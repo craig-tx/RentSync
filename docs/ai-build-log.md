@@ -134,6 +134,12 @@ The constitution's Development Workflow section requires an entry at the end of 
 - The release role's ECR resource is `repository/*/mock_pms`, so a future shared deployment needs no IAM change (contract updated).
 - Docker Compose is pinned to v5.6.0 (released 2026-10-02) rather than v5.6.1 (released the same day as this session), with sha256 checksums from its release.
 
+**Review fixes before push:**
+- CI's DeploymentId `ci` failed the 3-character minimum, so every CI example would have failed at boot. Local runs all used `local-dev`, so nothing caught it. It is now `ci-gh`, verified by running the suite with that value injected.
+- `rentsync-render-env` checked required parameters inside `"$(...)"`, which `set -e` ignores. A missing `admin_token` would have rendered `ADMIN_TOKEN=` and exited 0. All required keys are now checked in the main shell first. A new stub-`aws` test (`render_env_test.sh`, also run in CI) proves the failure path.
+- The instance now `depends_on` the EIP association, so cloud-init always has internet on first boot.
+- CI runs `apt-get update` before installing xfsprogs.
+
 **Test corrections (no assertion weakened):**
 - `setup_deploy_spec` used the wrong migration table name. Sequel's is `schema_info`.
 - The `ops_spec` `target_info` regex now also requires `deployment_id`, which makes it stricter.
