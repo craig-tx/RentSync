@@ -50,28 +50,28 @@ on its own once Phase 2 is complete.
 
 **Purpose**: Create the project skeleton, tooling, the local runtime, and CI.
 
-- [ ] T001 Create the directory skeleton from plan.md "Source Code": `mock_pms/{bin,config,db/migrations,lib/mock_pms/{models,api,views,oauth,middleware,events,delivery,chaos,seed,scenarios,admin,metrics,rate_limit,presenters},spec/{unit,requests,integration,fixtures,support}}`, plus `infra/otel/` and `docs/adr/`. Put a `.keep` file in each empty directory.
-- [ ] T002 Create `mock_pms/Gemfile` with `ruby ">= 3.3"`.
+- [X] T001 Create the directory skeleton from plan.md "Source Code": `mock_pms/{bin,config,db/migrations,lib/mock_pms/{models,api,views,oauth,middleware,events,delivery,chaos,seed,scenarios,admin,metrics,rate_limit,presenters},spec/{unit,requests,integration,fixtures,support}}`, plus `infra/otel/` and `docs/adr/`. Put a `.keep` file in each empty directory.
+- [X] T002 Create `mock_pms/Gemfile` with `ruby ">= 3.3"`.
   - Runtime gems: `grape`, `puma`, `sequel`, `pg`, `bcrypt`, `redis`.
   - `:development, :test` group: `rspec`, `rack-test`, `rubocop`.
   - Add no other gems. Each gem is justified in the plan.md Dependencies table (Constitution VIII).
   - Run `bundle lock` to produce `mock_pms/Gemfile.lock`.
-- [ ] T003 [P] Create `mock_pms/Dockerfile`. One `ruby:3.3-slim` image serves the web process, the worker, and the tools.
+- [X] T003 [P] Create `mock_pms/Dockerfile`. One `ruby:3.3-slim` image serves the web process, the worker, and the tools.
   - Install `build-essential` and `libpq-dev`, then run `bundle install`.
   - Copy the app in.
   - `ARG GIT_SHA` sets `ENV SERVICE_VERSION=$GIT_SHA`.
   - Default `CMD ["bundle","exec","puma","-C","config/puma.rb"]`.
   - `EXPOSE 4001`.
-- [ ] T004 [P] Create `mock_pms/config/puma.rb`.
+- [X] T004 [P] Create `mock_pms/config/puma.rb`.
   - Use `threads` from `PUMA_THREADS` (default 5) and `workers` from `WEB_CONCURRENCY` (default 0), and bind `tcp://0.0.0.0:4001`.
   - Add an `on_worker_shutdown` hook, and an `at_exit` hook for single mode, that call `MockPms::Metrics::Flusher.final_flush!` (implemented in T023). Until T023 exists, guard the call with `defined?`.
   - Add a comment that the web tier is stateless and any worker count is safe (research R8, R12).
-- [ ] T005 [P] Create `.env.example` at the repository root, containing every setting with a comment. Include no real secrets.
+- [X] T005 [P] Create `.env.example` at the repository root, containing every setting with a comment. Include no real secrets.
   - Mock settings: `DATABASE_URL=postgres://postgres:postgres@postgres:5432/mock_pms`, `TEST_DATABASE_URL=postgres://postgres:postgres@postgres:5432/mock_pms_test`, `REDIS_URL=redis://redis:6379/0`, `ADMIN_TOKEN=change-me-admin-token`.
   - Seed and token settings: `SEED=42`, `SEED_ANCHOR_DATE=` (empty means today), `ACCESS_TOKEN_TTL=300`, `REFRESH_TOKEN_TTL=2592000`.
   - Limits and delivery settings: `RATE_LIMIT_PER_MINUTE=60`, `RETRY_BASE_SECONDS=2`, `MAX_ATTEMPTS=8`, `METRICS_FLUSH_INTERVAL_S=5`.
   - Telemetry and environment settings: `DEPLOYMENT_ENVIRONMENT=local`, `OPENOBSERVE_USER=admin@example.com`, `OPENOBSERVE_PASSWORD=change-me`, `RECEIVER_SECRET=`, `RECEIVER_FAIL_FIRST=0`.
-- [ ] T006 Create `compose.yaml` at the repository root, following research R14 and R16.
+- [X] T006 Create `compose.yaml` at the repository root, following research R14 and R16.
   - **Services**:
     - `postgres` (`postgres:16`, with a healthcheck),
     - `redis` (`redis:7`, with a healthcheck),
@@ -84,21 +84,21 @@ on its own once Phase 2 is complete.
     - `receiver` (`command: bin/test_receiver --port 9999`, using `RECEIVER_SECRET` and `RECEIVER_FAIL_FIRST`, writing its log to the `receiver_logs` volume).
   - Pin the Collector and OpenObserve images to exact version tags that are at least two weeks old. Never use `latest`.
   - Add a header comment: "Scoped to feature 001; extended by feature 007".
-- [ ] T007 [P] Create `.github/workflows/ci.yml` with job `test`, which runs on `pull_request` and on `push` to `main`.
+- [X] T007 [P] Create `.github/workflows/ci.yml` with job `test`, which runs on `pull_request` and on `push` to `main`.
   - Service containers: `postgres:16` (health-checked) and `redis:7`, with ports mapped `5432:5432` and `6379:6379`. Inside an Actions job they are reached on `localhost`, not by service name.
   - Job-level `env:` block: `RACK_ENV=test`, `DATABASE_URL=postgres://postgres:postgres@localhost:5432/mock_pms`, `TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/mock_pms_test`, `REDIS_URL=redis://localhost:6379/0`, `ADMIN_TOKEN=ci-admin-token`. These override the `.env.example` hosts `postgres` and `redis`, which only resolve inside Compose.
   - Use `ruby/setup-ruby` with `ruby-version: '3.3'`, `bundler-cache: true`, and `working-directory: mock_pms`.
   - Steps: `bin/setup --test-db-only`, then `bundle exec rubocop`, then `bundle exec rspec`.
   - The `telemetry-smoke` job is added later, in T098.
-- [ ] T008 [P] Create `mock_pms/.rubocop.yml`, targeting Ruby 3.3 with `NewCops: enable`.
+- [X] T008 [P] Create `mock_pms/.rubocop.yml`, targeting Ruby 3.3 with `NewCops: enable`.
   - Add a custom cop or `Style` rule config, `mock_pms/.rubocop/no_direct_logger.rb`. It flags `Logger.new` and `.info/.warn/.error/.debug` calls on any receiver named `logger` outside `lib/mock_pms/logging.rb` (R12).
-- [ ] T009 [P] Create `mock_pms/spec/spec_helper.rb` and `mock_pms/spec/support/{db.rb,redis.rb,clock.rb}`.
+- [X] T009 [P] Create `mock_pms/spec/spec_helper.rb` and `mock_pms/spec/support/{db.rb,redis.rb,clock.rb}`.
   - `db.rb` connects to `TEST_DATABASE_URL`, migrates on boot, and wraps each example in `DB.transaction(rollback: :always, auto_savepoint: true)`.
   - **`:committed` examples**: these skip the rollback wrapper. Instead they run `TRUNCATE … RESTART IDENTITY CASCADE` on every table before and after the example, then re-insert the seed rows of `chaos_settings` and `chaos_counters`. Use the tag for any example where another connection, thread, or forked process has to see the rows: concurrent workers, the end-to-end receiver, and the thread or fork tests.
   - **`:slow` examples**: these are timing tests. They still run in CI.
   - `redis.rb` sets `MockPms::Redis.prefix = "mock_pms:test:#{Process.pid}:"` and deletes the keys under that prefix after each example.
   - `clock.rb` provides `freeze_time(t)` and `advance(seconds)` helpers on top of `MockPms::Clock`.
-- [ ] T010 [P] Create `docs/ai-build-log.md` with a header and an entry template. The template has the fields date, session type, what was done, what was blocked, decisions made, and next task, as required by the constitution's Development Workflow section.
+- [X] T010 [P] Create `docs/ai-build-log.md` with a header and an entry template. The template has the fields date, session type, what was done, what was blocked, decisions made, and next task, as required by the constitution's Development Workflow section.
 
 ---
 
@@ -112,19 +112,19 @@ envelope, the app skeleton, and telemetry wiring.
 
 ### Tests for the foundation (write first; they must fail)
 
-- [ ] T011 [P] Write `mock_pms/spec/unit/logging_spec.rb`. These tests drive T017.
+- [X] T011 [P] Write `mock_pms/spec/unit/logging_spec.rb`. These tests drive T017.
   - Using a `StringIO` sink, each log line is a single JSON object with these keys: `timestamp` (RFC 3339 UTC), `severity_text`, `body`, `service.name`, `service.version`, `deployment.environment`, `service.instance.id`, `code.function.name`, `code.file.path`, `code.line.number`, and `correlation_id`.
   - `code.function.name` is `"Dummy#work"` when logging from an instance method, `"Dummy.build"` from a class method, and `"Dummy#work"` from a block inside `#work`.
   - The redaction filter replaces values with `"[REDACTED]"` for keys matching `/token|secret|password|authorization/i` and for the keys `name`, `first_name`, `last_name`, `email`, `phone`, and `amount_cents`, including inside nested hashes.
   - Redaction happens before the line is written.
-- [ ] T012 [P] Write `mock_pms/spec/unit/metrics/buffer_spec.rb` and `mock_pms/spec/unit/metrics/flusher_spec.rb`. These tests drive T022 and T023.
+- [X] T012 [P] Write `mock_pms/spec/unit/metrics/buffer_spec.rb` and `mock_pms/spec/unit/metrics/flusher_spec.rb`. These tests drive T022 and T023.
   - The buffer records counter increments and histogram observations. Use buckets with `le` bounds `[0.005,0.01,0.025,0.05,0.1,0.25,0.5,1,2.5,5,10]`, plus `_sum` and `_count`.
   - `swap!` returns the deltas and leaves the buffer empty.
   - Once the cap of 10 000 fields is reached, new label sets are dropped and counted in `mock_pms_metrics_dropped_total`.
   - Against a real Redis, 4 threads each record 1 000 increments and flush concurrently. The Redis hash value then equals exactly 4 000.
   - When Redis raises during a flush, the deltas are merged back and sent on the next successful flush.
   - A flush sends a single `MULTI` using `HINCRBY` for counters and buckets and `HINCRBYFLOAT` for sums. Assert this through a Redis client spy.
-- [ ] T013 [P] Write `mock_pms/spec/requests/ops_spec.rb`. These tests drive T024 and T025.
+- [X] T013 [P] Write `mock_pms/spec/requests/ops_spec.rb`. These tests drive T024 and T025.
   - `GET /healthz` returns `200` with `{"status":"ok","db":"ok","redis":"ok","worker_heartbeat_age_s":<n>}` when a `worker_heartbeats` row is less than 30 s old.
   - It returns `503` with `"redis":"down"` when Redis is unreachable. Stub the connection to raise.
   - It returns `503` when the heartbeat is missing or older than 30 s.
@@ -132,7 +132,7 @@ envelope, the app skeleton, and telemetry wiring.
   - `GET /metrics` contains `target_info{service_name="mock_pms-web",service_version="<SERVICE_VERSION>",deployment_environment="<DEPLOYMENT_ENVIRONMENT>"} 1`. Principle VI requires `service.version` on all telemetry.
   - An unknown route returns the error envelope `{"error":{"code":"not_found","message":...}}` with status 404.
   - A request that sends `X-Request-Id: abc` gets `X-Correlation-Id: abc` back.
-- [ ] T014 [P] Write `mock_pms/spec/unit/admin/idempotency_spec.rb` and `mock_pms/spec/requests/admin_auth_spec.rb`. These tests drive T026 and T027.
+- [X] T014 [P] Write `mock_pms/spec/unit/admin/idempotency_spec.rb` and `mock_pms/spec/requests/admin_auth_spec.rb`. These tests drive T026 and T027.
   - `/admin/*` without `Authorization: Bearer <ADMIN_TOKEN>` returns `401` with the error envelope. With the wrong token it also returns `401`, using a constant-time comparison.
   - A POST with an `Idempotency-Key`, repeated with the same method, path, and body, returns the stored status and body and does not run the handler again. Use a counter to check this.
   - The same key with a different body returns `422` with `code: "idempotency_key_mismatch"`.
@@ -141,50 +141,50 @@ envelope, the app skeleton, and telemetry wiring.
 
 ### Implementation for the foundation
 
-- [ ] T015 [P] Create `mock_pms/config/settings.rb`, which defines `MockPms::Settings`. It reads ENV into typed, frozen values, with every default from T005.
+- [X] T015 [P] Create `mock_pms/config/settings.rb`, which defines `MockPms::Settings`. It reads ENV into typed, frozen values, with every default from T005.
   - `seed_anchor_date` defaults to `Date.today` (UTC) when it is empty.
   - `service_instance_id` is `ENV["HOSTNAME"]` or `Socket.gethostname`.
   - Startup fails with a clear message if `ADMIN_TOKEN` is missing.
-- [ ] T016 [P] Create `mock_pms/lib/mock_pms/clock.rb`, which defines `MockPms::Clock` with `now` (UTC `Time`), `today`, and a `with(fixed_or_proc)` override for tests. Also create `mock_pms/lib/mock_pms/ids.rb`, which defines `MockPms::Ids`.
+- [X] T016 [P] Create `mock_pms/lib/mock_pms/clock.rb`, which defines `MockPms::Clock` with `now` (UTC `Time`), `today`, and a `with(fixed_or_proc)` override for tests. Also create `mock_pms/lib/mock_pms/ids.rb`, which defines `MockPms::Ids`.
   - `generate(prefix, rng: nil)` returns `"#{prefix}_"` followed by 20 characters of Crockford base32.
   - When `rng` is given, it draws from that `Random`. That is how seeded rows get reproducible IDs (R5, R9).
   - Otherwise it uses `SecureRandom`.
-- [ ] T017 Create `mock_pms/lib/mock_pms/logging.rb`, making T011 pass.
+- [X] T017 Create `mock_pms/lib/mock_pms/logging.rb`, making T011 pass.
   - It defines a JSON formatter that uses the OTel field names listed in T011.
   - It defines `MockPms::Logging::Loggable`, which provides `log.debug`, `log.info`, `log.warn`, and `log.error`. The method name is taken from `caller_locations(1,1).first.base_label`. The class is the receiver's class, joined with `#`, or the receiver itself when it is a `Module`, joined with `.`.
   - `MockPms::Logging.service_name=` is set to `mock_pms-web`, `mock_pms-worker`, or `mock_pms-tool`.
   - The correlation ID is stored per thread, in `Thread.current[:correlation_id]`.
   - The redaction filter is applied before the line is written, as research R12 requires.
-- [ ] T018 Create `mock_pms/lib/mock_pms/db.rb`. It defines `MockPms::DB`, which connects with Sequel to `DATABASE_URL` (or `TEST_DATABASE_URL` when `RACK_ENV=test`).
+- [X] T018 Create `mock_pms/lib/mock_pms/db.rb`. It defines `MockPms::DB`, which connects with Sequel to `DATABASE_URL` (or `TEST_DATABASE_URL` when `RACK_ENV=test`).
   - It loads the `pg_json` and `pg_array` extensions.
   - It sets `Sequel.default_timezone = :utc`.
   - It adds a `MockPms::DB.migrate!` helper that runs `Sequel::Migrator` on `mock_pms/db/migrations`.
-- [ ] T019 [P] Create `mock_pms/lib/mock_pms/redis.rb`, which defines `MockPms::Redis`.
+- [X] T019 [P] Create `mock_pms/lib/mock_pms/redis.rb`, which defines `MockPms::Redis`.
   - It holds a connection to `REDIS_URL`, with a key `prefix` (`mock_pms:` by default) and `key(*parts)`.
   - `load_script(name, path)` caches the script's SHA. `evalsha(name, keys:, argv:)` loads the script again if Redis replies `NOSCRIPT`.
   - `ping?` returns true or false.
-- [ ] T020 Create migration `mock_pms/db/migrations/001_harness.rb` for the `worker_heartbeats` and `admin_idempotency_keys` tables.
+- [X] T020 Create migration `mock_pms/db/migrations/001_harness.rb` for the `worker_heartbeats` and `admin_idempotency_keys` tables.
   - `worker_heartbeats`: `worker_id text PK`; `beat_at timestamptz` "updated every 5 s".
   - `admin_idempotency_keys`: `key text PK`; `request_digest text` "SHA-256 of the method, path, and body"; `response_status smallint NULL` and `response_body jsonb NULL`, both "null while in flight"; `created_at timestamptz` "rows older than 24 h may be deleted". This table is kept across `/admin/reset`.
-- [ ] T021 [P] Create `mock_pms/lib/mock_pms/middleware/correlation_id.rb`, making the correlation part of T013 pass.
+- [X] T021 [P] Create `mock_pms/lib/mock_pms/middleware/correlation_id.rb`, making the correlation part of T013 pass.
   - It takes the ID from `X-Request-Id` or `X-Correlation-Id`, or generates one with `SecureRandom.uuid`.
   - It sets `Thread.current[:correlation_id]` and echoes the ID back as `X-Correlation-Id`.
   - It writes one access-log line per request through the mixin. `code.function.name` is the Grape endpoint (for example `MockPms::API::V1#GET /v1/payments`), and the line includes `http.request.method`, `url.path` (as the route template), `http.response.status_code`, and `duration_ms`.
   - Some responses come from middleware before Grape routes the request: 429, the 503 `rate_limiter_unavailable`, and chaos 500s. For these, `url.path` uses the same fallback route label as T023. `code.function.name` names the middleware that answered, for example `MockPms::Middleware::RateLimiter#call` or `MockPms::Middleware::ChaosErrors#call`.
-- [ ] T022 Create `mock_pms/lib/mock_pms/metrics/buffer.rb`, making the buffer part of T012 pass.
+- [X] T022 Create `mock_pms/lib/mock_pms/metrics/buffer.rb`, making the buffer part of T012 pass.
   - It is a delta buffer for counters and histograms, guarded by a `Mutex`.
   - Label sets are canonicalized as `k=v|k=v`, in sorted key order.
   - `swap!` runs in O(1). The buffer has the 10 000-field cap and its dropped counter.
-- [ ] T023 Create `mock_pms/lib/mock_pms/metrics/flusher.rb`, making the flusher part of T012 pass.
+- [X] T023 Create `mock_pms/lib/mock_pms/metrics/flusher.rb`, making the flusher part of T012 pass.
   - A background thread runs every `METRICS_FLUSH_INTERVAL_S`. Each run calls `swap!`, then sends one `MULTI` of `HINCRBY`/`HINCRBYFLOAT` to the hashes `MockPms::Redis.key("metrics", family)`.
   - On failure it merges the deltas back and logs a warning.
   - `final_flush!` does a synchronous flush at shutdown.
   - It uses no distributed lock (Constitution X; R12).
   - Then add Rack middleware `mock_pms/lib/mock_pms/middleware/request_metrics.rb`. It records `mock_pms_http_requests_total{route,method,status}` and `mock_pms_http_request_duration_seconds{route,method}`. `route` is the Grape route template, never the raw path.
     - **Fallback**: middleware can answer before Grape routes the request (429, 503, chaos 500). Then `env["grape.routing_args"]` has no template, and `route` comes from the static prefix map `{'/v1/' => '/v1/{resource}', '/oauth/' => '/oauth/{endpoint}', '/admin/' => '/admin/{endpoint}'}`. Any other path gets `unmatched`.
-- [ ] T024 Create `mock_pms/lib/mock_pms/metrics/exposition.rb`. It renders Prometheus text format 0.0.4 from the Redis metric hashes, with `# HELP` and `# TYPE` lines and cumulative histogram buckets. It also accepts a list of extra collectors (lambdas that return samples), so that later database-backed delivery metrics can plug in (T074). It always emits `target_info{service_name="mock_pms-web",service_version=Settings.service_version,deployment_environment=Settings.deployment_environment} 1`. The Collector turns that line into resource attributes (Constitution VI; R16).
-- [ ] T025 Create `mock_pms/lib/mock_pms/api/ops.rb`, a Grape API that serves `/healthz` (DB `SELECT 1`, `MockPms::Redis.ping?`, the newest `worker_heartbeats.beat_at`) and `/metrics`, making T013's `/healthz` and `/metrics` cases pass. Also create `mock_pms/lib/mock_pms/api/errors.rb`. It defines a Grape error formatter that produces `{"error":{"code","message"}}`, with handlers for 404, 422 (validation), and 500.
-- [ ] T026 Create `mock_pms/lib/mock_pms/api/admin_base.rb`. It defines admin authentication: a `before` hook comparing `Authorization: Bearer` against `Settings.admin_token` with `Rack::Utils.secure_compare`, and returning 401 with the envelope on a mismatch. Also create `mock_pms/lib/mock_pms/admin/idempotency.rb`, a helper `with_idempotency(env) { ... }` that uses `admin_idempotency_keys` (R11).
+- [X] T024 Create `mock_pms/lib/mock_pms/metrics/exposition.rb`. It renders Prometheus text format 0.0.4 from the Redis metric hashes, with `# HELP` and `# TYPE` lines and cumulative histogram buckets. It also accepts a list of extra collectors (lambdas that return samples), so that later database-backed delivery metrics can plug in (T074). It always emits `target_info{service_name="mock_pms-web",service_version=Settings.service_version,deployment_environment=Settings.deployment_environment} 1`. The Collector turns that line into resource attributes (Constitution VI; R16).
+- [X] T025 Create `mock_pms/lib/mock_pms/api/ops.rb`, a Grape API that serves `/healthz` (DB `SELECT 1`, `MockPms::Redis.ping?`, the newest `worker_heartbeats.beat_at`) and `/metrics`, making T013's `/healthz` and `/metrics` cases pass. Also create `mock_pms/lib/mock_pms/api/errors.rb`. It defines a Grape error formatter that produces `{"error":{"code","message"}}`, with handlers for 404, 422 (validation), and 500.
+- [X] T026 Create `mock_pms/lib/mock_pms/api/admin_base.rb`. It defines admin authentication: a `before` hook comparing `Authorization: Bearer` against `Settings.admin_token` with `Rack::Utils.secure_compare`, and returning 401 with the envelope on a mismatch. Also create `mock_pms/lib/mock_pms/admin/idempotency.rb`, a helper `with_idempotency(env) { ... }` that uses `admin_idempotency_keys` (R11).
   - `request_digest` is the SHA-256 of `"#{method}\n#{path}\n#{body}"`.
   - The key row is inserted with `INSERT ... ON CONFLICT DO NOTHING`, so it is claimed atomically. `response_status` and `response_body` stay null until the handler finishes.
   - On a conflict:
@@ -194,16 +194,16 @@ envelope, the app skeleton, and telemetry wiring.
   - If the handler raises, the key row is deleted, so the client can retry.
   - **Secrets**: endpoints whose response contains a secret MUST NOT use `with_idempotency`. Today that is only `POST /admin/clients`, which returns the one-time `client_secret` (R4).
   - These two files make T014 pass.
-- [ ] T027 Create `mock_pms/lib/mock_pms/app.rb`, defining `MockPms::App`. This is the Rack builder.
+- [X] T027 Create `mock_pms/lib/mock_pms/app.rb`, defining `MockPms::App`. This is the Rack builder.
   - Middleware order: `CorrelationId` → `RequestMetrics` → (rate limiter slot, filled in T079) → (chaos errors slot, filled in T089) → `Grape` cascade.
   - It mounts `API::Ops` and `API::AdminBase`.
   - It starts `Metrics::Flusher` (except under `RACK_ENV=test`, where specs flush explicitly).
   - Also create `mock_pms/config.ru`, which runs `MockPms::App`, and `mock_pms/lib/mock_pms.rb`, which loads `Settings`, `DB`, `Redis`, and `Logging` and sets `Logging.service_name = "mock_pms-web"`.
-- [ ] T028 Create `mock_pms/bin/setup` (executable Ruby).
+- [X] T028 Create `mock_pms/bin/setup` (executable Ruby).
   - It creates the `mock_pms` and `mock_pms_test` databases if they are missing and runs migrations.
   - It seeds unless `--test-db-only` is passed. Until T044 exists, seeding is a no-op.
   - It uses `Logging.service_name = "mock_pms-tool"`.
-- [ ] T029 [P] Create `infra/otel/collector.yaml`, implementing research R16.
+- [X] T029 [P] Create `infra/otel/collector.yaml`, implementing research R16.
   - **Receivers**:
     - `filelog`: include `/var/lib/docker/containers/*/*-json.log`. A `container` operator parses the files, and a `router` keeps only lines whose container name matches `mock_pms*`. A `json_parser` reads the body. Resource attributes are promoted from `service.name`, `service.version`, `deployment.environment`, and `service.instance.id`, and severity is mapped from `severity_text`.
     - `prometheus`: one scrape job, `mock_pms`, that targets `mock_pms:4001` every `15s`. Keep the receiver's default `target_info` handling turned on, so `service.name=mock_pms-web`, `service.version`, and `deployment.environment` become resource attributes on every series. Don't set a static `service.name`. Use the same name as the web service's logs (`mock_pms-web`).
@@ -211,7 +211,7 @@ envelope, the app skeleton, and telemetry wiring.
   - **Exporters**: `otlphttp/openobserve`, with `endpoint: http://openobserve:5080/api/default`, Basic auth from `${env:OPENOBSERVE_USER}`/`${env:OPENOBSERVE_PASSWORD}`, `sending_queue` (in memory, `queue_size: 1000`), and `retry_on_failure` turned on. Put a comment above the exporter stating the R16 loss bound.
   - **Self-monitoring**: set `service.telemetry.metrics` to expose the Collector's own metrics on `0.0.0.0:8888`. Add a second `prometheus` scrape job, `otel-collector`, targeting `localhost:8888`, so the drop counters (`otelcol_exporter_send_failed_*`, `otelcol_exporter_queue_size`, `otelcol_processor_refused_*`) also reach OpenObserve.
   - **Pipelines**: `logs` and `metrics`.
-- [ ] T030 [P] Write `docs/adr/0004-otlp-collector-bridge.md` (ADR-0004), following research R16. It needs these sections:
+- [X] T030 [P] Write `docs/adr/0004-otlp-collector-bridge.md` (ADR-0004), following research R16. It needs these sections:
   - **Context**: Constitution VI requires OTLP delivery, and the Ruby OTel metrics and logs SDKs are 0.x.
   - **Decision**: a Collector bridge to OpenObserve.
   - **Alternatives**: native SDKs; the fluentd logging driver; vendor ingestion APIs.

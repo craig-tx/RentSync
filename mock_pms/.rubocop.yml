@@ -1,0 +1,56 @@
+require:
+  - ./.rubocop/no_direct_logger.rb
+
+AllCops:
+  TargetRubyVersion: 3.3
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - "vendor/**/*"
+    - "tmp/**/*"
+
+MockPms/NoDirectLogger:
+  Enabled: true
+  Exclude:
+    - "lib/mock_pms/logging.rb"
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/MethodLength:
+  Max: 30
+
+Metrics/AbcSize:
+  Max: 40
+
+Metrics/ClassLength:
+  Max: 250
+
+Metrics/ModuleLength:
+  Max: 250
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*"
+    - "lib/mock_pms/api/**/*"
+
+Metrics/CyclomaticComplexity:
+  Max: 12
+
+Metrics/PerceivedComplexity:
+  Max: 12
+
+Metrics/ParameterLists:
+  CountKeywordArgs: false
+
+Layout/LineLength:
+  Max: 120
+
+Naming/MethodParameterName:
+  AllowedNames: [by, db, id, io, le, n, tx, v, k]
+
+Naming/PredicateMethod:
+  Enabled: false
