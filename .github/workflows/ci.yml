@@ -42,7 +42,7 @@ jobs:
           ruby-version: "3.3"
           bundler-cache: true
           working-directory: mock_pms
-      - run: bin/setup --test-db-only
+      - run: bundle exec bin/setup --test-db-only
       - run: bundle exec rubocop
       - run: bundle exec rspec
 
