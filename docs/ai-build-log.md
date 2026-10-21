@@ -81,6 +81,11 @@ The constitution's Development Workflow section requires an entry at the end of 
 - `chaos_check --generate` alternates bursts with NSF waves, because bursts alone run out of lease periods.
 - The `Delivery` Sequel model doubles as the namespace for `Delivery::Worker` and the other delivery classes.
 
-**Blocked:** nothing. The CI workflow has not been run on GitHub yet; it runs on the first push.
+**First CI runs on PR #2.** Three issues, all fixed; the fourth run is green for both `test` and `telemetry-smoke`.
+- **Executable bits:** `core.filemode` is off on Windows, so the `bin/` scripts were committed as 100644 and CI exited with 126. Docker Desktop hid this locally. Fixed with `git update-index --chmod=+x`; set this for any new script.
+- **`bundle exec`:** `ruby/setup-ruby` installs gems into the bundle, so `bin/setup` needs `bundle exec`.
+- **Missing database:** on a fresh stack the worker booted and tried to migrate before `bin/setup` had created the database, and exited. Boot now creates the database when it's missing. Reproduced and verified locally with an isolated Compose project (`-p rs-fresh`).
+
+**Blocked:** nothing.
 
 **Next task:** open a pull request for `001-mock-pms`, merge once CI is green, then `/speckit-specify` the Terraform Cloud and AWS deployment as feature 002 (see the project memory).
