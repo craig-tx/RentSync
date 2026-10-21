@@ -1,0 +1,9 @@
+# Removes images unused for a week; rollbacks pull from ECR, so nothing needed is lost (FR-012).
+[Unit]
+Description=Prune unused RentSync container images
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker image prune -af --filter until=168h

@@ -247,7 +247,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
 
 ### Tests for the Terraform and host foundation (write first; they must fail) ⚠️
 
-- [ ] T023 [P] Write `infra/terraform/environment/tests/deployment_id.tftest.hcl` using
+- [X] T023 [P] Write `infra/terraform/environment/tests/deployment_id.tftest.hcl` using
   `mock_provider "aws" {}`, `mock_provider "random" {}`, and `override_data` for
   `terraform_remote_state.shared`. It needs these runs:
   - `invalid_id`: `deployment_id = "Prod_US"` →
@@ -260,10 +260,10 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
       `tags_all`, so the real tags are proven live in T055;
   - `disjoint`: plan with `prod-us` and with `dev-staging`, and assert that the name sets
     don't intersect.
-- [ ] T024 [P] Write `infra/terraform/shared/tests/deployment_id.tftest.hcl` with the same
+- [X] T024 [P] Write `infra/terraform/shared/tests/deployment_id.tftest.hcl` with the same
   pattern: an invalid ID fails, and with `deployment_id = "shared-us"` the VPC, subnet, and ECR
   names start with `rentsync-shared-us-` or `shared-us/`.
-- [ ] T025 [P] Write `infra/host/test/boot_volume_test.sh`. It creates a 64 MiB file, attaches
+- [X] T025 [P] Write `infra/host/test/boot_volume_test.sh`. It creates a 64 MiB file, attaches
   it with `losetup`, and runs `infra/host/bin/rentsync-boot` with `RENTSYNC_DATA_DEVICE` set to
   the loop device and `RENTSYNC_DATA_MOUNT` set to a temporary directory. Then it checks:
   1. the volume gets formatted, mounted, and the `postgres/`, `caddy/`, `receiver/`,
@@ -275,7 +275,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
 
 ### Implementation for the Terraform and host foundation
 
-- [ ] T026 Create `infra/terraform/modules/host/variables.tf` with these variables:
+- [X] T026 Create `infra/terraform/modules/host/variables.tf` with these variables:
 
   | Variable | Type / default |
   |---|---|
@@ -295,7 +295,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   | `ecr_repository_arn` | string |
   | `extra_tags` | map(string), default {} |
 
-- [ ] T027 Create `infra/terraform/modules/host/main.tf` with these resources:
+- [X] T027 Create `infra/terraform/modules/host/main.tf` with these resources:
   - `aws_network_interface.this`: `private_ips = [var.private_ip]`, the given security groups,
     and `Name = rentsync-<id>-eni`.
   - `aws_instance.this`:
@@ -316,7 +316,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
     - `lifecycle { prevent_destroy = true }`.
   - `aws_volume_attachment.data`: `device_name = "/dev/sdf"` and
     `stop_instance_before_detaching = true`.
-- [ ] T028 Create `infra/terraform/modules/host/iam.tf`:
+- [X] T028 Create `infra/terraform/modules/host/iam.tf`:
   - role `rentsync-<id>-host`, with an EC2 trust policy and an instance profile of the same name;
   - attach `AmazonSSMManagedInstanceCore`;
   - an inline policy that grants:
@@ -329,9 +329,9 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
       deny `rentsync-render-env`;
     - `ssm:PutParameter` on each `var.ssm_write_params` ARN;
     - `kms:Decrypt` on `*`, with the condition `kms:ViaService = ssm.<region>.amazonaws.com`.
-- [ ] T029 Create `infra/terraform/modules/host/outputs.tf`, exposing `instance_id`, `public_ip`
+- [X] T029 Create `infra/terraform/modules/host/outputs.tf`, exposing `instance_id`, `public_ip`
   (the EIP), `private_ip`, `data_volume_id`, and `role_name`.
-- [ ] T030 Create `infra/terraform/modules/host/cloud-init.yaml.tftpl`. It takes `files`, a map
+- [X] T030 Create `infra/terraform/modules/host/cloud-init.yaml.tftpl`. It takes `files`, a map
   from path to `{content, permissions}`, and `host_env`, a map of non-secret key/values. It must:
   1. write every file, plus `/etc/rentsync/host.env`, which contains `host_env` and
      `VOLUME_ID`;
@@ -340,7 +340,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   3. `systemctl enable --now docker rentsync-boot.service rentsync.service rentsync-prune.timer`.
 
   It contains no secrets (research R6).
-- [ ] T031 Write `infra/host/bin/rentsync-boot`. T025 must pass.
+- [X] T031 Write `infra/host/bin/rentsync-boot`. T025 must pass.
   1. Source `/etc/rentsync/host.env`.
   2. Resolve the device: use `RENTSYNC_DATA_DEVICE` if set (tests), otherwise
      `/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${VOLUME_ID//-/}`. Wait up to 300 s for
@@ -350,15 +350,15 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   5. Create `postgres/`, `caddy/`, `receiver/`, `openobserve/`, and `openobserve-db/` on it.
   6. Install `infra/host/daemon.json` as `/etc/docker/daemon.json`. If it changed, restart
      Docker.
-- [ ] T032 [P] Create `infra/host/daemon.json` with
+- [X] T032 [P] Create `infra/host/daemon.json` with
   `{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}` (FR-012).
-- [ ] T033 [P] Create the systemd units in `infra/host/systemd/`:
+- [X] T033 [P] Create the systemd units in `infra/host/systemd/`:
   - `rentsync-boot.service`: oneshot, `After=docker.service`, `RemainAfterExit=yes`;
   - `rentsync.service`: oneshot, `Requires=rentsync-boot.service`, runs
     `/usr/local/bin/rentsync-start`;
   - `rentsync-prune.service`: runs `docker image prune -af --filter until=168h`;
   - `rentsync-prune.timer`: weekly, `Persistent=true`.
-- [ ] T034 Write `infra/host/bin/rentsync-render-env`:
+- [X] T034 Write `infra/host/bin/rentsync-render-env`:
   - source `/etc/rentsync/host.env`;
   - call `aws ssm get-parameters-by-path --with-decryption --recursive` for each path in
     `SSM_READ_PATHS`;
@@ -369,11 +369,11 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   - set `COMPOSE_PROJECT_NAME=rentsync-${DEPLOYMENT_ID}`.
 
   It never prints values, and must pass `shellcheck`.
-- [ ] T035 [P] Write `infra/host/bin/rentsync-start`, which `rentsync.service` runs:
+- [X] T035 [P] Write `infra/host/bin/rentsync-start`, which `rentsync.service` runs:
   - if `HOST_ROLE=environment`, it runs `rentsync-deploy --reload`;
   - if `HOST_ROLE=telemetry`, it runs `rentsync-render-env`, then
     `docker compose -f /opt/rentsync/compose.yaml up -d`.
-- [ ] T036 Create `infra/terraform/environment/main.tf`:
+- [X] T036 Create `infra/terraform/environment/main.tf`:
   - `locals`:
     - `name = "rentsync-${var.deployment_id}"`;
     - `ssm_prefix = "/rentsync/${var.deployment_id}"`;
@@ -391,7 +391,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   - `admin_token` is `sensitive` and `ephemeral`, with `validation` that its length is ≥ 32 and
     it is not `"change-me-admin-token"`;
   - `shared_workspace` defaults to `"rentsync-shared-us"`.
-- [ ] T037 Create `infra/terraform/shared/main.tf` with
+- [X] T037 Create `infra/terraform/shared/main.tf` with
   `locals { name = "rentsync-${var.deployment_id}", ssm_prefix = "/rentsync/${var.deployment_id}", default_tags = { ... as T036 } }`
   and the provider with `default_tags { tags = local.default_tags }`.
   Create `infra/terraform/shared/variables.tf` with every variable in
@@ -400,7 +400,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   - `openobserve_root_password` is `sensitive = true` and `ephemeral = true`, and validated to
     8–128 characters;
   - `budget_email` and `acme_email` have no default.
-- [ ] T038 Create `infra/terraform/check_prevent_destroy.sh`, which runs static checks that
+- [X] T038 Create `infra/terraform/check_prevent_destroy.sh`, which runs static checks that
   `terraform test` cannot express. It fails unless all of the following hold:
   1. the `aws_ebs_volume` `data` block in `infra/terraform/modules/host/main.tf` contains
      `prevent_destroy = true` (FR-034);
@@ -434,7 +434,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 
 ### Tests for User Story 1 (write first; they must fail) ⚠️
 
-- [ ] T039 [P] [US1] Write `infra/terraform/environment/tests/security.tftest.hcl` with mocked
+- [X] T039 [P] [US1] Write `infra/terraform/environment/tests/security.tftest.hcl` with mocked
   providers. Its assertions:
   - the deployment security group has ingress **only** on TCP 80 and 443 from `0.0.0.0/0`, and
     no rule on port 22 (FR-009);
@@ -445,7 +445,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
     T038's static check (R11);
   - the `admin_token` cases `"change-me-admin-token"` and a 31-character string both hit
     `expect_failures = [var.admin_token]` (FR-025).
-- [ ] T040 [P] [US1] Write `infra/terraform/shared/tests/security.tftest.hcl` with mocked
+- [X] T040 [P] [US1] Write `infra/terraform/shared/tests/security.tftest.hcl` with mocked
   providers. Its assertions:
   - the telemetry security group allows TCP 80 and 443 from `0.0.0.0/0`, and TCP 5080 **only**
     with `referenced_security_group_id` = the `otlp-client` group, never a CIDR (FR-011);
@@ -456,16 +456,16 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 
 ### Implementation for User Story 1
 
-- [ ] T041 [US1] Create `infra/terraform/shared/network.tf`:
+- [X] T041 [US1] Create `infra/terraform/shared/network.tf`:
   - `aws_vpc` `${local.name}-vpc` (`var.vpc_cidr`, DNS hostnames on);
   - `aws_subnet` `${local.name}-subnet` (`var.subnet_cidr`, `var.availability_zone`);
   - `aws_internet_gateway` `${local.name}-igw`;
   - `aws_route_table` `${local.name}-rt` with `0.0.0.0/0` to the IGW, and its association.
-- [ ] T042 [P] [US1] Create `infra/terraform/shared/ecr.tf`:
+- [X] T042 [P] [US1] Create `infra/terraform/shared/ecr.tf`:
   - `aws_ecr_repository` named `"${var.deployment_id}/mock_pms"`, with `IMMUTABLE` tags,
     `scan_on_push = true`, and `force_delete = false`;
   - `aws_ecr_lifecycle_policy` that keeps the last 20 images (R16).
-- [ ] T043 [US1] Create `infra/terraform/shared/telemetry.tf`:
+- [X] T043 [US1] Create `infra/terraform/shared/telemetry.tf`:
   - security groups use standalone `aws_vpc_security_group_ingress_rule` and `aws_vpc_security_group_egress_rule` resources, never inline `ingress`/`egress` blocks (T040 relies on `referenced_security_group_id`);
   - `aws_security_group` `${local.name}-otlp-client` (no ingress, all egress);
   - `aws_security_group` `${local.name}-sg`: 80 and 443 from anywhere, 5080 from the otlp-client
@@ -476,7 +476,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
     - `extra_tags = {}` (not deployable);
     - user data from the cloud-init template, with only the Phase 2 base files for now. US3
       adds the stack.
-- [ ] T044 [US1] Create `infra/terraform/shared/secrets.tf`:
+- [X] T044 [US1] Create `infra/terraform/shared/secrets.tf`:
   - `String` parameters `${local.ssm_prefix}/openobserve/root_email` and `.../ingest/user`
     (both `var.openobserve_root_email`);
   - `SecureString` `.../openobserve/root_password` and `.../openobserve/ingest/password`, both
@@ -484,10 +484,10 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
     `value_wo_version = var.openobserve_root_password_version`;
   - `ephemeral "random_password" "openobserve_db"` (32 characters, `special = false`) written to
     `.../openobserve/db_password` with `value_wo_version = var.openobserve_db_password_version`.
-- [ ] T045 [P] [US1] Create `infra/terraform/shared/budget.tf`: `aws_budgets_budget`
+- [X] T045 [P] [US1] Create `infra/terraform/shared/budget.tf`: `aws_budgets_budget`
   `${local.name}-monthly`, of type COST, with a monthly limit of `var.budget_limit_usd` USD and
   the three notifications to `var.budget_email` (FR-035).
-- [ ] T046 [US1] Create `infra/terraform/shared/outputs.tf` with every output in
+- [X] T046 [US1] Create `infra/terraform/shared/outputs.tf` with every output in
   contracts/workspace-variables.md:
   - `vpc_id`, `subnet_id`, and `otlp_client_security_group_id`;
   - `availability_zone` and `ami_id`;
@@ -497,9 +497,9 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   - `ingest_ssm_path = "${local.ssm_prefix}/openobserve/ingest"`.
 
   T024 and T040 must pass.
-- [ ] T047 [US1] Create `infra/terraform/environment/outputs.tf` with `public_ip`,
+- [X] T047 [US1] Create `infra/terraform/environment/outputs.tf` with `public_ip`,
   `instance_id`, and `url = "https://${var.hostname}"`. The variables already exist (T036).
-- [ ] T048 [US1] Add the security group and host to `infra/terraform/environment/main.tf`:
+- [X] T048 [US1] Add the security group and host to `infra/terraform/environment/main.tf`:
   - `aws_security_group` `${local.name}-sg`, with standalone rule resources as in T043: 80 and 443 from anywhere, all egress, in the shared
     VPC;
   - `module "host"`:
@@ -511,7 +511,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
     - user data with the Phase 2 base files, and `host_env` containing `HOST_ROLE=environment`,
       `DEPLOYMENT_ID`, `DEPLOYMENT_ENVIRONMENT`, `SITE_HOSTNAME`, `DB_NAME`, `AWS_REGION`,
       `SSM_READ_PATHS`, `ECR_REPOSITORY_URL`, and `OPENOBSERVE_OTLP_ENDPOINT`.
-- [ ] T049 [US1] Create `infra/terraform/environment/secrets.tf`:
+- [X] T049 [US1] Create `infra/terraform/environment/secrets.tf`:
   - `SecureString` `${local.ssm_prefix}/admin_token`, with `value_wo = var.admin_token` and
     `value_wo_version = var.admin_token_version`;
   - `ephemeral "random_password" "postgres"` (32 characters, `special = false`) written to

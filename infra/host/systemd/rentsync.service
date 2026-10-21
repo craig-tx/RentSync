@@ -1,0 +1,15 @@
+# Renders secrets from SSM and starts the host's Compose stack on every boot (US5 AC5).
+[Unit]
+Description=RentSync stack
+Requires=rentsync-boot.service docker.service
+After=rentsync-boot.service docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/rentsync-start
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

@@ -80,7 +80,7 @@ jobs:
       - run: terraform fmt -check -recursive infra/terraform
       - name: Validate and test each root
         run: |
-          for root in infra/terraform/shared infra/terraform/environment; do
+          for root in infra/terraform/shared infra/terraform/environment infra/terraform/modules/host; do
             terraform -chdir=$root init -backend=false -input=false
             terraform -chdir=$root validate
             if ls $root/tests/*.tftest.hcl >/dev/null 2>&1; then terraform -chdir=$root test; fi

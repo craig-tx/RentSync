@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Renders /run/rentsync/env (tmpfs, 0600) from SSM Parameter Store and /etc/rentsync/host.env
+# (feature 002 research R11, contracts/host-interface.md). Compose reads it as env_file and
+# --env-file. Never prints a value, and never runs with xtrace.
+set -euo pipefail
+set +x
+
+etc="${RENTSYNC_ETC:-/etc/rentsync}"
+out_dir="${RENTSYNC_RUN:-/run/rentsync}"
+# shellcheck source=/dev/null
+. "$etc/host.env"
+
+umask 077
+mkdir -p "$out_dir"
+tmp="$(mktemp "$out_dir/env.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+
+declare -A param=()
+for path in $SSM_READ_PATHS; do
+  while IFS=$'\t' read -r name value; do
+    [ -n "$name" ] || continue
+    param["${name#"$path"/}"]="$value"
+  done < <(aws ssm get-parameters-by-path --region "$AWS_REGION" --path "$path" --recursive \
+             --with-decryption --query 'Parameters[].[Name,Value]' --output text)
+done
+
+emit() { printf '%s=%s\n' "$1" "$2" >> "$tmp"; }
+need() {
+  [ -n "${param[$1]:-}" ] || { echo "rentsync-render-env: missing SSM parameter $1 under $SSM_READ_PATHS" >&2; exit 1; }
+  printf '%s' "${param[$1]}"
+}
+
+# Non-secret settings from host.env, minus the ones only scripts use.
+while IFS= read -r line; do
+  key="${line%%=*}"
+  case "$key" in ''|'#'*|SSM_READ_PATHS|VOLUME_ID) continue ;; esac
+  value="${line#*=}"
+  value="${value#\"}"
+  emit "$key" "${value%\"}"
+done < "$etc/host.env"
+
+emit COMPOSE_PROJECT_NAME "rentsync-$DEPLOYMENT_ID"
+
+case "$HOST_ROLE" in
+  environment)
+    postgres_password="$(need postgres_password)"
+    emit POSTGRES_PASSWORD "$postgres_password"
+    emit DATABASE_URL "postgres://postgres:$postgres_password@postgres:5432/$DB_NAME"
+    emit REDIS_URL "redis://redis:6379/0"
+    emit ADMIN_TOKEN "$(need admin_token)"
+    emit IMAGE_TAG "$(need image_tag)"
+    emit PREVIOUS_IMAGE_TAG "${param[previous_image_tag]:-none}"
+    emit OPENOBSERVE_USER "$(need user)"
+    emit OPENOBSERVE_PASSWORD "$(need password)"
+    ;;
+  telemetry)
+    emit ZO_ROOT_USER_EMAIL "$(need openobserve/root_email)"
+    emit ZO_ROOT_USER_PASSWORD "$(need openobserve/root_password)"
+    emit OPENOBSERVE_DB_PASSWORD "$(need openobserve/db_password)"
+    ;;
+  *)
+    echo "rentsync-render-env: unknown HOST_ROLE '$HOST_ROLE'" >&2
+    exit 1
+    ;;
+esac
+
+mv "$tmp" "$out_dir/env"
+trap - EXIT
+echo "rentsync-render-env: wrote $out_dir/env (${#param[@]} parameters)"

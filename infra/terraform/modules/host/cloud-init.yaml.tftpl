@@ -1,0 +1,25 @@
+#cloud-config
+# Rendered by modules/host (feature 002 research R6). Contains no secrets: hosts read those
+# from SSM at boot through rentsync-render-env.
+write_files:
+%{ for path, f in files ~}
+  - path: ${path}
+    permissions: "${f.permissions}"
+    encoding: b64
+    content: ${base64encode(f.content)}
+%{ endfor ~}
+  - path: /etc/rentsync/host.env
+    permissions: "0644"
+    encoding: b64
+    content: ${base64encode(join("", [for k, v in host_env : "${k}=\"${v}\"\n"]))}
+
+runcmd:
+  - dnf install -y docker jq
+  - mkdir -p /usr/local/lib/docker/cli-plugins
+  - curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-linux-${compose_arch}
+  - echo "${compose_sha256}  /usr/local/lib/docker/cli-plugins/docker-compose" | sha256sum -c -
+  - chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose
+  - systemctl daemon-reload
+  - systemctl enable --now docker
+  - systemctl enable rentsync-boot.service rentsync.service rentsync-prune.timer
+  - systemctl start rentsync-boot.service rentsync.service rentsync-prune.timer
