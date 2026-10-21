@@ -224,8 +224,8 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
     `OPENOBSERVE_OTLP_ENDPOINT=http://openobserve:5080/api/default`;
   - rename the databases to `.../mock_pms_local_dev` and `.../mock_pms_local_dev_test`.
 
-  In `.github/workflows/ci.yml`, the `test` job gets `DEPLOYMENT_ID: ci` and databases
-  `mock_pms_ci` and `mock_pms_ci_test`. Grep `specs/001-mock-pms/quickstart.md`, `README.md`,
+  In `.github/workflows/ci.yml`, the `test` job gets `DEPLOYMENT_ID: ci-gh` (`ci` is too short for the format) and databases
+  `mock_pms_ci_gh` and `mock_pms_ci_gh_test`. Grep `specs/001-mock-pms/quickstart.md`, `README.md`,
   and `mock_pms/` for hard-coded `mock_pms_test` or `/mock_pms"` and update them.
 
   Note in `docs/ai-build-log.md` that developers must re-copy `.env` from `.env.example`. The old

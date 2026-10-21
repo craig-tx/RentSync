@@ -25,10 +25,23 @@ for path in $SSM_READ_PATHS; do
 done
 
 emit() { printf '%s=%s\n' "$1" "$2" >> "$tmp"; }
-need() {
-  [ -n "${param[$1]:-}" ] || { echo "rentsync-render-env: missing SSM parameter $1 under $SSM_READ_PATHS" >&2; exit 1; }
-  printf '%s' "${param[$1]}"
-}
+
+# Check every required parameter here, in the main shell, before writing anything. A check
+# inside "$(...)" would not stop the script (set -e ignores it there), and a host would start
+# with an empty ADMIN_TOKEN. infra/host/test/render_env_test.sh covers this.
+case "$HOST_ROLE" in
+  environment) required=(admin_token postgres_password image_tag user password) ;;
+  telemetry) required=(openobserve/root_email openobserve/root_password openobserve/db_password) ;;
+  *) echo "rentsync-render-env: unknown HOST_ROLE '$HOST_ROLE'" >&2; exit 1 ;;
+esac
+missing=0
+for key in "${required[@]}"; do
+  if [ -z "${param[$key]:-}" ]; then
+    echo "rentsync-render-env: missing SSM parameter $key under $SSM_READ_PATHS" >&2
+    missing=1
+  fi
+done
+[ "$missing" -eq 0 ] || exit 1
 
 # Non-secret settings from host.env, minus the ones only scripts use.
 while IFS= read -r line; do
@@ -43,24 +56,19 @@ emit COMPOSE_PROJECT_NAME "rentsync-$DEPLOYMENT_ID"
 
 case "$HOST_ROLE" in
   environment)
-    postgres_password="$(need postgres_password)"
-    emit POSTGRES_PASSWORD "$postgres_password"
-    emit DATABASE_URL "postgres://postgres:$postgres_password@postgres:5432/$DB_NAME"
+    emit POSTGRES_PASSWORD "${param[postgres_password]}"
+    emit DATABASE_URL "postgres://postgres:${param[postgres_password]}@postgres:5432/$DB_NAME"
     emit REDIS_URL "redis://redis:6379/0"
-    emit ADMIN_TOKEN "$(need admin_token)"
-    emit IMAGE_TAG "$(need image_tag)"
+    emit ADMIN_TOKEN "${param[admin_token]}"
+    emit IMAGE_TAG "${param[image_tag]}"
     emit PREVIOUS_IMAGE_TAG "${param[previous_image_tag]:-none}"
-    emit OPENOBSERVE_USER "$(need user)"
-    emit OPENOBSERVE_PASSWORD "$(need password)"
+    emit OPENOBSERVE_USER "${param[user]}"
+    emit OPENOBSERVE_PASSWORD "${param[password]}"
     ;;
   telemetry)
-    emit ZO_ROOT_USER_EMAIL "$(need openobserve/root_email)"
-    emit ZO_ROOT_USER_PASSWORD "$(need openobserve/root_password)"
-    emit OPENOBSERVE_DB_PASSWORD "$(need openobserve/db_password)"
-    ;;
-  *)
-    echo "rentsync-render-env: unknown HOST_ROLE '$HOST_ROLE'" >&2
-    exit 1
+    emit ZO_ROOT_USER_EMAIL "${param[openobserve/root_email]}"
+    emit ZO_ROOT_USER_PASSWORD "${param[openobserve/root_password]}"
+    emit OPENOBSERVE_DB_PASSWORD "${param[openobserve/db_password]}"
     ;;
 esac
 

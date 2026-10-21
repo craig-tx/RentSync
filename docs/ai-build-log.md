@@ -107,7 +107,7 @@ The constitution's Development Workflow section requires an entry at the end of 
   - `/healthz` and `/healthz/live` report `version` and `deployment_id`;
   - `bin/setup --deploy` never reseeds a database that has data;
   - the Collector endpoint comes from configuration, and a `resource/deployment` processor puts the deployment attributes on the Collector's own metrics;
-  - local and CI databases now follow the DeploymentId (`mock_pms_local_dev`, `mock_pms_ci`).
+  - local and CI databases now follow the DeploymentId (`mock_pms_local_dev`, `mock_pms_ci_gh`; CI uses DeploymentId `ci-gh`, because `ci` is shorter than the 3-character minimum).
 
   Verified: 172 examples, 0 failures; RuboCop clean; `bin/telemetry_smoke` live, including the Collector self-metric with `deployment.id=local-dev`.
 - **Phase 2 and US1 infrastructure (T023–T049):** the host module, the shared and environment roots, the host scripts and the systemd units. Verified locally:

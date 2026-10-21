@@ -66,6 +66,10 @@ resource "aws_instance" "this" {
   }
 
   tags = merge({ Name = "${local.name}-host" }, var.extra_tags)
+
+  # The host reaches the internet only through the Elastic IP on its interface, and cloud-init
+  # installs Docker on first boot, so the association must exist before the instance starts.
+  depends_on = [aws_eip_association.this]
 }
 
 # The address belongs to the network interface, so it survives instance replacement.

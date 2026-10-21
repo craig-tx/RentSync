@@ -28,9 +28,9 @@ jobs:
     # so these override the Compose hostnames in .env.example.
     env:
       RACK_ENV: test
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_ci
-      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_ci_test
-      DEPLOYMENT_ID: ci
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_ci_gh
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_ci_gh_test
+      DEPLOYMENT_ID: ci-gh
       REDIS_URL: redis://localhost:6379/0
       ADMIN_TOKEN: ci-admin-token
     defaults:
@@ -94,6 +94,11 @@ jobs:
       - name: Boot volume test (loop device)
         run: |
           if [ -e infra/host/test/boot_volume_test.sh ]; then
-            sudo apt-get install -y -qq xfsprogs
+            sudo apt-get update -qq && sudo apt-get install -y -qq xfsprogs
             sudo bash infra/host/test/boot_volume_test.sh
+          fi
+      - name: Render-env test (stub aws)
+        run: |
+          if [ -e infra/host/test/render_env_test.sh ]; then
+            bash infra/host/test/render_env_test.sh
           fi
