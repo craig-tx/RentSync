@@ -87,15 +87,38 @@ auditable safety boundary.
   from the webhook to the job to the ledger entry.
 - Every service MUST expose request and job metrics and a health endpoint (`/healthz`).
 - Rejected events, retries, and exceptions MUST be visible as metrics or log events.
+- **Logs and metrics from every service MUST be delivered over OTLP (the OpenTelemetry
+  Protocol) to a single OTLP-compatible backend**, such as OpenObserve.
+  - The service MAY send OTLP itself, or an OpenTelemetry Collector MAY collect the service's
+    standard output (JSON logs on stdout, a metrics endpoint) and forward it as OTLP. Each
+    plan chooses which.
+  - The backend and its endpoint MUST be configuration only, using the standard `OTEL_*`
+    environment variables or the Collector's config. Application code MUST NOT call a
+    vendor-specific telemetry API, so changing the backend never requires a code change.
+  - All telemetry MUST carry the resource attributes `service.name`, `service.version`, and
+    `deployment.environment`. Instance-level data MUST also carry `service.instance.id`.
+- Exporting telemetry MUST NOT block a request or a job, and MUST NOT make one fail.
+  - Export runs asynchronously from bounded buffers (Principle X).
+  - If the backend is unreachable, telemetry is dropped, and the number dropped is itself
+    counted.
+  - The service keeps writing logs to stdout as a fallback.
+- Telemetry that leaves a process is subject to Principle VII. Secrets and unredacted personal
+  data MUST be removed before export, not at the backend.
+- Local development and CI MUST run an OTLP backend (or Collector plus backend), so that every
+  feature's telemetry can be seen and checked end to end.
 
 **Rationale**: Diagnosing a ledger discrepancy means being able to follow one event across
-every service it touched.
+every service it touched. Delivering logs and metrics to one place over an open protocol makes
+that possible, without tying the code to any one vendor.
 
 ### VII. Secure by Default
 
 - Inbound webhooks MUST have their HMAC signatures verified before any processing. Requests
   that fail verification are rejected and recorded.
-- OAuth access and refresh tokens MUST be encrypted at rest.
+- OAuth access and refresh tokens MUST be protected at rest. A system that must present a
+  token again later, such as RentSync calling a PMS, MUST encrypt it. A system that only verifies
+  tokens it issued, such as the mock PMS authorization server, MUST store only a one-way hash and
+  never the token itself.
 - Secrets MUST NOT be committed. Configuration is documented in `.env.example`.
 - Tenant PII (names, contact details, payment amounts) is sensitive. It MUST NOT appear
   unredacted in logs, metrics, or error messages.
@@ -123,6 +146,38 @@ is easier to verify and to explain.
   consequences.
 
 **Rationale**: Decisions that are written down can be reviewed, revisited, and explained.
+
+### X. Stateless, Horizontally Scalable Services
+
+Every design decision MUST keep service processes stateless, so that any service can scale out
+by adding instances.
+
+- A process MUST NOT keep anything in memory that has to be shared across requests or
+  instances, or that has to survive a restart. That includes sessions, rate-limit buckets,
+  counters and metrics, locks, queues, and caches that must stay coherent across instances.
+  Such state belongs in a shared external store: Postgres for durable data, Redis for
+  short-lived data.
+- Correctness MUST NOT depend on how many instances are running or which instance handles a
+  request. Any instance MUST be safe to stop at any time without losing committed data.
+- Background work MUST be coordinated through the shared store, for example with
+  `SKIP LOCKED` claims or leases. It MUST NOT rely on a process-local scheduler that assumes it
+  is the only instance. If a job genuinely needs a single runner, it MUST hold a lease or lock
+  in the shared store.
+- Process memory MAY hold:
+  - data for a single request,
+  - immutable configuration,
+  - buffers and caches that can be lost safely and are reconciled to the shared store, such as
+    metric deltas flushed periodically.
+
+  Each plan MUST state how much data a buffer can lose if the process crashes.
+- Shared state MUST be updated with atomic operations (conditional `UPDATE`, unique
+  constraints, Redis atomic commands, or Lua scripts) rather than read-modify-write sequences.
+  Distributed locks are a last resort, and a plan that uses one MUST justify it.
+- Any exception to this principle MUST be justified in the plan's Complexity Tracking table.
+
+**Rationale**: A stateless service can be scaled, restarted, and replaced without coordination.
+State held inside one process is a hidden single point of failure, and it breaks silently when
+a second instance starts.
 
 ## Scope & Data Constraints
 
@@ -172,4 +227,4 @@ is easier to verify and to explain.
   every PR review MUST verify compliance with these principles. Any unjustified violation
   blocks the merge.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-20
+**Version**: 1.1.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-20
