@@ -99,6 +99,16 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
+    Health:
+      type: object
+      required: [status, db, redis, worker_heartbeat_age_s, version, deployment_id]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        db: { type: string, enum: [ok, down] }
+        redis: { type: string, enum: [ok, down] }
+        worker_heartbeat_age_s: { type: [integer, "null"] }
+        version: { type: string, description: 'SERVICE_VERSION: the image GIT_SHA, or dev locally (feature 002 FR-028)' }
+        deployment_id: { type: string, description: 'DEPLOYMENT_ID, e.g. prod-us (constitution VI)' }
     Error:
       type: object
       required: [error]
@@ -732,19 +742,19 @@ paths:
       summary: Health check
       security: []
       responses:
-        '200': { description: 'DB and Redis reachable, worker heartbeat < 30 s. {"status":"ok","db":"ok","redis":"ok","worker_heartbeat_age_s":3}' }
-        '503': { description: 'Degraded; same body shape, failing component marked' }
+        '200': { description: 'DB and Redis reachable, worker heartbeat < 30 s. version and deployment_id added by feature 002 (FR-028).', content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } } }
+        '503': { description: 'Degraded; same body shape, failing component marked', content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } } }
   /healthz/live:
     get:
       tags: [ops]
       summary: Liveness (process is up; used by container healthchecks)
       security: []
       responses:
-        '200': { description: '{"status":"ok"}' }
+        '200': { description: 'Process is up', content: { application/json: { schema: { type: object, required: [status, version, deployment_id], properties: { status: { type: string, enum: [ok] }, version: { type: string, description: 'SERVICE_VERSION (git SHA, or dev)' }, deployment_id: { type: string, description: 'DEPLOYMENT_ID (constitution VI)' } } } } } }
   /metrics:
     get:
       tags: [ops]
       summary: Prometheus metrics
       security: []
       responses:
-        '200': { description: 'Prometheus text exposition (cluster-wide totals). Always includes target_info{service_name="mock_pms-web",service_version,deployment_environment} 1.', content: { text/plain: {} } }
+        '200': { description: 'Prometheus text exposition (cluster-wide totals). Always includes target_info{service_name="mock_pms-web",service_version,deployment_environment,deployment_id} 1.', content: { text/plain: {} } }

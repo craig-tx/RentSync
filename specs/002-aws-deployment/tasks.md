@@ -152,7 +152,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
 
 ### Tests for the mock PMS changes (write first; they must fail) ⚠️
 
-- [ ] T008 [P] Write `mock_pms/spec/unit/settings_spec.rb`, which tests three behaviors:
+- [X] T008 [P] Write `mock_pms/spec/unit/settings_spec.rb`, which tests three behaviors:
   - `MockPms::Settings.deployment_id` returns `ENV["DEPLOYMENT_ID"]`, and defaults to
     `"local-dev"` when the variable is unset;
   - it raises `ArgumentError` naming the variable for `"Prod_US"`, `"a"`, `"-x"`, `"x-"`, and
@@ -160,18 +160,18 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   - it accepts `"prod-us"`, `"dev-staging"`, `"shared-us"`, and `"pr-42"`.
 
   The rule is `^[a-z][a-z0-9-]{1,14}[a-z0-9]$`.
-- [ ] T009 [P] Extend `mock_pms/spec/unit/logging_spec.rb`. Every emitted JSON line must contain
+- [X] T009 [P] Extend `mock_pms/spec/unit/logging_spec.rb`. Every emitted JSON line must contain
   `"deployment.id"` equal to `Settings.deployment_id`, next to the existing
   `"deployment.environment"`.
-- [ ] T010 [P] Create `mock_pms/spec/unit/metrics/exposition_spec.rb`. `Exposition.render`'s
+- [X] T010 [P] Create `mock_pms/spec/unit/metrics/exposition_spec.rb`. `Exposition.render`'s
   `target_info` line must include the label `deployment_id="<Settings.deployment_id>"`, next to
   the existing `deployment_environment`.
-- [ ] T011 [P] Extend `mock_pms/spec/requests/ops_spec.rb`:
+- [X] T011 [P] Extend `mock_pms/spec/requests/ops_spec.rb`:
   - `GET /healthz` returns `version` (= `Settings.service_version`) and `deployment_id`
     (= `Settings.deployment_id`), on both the 200 and the 503 bodies;
   - `GET /healthz/live` returns both fields;
   - the existing fields and status codes are unchanged (contracts/host-interface.md §/healthz).
-- [ ] T012 [P] Write `mock_pms/spec/integration/setup_deploy_spec.rb`. It runs
+- [X] T012 [P] Write `mock_pms/spec/integration/setup_deploy_spec.rb`. It runs
   `bin/setup --deploy` as a subprocess, with `DATABASE_URL` pointing at a scratch database
   `mock_pms_setup_deploy_spec` (dropped before and after) and **no** `TEST_DATABASE_URL` in the
   environment. Assert that:
@@ -187,23 +187,23 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
 
 ### Implementation for the mock PMS changes
 
-- [ ] T013 Implement `Settings.deployment_id` in `mock_pms/config/settings.rb`, with the
+- [X] T013 Implement `Settings.deployment_id` in `mock_pms/config/settings.rb`, with the
   validation from T008. Call it during `MockPms.boot!`, so an invalid value fails at startup.
   T008 must pass.
-- [ ] T014 [P] Add `"deployment.id" => Settings.deployment_id` to the base fields in
+- [X] T014 [P] Add `"deployment.id" => Settings.deployment_id` to the base fields in
   `mock_pms/lib/mock_pms/logging.rb`, next to line 60. T009 must pass.
-- [ ] T015 [P] Add `"deployment_id" => Settings.deployment_id` to `target_info` in
+- [X] T015 [P] Add `"deployment_id" => Settings.deployment_id` to `target_info` in
   `mock_pms/lib/mock_pms/metrics/exposition.rb`, next to line 33. T010 must pass.
-- [ ] T016 [P] Add `version` and `deployment_id` to both bodies in
+- [X] T016 [P] Add `version` and `deployment_id` to both bodies in
   `mock_pms/lib/mock_pms/api/ops.rb`. T011 must pass.
-- [ ] T017 Add a `--deploy` flag to `mock_pms/bin/setup`:
+- [X] T017 Add a `--deploy` flag to `mock_pms/bin/setup`:
   - only `DATABASE_URL` is required;
   - it ensures the database exists and migrates it;
   - it seeds through `Seed::Reset.run!` only when `MockPms.db[:operators].empty?`;
   - it prints `setup complete (deploy; seeded=<true|false>)`.
 
   Without `--deploy`, the existing behavior is unchanged. T012 must pass.
-- [ ] T018 Update `infra/otel/collector.yaml`:
+- [X] T018 Update `infra/otel/collector.yaml`:
   - the exporter `endpoint` becomes `${env:OPENOBSERVE_OTLP_ENDPOINT}`;
   - in `file_log/docker`, add a `move` operator from `attributes["deployment.id"]` to
     `resource["deployment.id"]`;
@@ -219,7 +219,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
     `compose.yaml`, which already loads them from `env_file: .env`.
 
   Update the file's header comment to mention research 002 R8.
-- [ ] T019 Update `.env.example`:
+- [X] T019 Update `.env.example`:
   - add `DEPLOYMENT_ID=local-dev` (with a comment pointing to constitution VI) and
     `OPENOBSERVE_OTLP_ENDPOINT=http://openobserve:5080/api/default`;
   - rename the databases to `.../mock_pms_local_dev` and `.../mock_pms_local_dev_test`.
@@ -230,14 +230,14 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
 
   Note in `docs/ai-build-log.md` that developers must re-copy `.env` from `.env.example`. The old
   `mock_pms` database is simply left unused.
-- [ ] T020 Extend `mock_pms/bin/telemetry_smoke`. It must also assert that at least one log
+- [X] T020 Extend `mock_pms/bin/telemetry_smoke`. It must also assert that at least one log
   record, one `mock_pms_*` metric, and one Collector self-metric (for example
   `otelcol_exporter_sent_log_records`) in OpenObserve carry `deployment.id` equal to
   `DEPLOYMENT_ID` and `deployment.environment` equal to `DEPLOYMENT_ENVIRONMENT`.
-- [ ] T021 [P] Add `version` (string) and `deployment_id` (string) to the `/healthz` and
+- [X] T021 [P] Add `version` (string) and `deployment_id` (string) to the `/healthz` and
   `/healthz/live` response schemas in `specs/001-mock-pms/contracts/openapi.yaml`, at lines
   729–745.
-- [ ] T022 Verify the changes so far:
+- [X] T022 Verify the changes so far:
   1. Re-copy `.env`, then `docker compose up -d --build` and
      `docker compose exec mock_pms bundle exec bin/setup`.
   2. Run the full `rspec` and `rubocop`.

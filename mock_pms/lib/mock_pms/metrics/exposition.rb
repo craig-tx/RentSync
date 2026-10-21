@@ -30,7 +30,8 @@ module MockPms
           labels = {
             "service_name" => "mock_pms-web",
             "service_version" => Settings.service_version,
-            "deployment_environment" => Settings.deployment_environment
+            "deployment_environment" => Settings.deployment_environment,
+            "deployment_id" => Settings.deployment_id
           }
           ["# HELP target_info Target metadata.", "# TYPE target_info gauge", "target_info#{fmt(labels)} 1"]
         end

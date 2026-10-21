@@ -3,9 +3,12 @@
 
 # CI telemetry smoke test (Constitution VI): polls OpenObserve for up to 60 s until
 #   - a log from mock_pms-worker carrying a non-empty code.function.name, and
-#   - the mock_pms_http_requests_total metric from mock_pms-web with a service.version
-# have arrived through the Collector. Exits 1 if either is missing.
-# ENV: OPENOBSERVE_URL (default http://openobserve:5080), OPENOBSERVE_USER, OPENOBSERVE_PASSWORD.
+#   - the mock_pms_http_requests_total metric from mock_pms-web with a service.version, and
+#   - a Collector self-metric,
+# each carrying deployment.id = DEPLOYMENT_ID and deployment.environment = DEPLOYMENT_ENVIRONMENT
+# (constitution VI, feature 002 T020), have arrived through the Collector. Exits 1 if any is missing.
+# ENV: OPENOBSERVE_URL (default http://openobserve:5080), OPENOBSERVE_USER, OPENOBSERVE_PASSWORD,
+#      DEPLOYMENT_ID (default local-dev), DEPLOYMENT_ENVIRONMENT (default local).
 require "json"
 require "net/http"
 require "uri"
@@ -15,8 +18,13 @@ require "uri"
 FIELD_NAMES = {
   service_name: "service_name",
   service_version: "service_version",
-  code_function_name: "code_function_name"
+  code_function_name: "code_function_name",
+  deployment_id: "deployment_id",
+  deployment_environment: "deployment_environment"
 }.freeze
+
+DEPLOYMENT_ID = ENV.fetch("DEPLOYMENT_ID", "local-dev")
+DEPLOYMENT_ENVIRONMENT = ENV.fetch("DEPLOYMENT_ENVIRONMENT", "local")
 
 BASE = ENV.fetch("OPENOBSERVE_URL", "http://openobserve:5080")
 USER = ENV.fetch("OPENOBSERVE_USER")
@@ -36,14 +44,19 @@ rescue SystemCallError, Net::OpenTimeout, Net::ReadTimeout, JSON::ParserError
 end
 
 f = FIELD_NAMES
+deployed = %( AND #{f[:deployment_id]} = '#{DEPLOYMENT_ID}' ) +
+           %(AND #{f[:deployment_environment]} = '#{DEPLOYMENT_ENVIRONMENT}')
 checks = {
-  "worker log with code.function.name" => lambda {
+  "worker log with code.function.name and deployment attributes" => lambda {
     search(%(SELECT * FROM "default" WHERE #{f[:service_name]} = 'mock_pms-worker' ) +
-           %(AND #{f[:code_function_name]} IS NOT NULL AND #{f[:code_function_name]} <> ''))
+           %(AND #{f[:code_function_name]} IS NOT NULL AND #{f[:code_function_name]} <> '') + deployed)
   },
-  "mock_pms_http_requests_total from mock_pms-web with service.version" => lambda {
+  "mock_pms_http_requests_total from mock_pms-web with service.version and deployment attributes" => lambda {
     search(%(SELECT * FROM "mock_pms_http_requests_total" WHERE #{f[:service_name]} = 'mock_pms-web' ) +
-           %(AND #{f[:service_version]} IS NOT NULL AND #{f[:service_version]} <> ''), type: "metrics")
+           %(AND #{f[:service_version]} IS NOT NULL AND #{f[:service_version]} <> '') + deployed, type: "metrics")
+  },
+  "Collector self-metric otelcol_exporter_sent_log_records with deployment attributes" => lambda {
+    search(%(SELECT * FROM "otelcol_exporter_sent_log_records" WHERE 1 = 1#{deployed}), type: "metrics")
   }
 }
 

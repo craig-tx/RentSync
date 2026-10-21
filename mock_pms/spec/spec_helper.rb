@@ -2,7 +2,7 @@
 
 ENV["RACK_ENV"] = "test"
 ENV["ADMIN_TOKEN"] ||= "test-admin-token"
-ENV["TEST_DATABASE_URL"] ||= "postgres://postgres:postgres@postgres:5432/mock_pms_test"
+ENV["TEST_DATABASE_URL"] ||= "postgres://postgres:postgres@postgres:5432/mock_pms_local_dev_test"
 ENV["REDIS_URL"] ||= "redis://redis:6379/0"
 
 require_relative "../lib/mock_pms"

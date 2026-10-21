@@ -28,6 +28,31 @@ RSpec.describe "ops endpoints", type: :request do
       expect(JSON.parse(last_response.body)).to include("redis" => "down")
     end
 
+    # Feature 002 FR-028: the release check reads the build and the deployment from /healthz.
+    it "reports version and deployment_id on 200" do
+      beat!(1)
+      get "/healthz"
+      expect(last_response.status).to eq(200)
+      expect(JSON.parse(last_response.body)).to include("version" => MockPms::Settings.service_version,
+                                                        "deployment_id" => MockPms::Settings.deployment_id)
+    end
+
+    it "reports version and deployment_id on 503" do
+      get "/healthz"
+      expect(last_response.status).to eq(503)
+      expect(JSON.parse(last_response.body)).to include("version" => MockPms::Settings.service_version,
+                                                        "deployment_id" => MockPms::Settings.deployment_id)
+    end
+  end
+
+  describe "GET /healthz/live" do
+    it "reports status, version and deployment_id" do
+      get "/healthz/live"
+      expect(last_response.status).to eq(200)
+      expect(JSON.parse(last_response.body)).to eq("status" => "ok", "version" => MockPms::Settings.service_version,
+                                                   "deployment_id" => MockPms::Settings.deployment_id)
+    end
+
     it "is 503 when the worker heartbeat is missing" do
       get "/healthz"
       expect(last_response.status).to eq(503)
@@ -51,9 +76,9 @@ RSpec.describe "ops endpoints", type: :request do
       expect(last_response.content_type).to include("version=0.0.4")
       expected = 'mock_pms_http_requests_total{method="GET",route="/healthz",status="200"} 1'
       expect(last_response.body).to include(expected)
-      expect(last_response.body).to match(
-        /^target_info\{deployment_environment="[^"]+",service_name="mock_pms-web",service_version="[^"]+"\} 1$/
-      )
+      labels = 'deployment_environment="[^"]+",deployment_id="[^"]+",' \
+               'service_name="mock_pms-web",service_version="[^"]+"'
+      expect(last_response.body).to match(/^target_info\{#{labels}\} 1$/)
     end
   end
 

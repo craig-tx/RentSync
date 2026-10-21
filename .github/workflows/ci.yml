@@ -28,8 +28,9 @@ jobs:
     # so these override the Compose hostnames in .env.example.
     env:
       RACK_ENV: test
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms
-      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_ci
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_ci_test
+      DEPLOYMENT_ID: ci
       REDIS_URL: redis://localhost:6379/0
       ADMIN_TOKEN: ci-admin-token
     defaults:
