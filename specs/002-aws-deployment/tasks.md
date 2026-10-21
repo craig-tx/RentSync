@@ -803,7 +803,7 @@ Ingest stays inside the VPC.
 
 ### Tests for User Story 5 (write first; they must fail) ⚠️
 
-- [ ] T076 [P] [US5] Write `infra/terraform/shared/tests/backup.tftest.hcl` with mocked
+- [X] T076 [P] [US5] Write `infra/terraform/shared/tests/backup.tftest.hcl` with mocked
   providers. Assert that `aws_dlm_lifecycle_policy` `${local.name}-daily`:
   - targets `target_tags = { "rentsync:backup" = "daily" }`, with resource type `VOLUME`;
   - runs every 24 hours at `05:00` UTC;
@@ -815,19 +815,19 @@ Ingest stays inside the VPC.
 
 ### Implementation for User Story 5
 
-- [ ] T077 [US5] Create `infra/terraform/shared/backup.tf`:
+- [X] T077 [US5] Create `infra/terraform/shared/backup.tf`:
   - IAM role `${local.name}-dlm` (trusted by `dlm.amazonaws.com`), with the AWS-managed
     `AWSDataLifecycleManagerServiceRole` policy;
   - `aws_dlm_lifecycle_policy` per T076.
 
   T076 must pass.
-- [ ] T078 [US5] Fill in runbook §Host replacement:
+- [X] T078 [US5] Fill in runbook §Host replacement:
   - a `-replace=module.host.aws_instance.this` apply on the deployment's workspace (HCP: "Start
     new run" → "Replace resources");
   - what to expect (the same IP, Caddy logs `certificate loaded`, pending deliveries resume);
   - the 30-minute bound (SC-007);
   - reboot recovery.
-- [ ] T079 [US5] Fill in runbook §Backup restore (research R14). Write the exact, deliberate
+- [X] T079 [US5] Fill in runbook §Backup restore (research R14). Write the exact, deliberate
   override procedure:
   1. choose a snapshot (`aws ec2 describe-snapshots --filters Name=tag:DeploymentId,Values=<id>`);
   2. set the workspace variable `data_snapshot_id`;
@@ -840,7 +840,7 @@ Ingest stays inside the VPC.
 
   **Rehearse it on `dev-staging`** before finalizing the wording. Adjust the HCL shape to what
   actually plans cleanly, and record the final shape in the runbook.
-- [ ] T080 [US5] Fill in runbook §Secret rotation:
+- [X] T080 [US5] Fill in runbook §Secret rotation:
   - **admin token**: update the HCP variable, bump `admin_token_version`, apply, then run
     `deploy.yml` with the current tag (`--reload` re-renders the env file);
   - **Postgres password**: bump `postgres_password_version`, apply, open an SSM session, and
@@ -850,7 +850,7 @@ Ingest stays inside the VPC.
     update the OpenObserve user through its UI or API, and `--reload` both environment hosts.
 
   Include how to check that the old admin token gets 401.
-- [ ] T081 [US5] Fill in runbook §Teardown (quickstart §10):
+- [X] T081 [US5] Fill in runbook §Teardown (quickstart §10):
   1. a PR that temporarily sets `prevent_destroy = false`, the documented override;
   2. destroy `prod-us`, then `dev-staging`, then `shared-us`, emptying ECR first with
      `aws ecr batch-delete-image`;

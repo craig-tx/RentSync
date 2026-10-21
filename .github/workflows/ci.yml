@@ -78,31 +78,23 @@ jobs:
           terraform_version: 1.16.6
           terraform_wrapper: false
       - run: terraform fmt -check -recursive infra/terraform
-      - name: Validate and test each root
+      - name: Validate and test each root and the host module
         run: |
           for root in infra/terraform/shared infra/terraform/environment infra/terraform/modules/host; do
             terraform -chdir=$root init -backend=false -input=false
             terraform -chdir=$root validate
-            if ls $root/tests/*.tftest.hcl >/dev/null 2>&1; then terraform -chdir=$root test; fi
+            terraform -chdir=$root test
           done
       - name: Static checks
-        run: if [ -e infra/terraform/check_prevent_destroy.sh ]; then bash infra/terraform/check_prevent_destroy.sh; fi
+        run: bash infra/terraform/check_prevent_destroy.sh
       - name: Shellcheck
         run: |
-          find infra/host/bin infra/host/test infra/terraform -maxdepth 1 -type f \( -path "infra/host/bin/*" -o -name "*.sh" \) -print0 | xargs -0 -r shellcheck
+          find infra/host/bin infra/host/test infra/terraform -maxdepth 1 -type f \( -path "infra/host/bin/*" -o -name "*.sh" \) -print0 | xargs -0 shellcheck
       - name: Boot volume test (loop device)
         run: |
-          if [ -e infra/host/test/boot_volume_test.sh ]; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq xfsprogs
-            sudo bash infra/host/test/boot_volume_test.sh
-          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq xfsprogs
+          sudo bash infra/host/test/boot_volume_test.sh
       - name: Render-env test (stub aws)
-        run: |
-          if [ -e infra/host/test/render_env_test.sh ]; then
-            bash infra/host/test/render_env_test.sh
-          fi
+        run: bash infra/host/test/render_env_test.sh
       - name: Deploy-script test (stub docker and aws)
-        run: |
-          if [ -e infra/host/test/deploy_test.sh ]; then
-            bash infra/host/test/deploy_test.sh
-          fi
+        run: bash infra/host/test/deploy_test.sh

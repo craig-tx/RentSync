@@ -306,15 +306,158 @@ still be in ECR, which keeps the last 20 images.
 
 ## Host replacement
 
-TBD (task T078).
+A host is disposable; its data is not. The Elastic IP, the network interface (with its
+private IP) and the data volume stay when the instance is replaced (FR-008, FR-031). The
+volume holds Postgres (or OpenObserve) and Caddy's certificates.
+
+**Planned replacement** (an AMI upgrade, a new instance type, or "just rebuild it"):
+
+1. In the deployment's HCP workspace (for example `rentsync-dev-staging`), choose **New run**
+   → **Plan and apply**.
+2. Under **Additional planning options**, add the replace address
+   `module.host.aws_instance.this`. For the telemetry host in `rentsync-shared-us`, use
+   `module.telemetry_host.aws_instance.this`.
+3. The plan should show **1 to replace**: the instance, plus the volume attachment that goes
+   with it. It must show no change to the EIP, the network interface or `aws_ebs_volume.data`.
+   Confirm.
+
+These workspaces are connected to GitHub, so they don't accept a CLI `terraform apply`. Start
+the run from the HCP UI.
+
+An AMI or `instance_type` variable change, or any change to the host files, replaces the
+host the same way, because user data changes force replacement (research R6).
+
+**What to expect** (under 30 minutes, SC-007):
+
+- Terraform stops the old instance cleanly, detaches the data volume, and destroys the
+  instance. It then creates the new one, attaches the volume, and re-associates nothing,
+  because the EIP lives on the network interface.
+- On boot, `rentsync-boot` finds an existing filesystem, so it **mounts without formatting**.
+  `rentsync.service` then runs `rentsync-deploy --reload`, which brings back the image recorded
+  in `image_tag`.
+- Caddy logs that it loaded the certificate from storage and makes no new ACME order. Check
+  this in a session with `docker logs rentsync-dev-staging-caddy-1 2>&1 | grep -i certificate`.
+- Pending webhook deliveries resume from the outbox. Delivery is at-least-once (FR-030).
+- There is no DNS change.
+
+**Unplanned loss** (the instance was terminated): run a normal plan in the workspace. It
+recreates the instance, and the rest of the steps are the same.
+
+**Reboot or stop/start**: no action is needed (US5 AC5). systemd mounts the volume, Docker
+waits for it, and `rentsync.service` re-renders secrets and starts the stack.
 
 ## Backup restore
 
-TBD (task T079).
+AWS Data Lifecycle Manager snapshots every data volume daily at 05:00 UTC and keeps 7
+(FR-032). Restoring means replacing a deployment's data volume with one created from a
+snapshot. `prevent_destroy` blocks that by design (FR-034), so this procedure is the
+deliberate override. It **keeps the old volume** for forensics.
+
+This needs the Terraform CLI signed in to HCP (`terraform login`, which opens a browser for
+your own user token) and AWS CLI access. Example for `dev-staging`; rehearse it there before
+you ever need it on `prod-us` (task T083).
+
+1. **Pick a snapshot:**
+
+   ```bash
+   aws ec2 describe-snapshots --region us-east-1 --owner-ids self \
+     --filters Name=tag:DeploymentId,Values=dev-staging \
+     --query 'reverse(sort_by(Snapshots,&StartTime))[].[SnapshotId,StartTime,VolumeSize]' --output table
+   ```
+
+2. **Release the current volume from Terraform's management** (the override). It stays in
+   AWS, attached and untouched:
+
+   ```bash
+   cd infra/terraform/environment
+   export TF_WORKSPACE=rentsync-dev-staging
+   terraform init
+   terraform state rm 'module.host.aws_ebs_volume.data'
+   ```
+
+   A `removed { … destroy = false }` block can't do this here, because the module still
+   declares the volume. `terraform state rm` is the explicit, audited equivalent: HCP records a
+   new state version.
+3. In the HCP workspace, set the variable `data_snapshot_id` to the chosen `snap-…`, then start
+   a run. The plan should show:
+   - **create** `aws_ebs_volume.data`, from the snapshot;
+   - **replace** `aws_volume_attachment.data`;
+   - **replace** `aws_instance.this`, because the user data holds the volume ID.
+
+   Confirm.
+4. **Verify**: `/healthz` is ok, and the data matches the snapshot time. For example,
+   `GET /admin/clients` shows the clients that existed then. Anything newer than the snapshot
+   is gone (at most 24 hours, SC-007).
+5. **Leave `data_snapshot_id` set.** Clearing it would plan a replacement of the new volume,
+   which `prevent_destroy` correctly refuses.
+6. **Delete the old volume** once you no longer need it. The old volume is the one in
+   `available` state with the deployment's Name tag:
+
+   ```bash
+   aws ec2 describe-volumes --region us-east-1 \
+     --filters Name=tag:DeploymentId,Values=dev-staging Name=status,Values=available \
+     --query 'Volumes[].[VolumeId,CreateTime]' --output table
+   aws ec2 delete-volume --region us-east-1 --volume-id vol-…
+   ```
 
 ## Secret rotation
 
-TBD (task T080).
+A new value goes into HCP (or a version bump generates one). The apply writes it to SSM through
+a write-only argument, so it never appears in state or logs. Then the containers pick it up
+with a **reload**. Run **Deploy** with the deployment, `image_tag` empty, and **reload**
+ticked. Re-deploying the same SHA would be a no-op.
+
+**Admin token** (per environment):
+
+1. On your machine, run `openssl rand -hex 32`. In the workspace, replace the `admin_token`
+   variable (Sensitive) and increase `admin_token_version` by 1.
+2. Apply. `rentsync-dev-staging` applies on its own; `rentsync-prod-us` needs you to confirm.
+3. Run **Deploy** with **reload** for that deployment.
+4. Check:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' "$BASE/admin/clients" -H "Authorization: Bearer $OLD"   # 401
+   curl -s -o /dev/null -w '%{http_code}\n' "$BASE/admin/clients" -H "Authorization: Bearer $NEW"   # 200
+   ```
+
+**Postgres password** (per environment). The database keeps its old password until it is told
+otherwise, so run these steps back to back:
+
+1. Increase `postgres_password_version` by 1 and apply. A new random password is written to
+   SSM.
+2. Open a session (`aws ssm start-session --target <instance_id>`), then run:
+
+   ```bash
+   sudo -i
+   NEW="$(aws ssm get-parameter --region us-east-1 --with-decryption \
+     --name /rentsync/dev-staging/postgres_password --query Parameter.Value --output text)"
+   printf "ALTER USER postgres PASSWORD '%s';\n" "$NEW" \
+     | docker exec -i rentsync-dev-staging-postgres-1 psql -U postgres -q
+   unset NEW
+   /usr/local/bin/rentsync-deploy --reload
+   ```
+
+   The password goes to `psql` on stdin, so it never appears in a process list or in shell
+   history. Between the `ALTER USER` and the reload, the app can't open new connections for a
+   few seconds.
+
+**OpenObserve root password** (shared). OpenObserve reads `ZO_ROOT_USER_PASSWORD` only when it
+first initializes, so change the account itself first:
+
+1. Sign in to `https://telemetry.rentsync.org` → **IAM** → **Users** → the root user →
+   **Change password**, and set the new value.
+2. In `rentsync-shared-us`, set `openobserve_root_password` to the same value and increase
+   `openobserve_root_password_version` by 1. Apply (confirm). Both the root and ingest
+   parameters are rewritten.
+3. Run **Deploy** with **reload** for `dev-staging` and for `prod-us`, so their Collectors use
+   the new ingest password.
+4. On the telemetry host, run `sudo systemctl restart rentsync.service`.
+5. Check that telemetry from both environments still arrives (quickstart §5).
+
+**OpenObserve metadata database password**: do this rarely. It is the same as the Postgres
+procedure, run on the telemetry host against `rentsync-shared-us-openobserve-db-1` with user
+`openobserve` and parameter `/rentsync/shared-us/openobserve/db_password`, followed by
+`sudo systemctl restart rentsync.service`.
 
 ## Replaying failed webhooks on a deployed environment
 
@@ -348,8 +491,76 @@ Replays are idempotent from the receiver's point of view, because the event ID i
 
 ## Adding a side-by-side deployment
 
-TBD (task T081).
+Every name a deployment owns derives from its DeploymentId (constitution VI), so a new one,
+for example `pr-42`, runs next to the others in the same account. Nothing existing changes
+(FR-042):
+
+1. **HCP:** create workspace `rentsync-pr-42` on `infra/terraform/environment`, tagged
+   `rentsync-environment`, like the others in §Bootstrap step 5. Pick its apply method. Add it
+   to `rentsync-shared-us`'s remote state sharing list, and set its variables:
+   - `deployment_id = pr-42`;
+   - `environment` (`staging` for anything that isn't production);
+   - `hostname = pms-pr-42.rentsync.org`;
+   - a free `private_ip` in `10.40.1.0/24`, such as `10.40.1.42`;
+   - `acme_email` and `acme_ca`;
+   - a fresh `admin_token`.
+2. **GitHub:** create Environment `pr-42` with `SITE_URL = https://pms-pr-42.rentsync.org`. Add
+   `pr-42` to the `deployment_id` choice list in `.github/workflows/deploy.yml`, which is the
+   only code change.
+3. **NameCheap:** add an A record `pms-pr-42` → the workspace's `public_ip` output.
+4. Apply, then run **Deploy** for `pr-42`.
+
+It gets its own host, volume, role, parameters (`/rentsync/pr-42/…`), database
+(`mock_pms_pr_42`), Compose project and telemetry label (`deployment.id=pr-42`). It costs
+about $17 a month while it exists; Cost Explorer shows it under the `DeploymentId` tag.
+
+**Removing it** follows §Teardown for that one deployment. Afterwards, remove the Environment,
+the choice-list entry and the A record.
 
 ## Teardown
 
-TBD (task T081).
+This stops all costs (quickstart §10). Data volumes are protected (FR-034), so teardown
+releases each one from Terraform first. That is the deliberate override; the volumes stay in
+AWS until you delete them. Work from the newest deployment to the oldest: environments first,
+then `shared-us`, because the environments depend on its network.
+
+1. **Optional:** take a final manual snapshot of each data volume you might want back.
+2. For each environment workspace (`rentsync-prod-us`, then `rentsync-dev-staging`, plus any
+   side-by-side ones):
+
+   ```bash
+   cd infra/terraform/environment
+   export TF_WORKSPACE=rentsync-prod-us
+   terraform init
+   terraform state rm 'module.host.aws_ebs_volume.data'
+   ```
+
+   Then, in the HCP UI, open **Settings** → **Destruction and Deletion** → **Queue destroy
+   plan**, and confirm.
+3. **Empty the image registry**, because ECR refuses to delete a repository that holds
+   images (`force_delete = false`):
+
+   ```bash
+   repo=shared-us/mock_pms
+   aws ecr list-images --region us-east-1 --repository-name "$repo" --query 'imageIds[*]' --output json > /tmp/ids.json
+   aws ecr batch-delete-image --region us-east-1 --repository-name "$repo" --image-ids file:///tmp/ids.json
+   ```
+
+4. Do the same for `rentsync-shared-us` (`infra/terraform/shared`), with
+   `terraform state rm 'module.telemetry_host.aws_ebs_volume.data'`, then queue its destroy.
+5. Delete the released data volumes, and any snapshots you don't want:
+
+   ```bash
+   aws ec2 describe-volumes --region us-east-1 --filters Name=tag:Project,Values=rentsync \
+     --query 'Volumes[].[VolumeId,Tags[?Key==`DeploymentId`]|[0].Value,State]' --output table
+   aws ec2 delete-volume --region us-east-1 --volume-id vol-…
+   aws ec2 describe-snapshots --region us-east-1 --owner-ids self --filters Name=tag:Project,Values=rentsync \
+     --query 'Snapshots[].[SnapshotId,StartTime]' --output table
+   aws ec2 delete-snapshot --region us-east-1 --snapshot-id snap-…
+   ```
+
+6. Delete the NameCheap A records.
+7. If you're leaving for good, also delete the bootstrap roles, policies and OIDC providers
+   (§Bootstrap steps 1–2), and the HCP workspaces.
+
+Next day: Cost Explorer, grouped by `DeploymentId`, should show no new charges.

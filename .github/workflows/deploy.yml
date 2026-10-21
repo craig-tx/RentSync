@@ -1,5 +1,6 @@
-# Manual deploy and rollback (feature 002 FR-029, runbook §Rollback). This is the one documented
-# action for either. A prod-us run waits for the prod-us Environment's required reviewer.
+# Manual deploy, rollback and reload (feature 002 FR-029; runbook §Rollback, §Secret rotation).
+# This is the one documented action for each. A prod-us run waits for the prod-us Environment's
+# required reviewer.
 name: Deploy
 
 on:
@@ -11,12 +12,17 @@ on:
         type: choice
         options: [dev-staging, prod-us]
       image_tag:
-        description: Full commit SHA to deploy (built first if missing). Leave empty with rollback.
+        description: Full commit SHA to deploy (built first if missing). Leave empty for rollback or reload.
         required: false
         type: string
         default: ""
       rollback:
         description: Roll back to the previously deployed image
+        required: false
+        type: boolean
+        default: false
+      reload:
+        description: Re-render secrets from SSM and restart the current image (after a secret rotation)
         required: false
         type: boolean
         default: false
@@ -27,7 +33,7 @@ permissions:
 
 jobs:
   build:
-    if: ${{ !inputs.rollback }}
+    if: ${{ !inputs.rollback && !inputs.reload }}
     uses: ./.github/workflows/build-image.yml
     with:
       sha: ${{ inputs.image_tag }}
@@ -40,3 +46,4 @@ jobs:
       deployment_id: ${{ inputs.deployment_id }}
       image_tag: ${{ inputs.image_tag }}
       rollback: ${{ inputs.rollback }}
+      reload: ${{ inputs.reload }}

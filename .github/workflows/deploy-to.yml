@@ -13,12 +13,17 @@ on:
         required: true
         type: string
       image_tag:
-        description: Full commit SHA to deploy; ignored when rollback is true
+        description: Full commit SHA to deploy; ignored for rollback and reload
         required: false
         type: string
         default: ""
       rollback:
         description: Deploy the previous image instead
+        required: false
+        type: boolean
+        default: false
+      reload:
+        description: Re-render secrets and restart the current image (secret rotation)
         required: false
         type: boolean
         default: false
@@ -38,6 +43,7 @@ jobs:
       DEPLOYMENT_ID: ${{ inputs.deployment_id }}
       IMAGE_TAG: ${{ inputs.image_tag }}
       ROLLBACK: ${{ inputs.rollback }}
+      RELOAD: ${{ inputs.reload }}
       SITE_URL: ${{ vars.SITE_URL }}
       AWS_REGION: ${{ vars.AWS_REGION }}
     steps:
@@ -45,7 +51,8 @@ jobs:
         run: |
           [[ "$DEPLOYMENT_ID" =~ ^[a-z][a-z0-9-]{1,14}[a-z0-9]$ ]] || { echo "invalid deployment_id"; exit 1; }
           [ -n "$SITE_URL" ] || { echo "Environment $DEPLOYMENT_ID has no SITE_URL variable (runbook §Bootstrap)"; exit 1; }
-          if [ "$ROLLBACK" != "true" ]; then
+          if [ "$ROLLBACK" = "true" ] && [ "$RELOAD" = "true" ]; then echo "choose rollback or reload, not both"; exit 1; fi
+          if [ "$ROLLBACK" != "true" ] && [ "$RELOAD" != "true" ]; then
             [[ "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "image_tag must be a full 40-character commit SHA"; exit 1; }
           fi
       - uses: aws-actions/configure-aws-credentials@v4
@@ -54,7 +61,9 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
       - name: Run rentsync-deploy on the host
         run: |
-          arg="$IMAGE_TAG"; [ "$ROLLBACK" = "true" ] && arg="--rollback"
+          arg="$IMAGE_TAG"
+          [ "$ROLLBACK" = "true" ] && arg="--rollback"
+          [ "$RELOAD" = "true" ] && arg="--reload"
           command_id="$(aws ssm send-command \
             --document-name AWS-RunShellScript \
             --targets "Key=tag:DeploymentId,Values=$DEPLOYMENT_ID" "Key=tag:rentsync:deployable,Values=true" \
@@ -80,6 +89,6 @@ jobs:
           echo "$body"
           [ "$(jq -r .status <<< "$body")" = ok ] || { echo "status is not ok"; exit 1; }
           [ "$(jq -r .deployment_id <<< "$body")" = "$DEPLOYMENT_ID" ] || { echo "wrong deployment answered"; exit 1; }
-          if [ "$ROLLBACK" != "true" ]; then
+          if [ "$ROLLBACK" != "true" ] && [ "$RELOAD" != "true" ]; then
             [ "$(jq -r .version <<< "$body")" = "$IMAGE_TAG" ] || { echo "version is not $IMAGE_TAG"; exit 1; }
           fi
