@@ -40,6 +40,10 @@ module MockPms
     middleware/request_metrics
     rate_limit/limiter
     middleware/rate_limiter
+    chaos/settings
+    chaos/decider
+    middleware/chaos_errors
+    delivery/malformer
     api/errors
     api/ops
     api/admin_base

@@ -97,6 +97,17 @@ module MockPms
           end
         end
 
+        namespace :chaos do
+          get { Chaos::Settings.current }
+
+          put do
+            changes = params.slice(*Chaos::Settings::FIELDS.map(&:to_s)).to_h
+            Chaos::Settings.update!(changes)
+          rescue Chaos::Invalid, ArgumentError, TypeError => e
+            api_error!("invalid_parameter", e.message, 422)
+          end
+        end
+
         get :events do
           dataset = MockPms::Event.dataset
           dataset = dataset.where(type: params[:type].to_s) if params[:type]

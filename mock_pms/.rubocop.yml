@@ -51,7 +51,7 @@ Layout/LineLength:
   Max: 120
 
 Naming/MethodParameterName:
-  AllowedNames: [by, c, db, id, io, k, l, le, n, o, p, r, t, tx, v]
+  AllowedNames: [at, by, c, db, id, io, k, l, le, n, o, p, r, s, t, tx, u, v]
 
 Naming/PredicateMethod:
   Enabled: false

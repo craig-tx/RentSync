@@ -633,7 +633,7 @@ identical decision sequences (quickstart §7).
 
 ### Tests for User Story 4 (write first; they must fail) ⚠️
 
-- [ ] T082 [P] [US4] Write `mock_pms/spec/unit/chaos/decider_spec.rb`.
+- [X] T082 [P] [US4] Write `mock_pms/spec/unit/chaos/decider_spec.rb`.
   - `Decider.uniform(seed:, stream:, counter:, field:)` equals the first 8 bytes of `HMAC-SHA256(seed, "<stream>:<counter>:<field>")`, read as a big-endian unsigned integer, divided by `2**64`. Check it against a vector computed by hand in the spec.
   - `draw!(:delivery)` runs `UPDATE chaos_counters SET value = value + 1 WHERE stream = 'delivery' RETURNING value`. Draws from 8 threads produce unique, gap-free counters (`:committed`).
   - **Independence**: while one connection holds an open transaction that has drawn from `delivery`, `draw!(:api)` on another connection returns at once and does not block (`:committed`).
@@ -641,18 +641,18 @@ identical decision sequences (quickstart §7).
   - With `seed: 1`, the same sequence of `decide_delivery` calls gives identical `chaos` hashes across two runs, including when the runs happen in a different process (fork in the spec, `:committed`).
   - With every rate at 0, every decision is `{}`.
   - With rates at 0.10, the observed frequencies over 10 000 decisions are within ±1 percentage point for a fixed seed.
-- [ ] T083 [P] [US4] Write `mock_pms/spec/unit/delivery/malformer_spec.rb`.
+- [X] T083 [P] [US4] Write `mock_pms/spec/unit/delivery/malformer_spec.rb`.
   - `truncate` returns the first half of the body bytes, which is not parseable JSON.
   - `drop_field` removes `data`.
   - `bad_type` sets `occurred_at` to a number.
   - The signer covers the bytes after malformation, so `Signer.verify` passes on the malformed body.
-- [ ] T084 [P] [US4] Write `mock_pms/spec/unit/chaos/application_spec.rb`, covering the recorder and the worker with chaos turned on.
+- [X] T084 [P] [US4] Write `mock_pms/spec/unit/chaos/application_spec.rb`, covering the recorder and the worker with chaos turned on.
   - **Duplicate**: adds a second `deliveries` row for the same event and client, with `chaos.duplicate_of` set to the first delivery's `id`. Each copy gets its own malform decision.
   - **Out-of-order**: sets `chaos.reorder_hold_s` between 2 and 10 and moves `scheduled_at` later by that amount.
   - **Delay**: sets `chaos.delayed_s` between `delay_min_s` and `delay_max_s` and moves `scheduled_at` later.
   - **Malform**: sets `chaos.malform` to one of `truncate`, `drop_field`, or `bad_type`. The worker sends the malformed body and records `chaos_applied`.
   - The stored `events` row is never changed (FR-025).
-- [ ] T085 [P] [US4] Write `mock_pms/spec/requests/chaos_spec.rb`.
+- [X] T085 [P] [US4] Write `mock_pms/spec/requests/chaos_spec.rb`.
   - `GET /admin/chaos` returns the defaults: every rate is 0, `delay_min_s` is 5, `delay_max_s` is 60, and `seed` is 1.
   - `PUT /admin/chaos` with a value out of range returns 422. The ranges are: every rate between 0 and 1; `0 ≤ delay_min_s ≤ delay_max_s ≤ 3600`.
   - A valid `PUT` takes effect immediately, without a restart.
@@ -661,24 +661,24 @@ identical decision sequences (quickstart §7).
 
 ### Implementation for User Story 4
 
-- [ ] T086 [US4] Create migration `mock_pms/db/migrations/006_chaos_settings.rb` for `chaos_settings` and `chaos_counters`. `chaos_settings` holds exactly one row. Enforce that with `id smallint PK CHECK (id = 1)` and insert the default row.
+- [X] T086 [US4] Create migration `mock_pms/db/migrations/006_chaos_settings.rb` for `chaos_settings` and `chaos_counters`. `chaos_settings` holds exactly one row. Enforce that with `id smallint PK CHECK (id = 1)` and insert the default row.
   - `duplicate_rate`, `out_of_order_rate`, `delay_rate`, `server_error_rate`, and `malformed_rate` are `numeric(4,3) NOT NULL DEFAULT 0 CHECK (BETWEEN 0 AND 1)`. Per the data model, they are "each between 0 and 1. **All default to 0**".
   - `delay_min_s integer DEFAULT 5` and `delay_max_s integer DEFAULT 60`, with `CHECK (0 <= delay_min_s AND delay_min_s <= delay_max_s AND delay_max_s <= 3600)`.
   - `seed bigint DEFAULT 1`.
   - `updated_at timestamptz`.
   - **`chaos_counters`**: `stream text PRIMARY KEY CHECK (stream IN ('delivery','api'))` and `value bigint NOT NULL DEFAULT 0`. Insert both rows. Each stream has its own row, so an API draw never waits on a delivery transaction's row lock (R7).
-- [ ] T087 [US4] Implement `mock_pms/lib/mock_pms/chaos/settings.rb`, which reads and updates the single row, validates the ranges, and resets both `chaos_counters` rows to 0 on every update, in the same transaction. Also implement `mock_pms/lib/mock_pms/chaos/decider.rb`, making T082 pass.
+- [X] T087 [US4] Implement `mock_pms/lib/mock_pms/chaos/settings.rb`, which reads and updates the single row, validates the ranges, and resets both `chaos_counters` rows to 0 on every update, in the same transaction. Also implement `mock_pms/lib/mock_pms/chaos/decider.rb`, making T082 pass.
   - `uniform`: the HMAC-counter derivation from research R7.
   - `draw!(stream)`: `UPDATE chaos_counters SET value = value + 1 WHERE stream = ? RETURNING value`, inside the caller's transaction.
   - `decide_delivery`: returns a `chaos` hash with the fields `duplicate`, `reorder`, `reorder_hold`, `delay`, `delay_s`, `malform`, and `malform_kind`.
   - `api_server_error?`: returns false without touching the database when the rate is 0.
-- [ ] T088 [US4] Implement `mock_pms/lib/mock_pms/delivery/malformer.rb`, making T083 pass. Then wire chaos into `Events::Recorder#chaos_for` (T064) and `Delivery::Worker` (T066):
+- [X] T088 [US4] Implement `mock_pms/lib/mock_pms/delivery/malformer.rb`, making T083 pass. Then wire chaos into `Events::Recorder#chaos_for` (T064) and `Delivery::Worker` (T066):
   - the recorder creates the duplicate row and adjusts `scheduled_at`;
   - the worker applies the `malform` setting before signing and copies `chaos` into `delivery_attempts.chaos_applied`.
 
   This task makes T084 pass.
-- [ ] T089 [US4] Implement `mock_pms/lib/mock_pms/middleware/chaos_errors.rb` and insert it into the chaos slot of `MockPms::App`, **after** the rate limiter, so injected 500s still count against the limit. It applies only to `/v1/*` and returns 500 `{"error":{"code":"chaos_injected","message":...}}`. Add `GET` and `PUT /admin/chaos` to `mock_pms/lib/mock_pms/api/admin.rb`. This task makes T085 pass.
-- [ ] T090 [US4] Create `mock_pms/bin/chaos_check`.
+- [X] T089 [US4] Implement `mock_pms/lib/mock_pms/middleware/chaos_errors.rb` and insert it into the chaos slot of `MockPms::App`, **after** the rate limiter, so injected 500s still count against the limit. It applies only to `/v1/*` and returns 500 `{"error":{"code":"chaos_injected","message":...}}`. Add `GET` and `PUT /admin/chaos` to `mock_pms/lib/mock_pms/api/admin.rb`. This task makes T085 pass.
+- [X] T090 [US4] Create `mock_pms/bin/chaos_check`.
   - **Rates**: `--receiver-log PATH` joins the receiver JSONL log with `/admin/deliveries` and `/admin/events` through the admin API, computes each rate using the definitions in the research R7 table, and prints observed against configured values. It exits non-zero if any rate differs by more than 3 percentage points.
   - **Volume**: `--generate N` triggers bursts until N events exist.
   - **Determinism**: `--determinism` runs the following twice:

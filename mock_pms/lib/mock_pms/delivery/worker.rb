@@ -79,8 +79,12 @@ module MockPms
         Thread.current[:correlation_id] = nil
       end
 
-      # The bytes to send; chaos (US4) may replace them with a malformed body.
-      def body_for(_delivery, event) = Events::Serializer.body(event)
+      # The bytes to send: the envelope, or a chaos-malformed version of it.
+      def body_for(delivery, event)
+        body = Events::Serializer.body(event)
+        kind = delivery.chaos.to_h["malform"]
+        kind ? Malformer.apply(kind, body) : body
+      end
 
       def headers_for(delivery, attempt:, now:, body:)
         event = delivery.event

@@ -45,13 +45,26 @@ module MockPms
       # scheduled_at; with chaos off it is exactly one immediate delivery.
       def enqueue(event, client, replay: false, scheduled_at: Clock.now)
         chaos_for(event, client).map do |plan|
-          Delivery.create(event_seq: event.seq, client_seq: client.seq, replay: replay, status: "pending",
+          Delivery.create(id: plan[:id] || Ids.generate("dlv"), event_seq: event.seq, client_seq: client.seq,
+                          replay: replay, status: "pending",
                           scheduled_at: scheduled_at + plan.fetch(:offset_s, 0),
                           chaos: Sequel.pg_jsonb_wrap(plan.fetch(:chaos, {})))
         end
       end
 
-      def chaos_for(_event, _client) = [{ chaos: {}, offset_s: 0 }]
+      # The chaos decision is made here, at creation, and stored on each row (research
+      # R7): out-of-order and delay move scheduled_at; a duplicate adds a copy that
+      # points at the first delivery and gets its own malform decision.
+      def chaos_for(_event, _client)
+        decision = Chaos::Decider.decide_delivery!
+        first_id = Ids.generate("dlv")
+        offset = decision.fetch("reorder_hold_s", 0) + decision.fetch("delayed_s", 0)
+        plans = [{ id: first_id, chaos: decision.except("duplicate"), offset_s: offset }]
+        if decision["duplicate"]
+          plans << { chaos: { "duplicate_of" => first_id }.merge(Chaos::Decider.decide_copy!), offset_s: 0 }
+        end
+        plans
+      end
     end
   end
 end

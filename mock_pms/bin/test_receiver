@@ -35,7 +35,7 @@ class TestReceiver
     body = env["rack.input"].read
     header = ->(name) { env["HTTP_#{name.upcase.tr('-', '_')}"] }
     status = next_status
-    entry = record(body, header)
+    entry = record(body, header, status)
     log.info("webhook received", **entry.slice(:event_id, :event_type, :delivery_id, :attempt, :signature_valid,
                                                :parsed, :lag_ms), status: status)
     [status, { "content-type" => "text/plain" }, [status == 200 ? "ok" : "fail"]]
@@ -52,7 +52,7 @@ class TestReceiver
     end
   end
 
-  def record(body, header)
+  def record(body, header, status)
     parsed = begin
       JSON.parse(body)
     rescue JSON::ParserError
@@ -60,7 +60,7 @@ class TestReceiver
     end
     occurred = parsed.is_a?(Hash) && parsed["occurred_at"].is_a?(String) ? Time.iso8601(parsed["occurred_at"]) : nil
     entry = {
-      received_at: Time.now.utc.iso8601(3), event_id: header.call("PMS-Event-Id"),
+      received_at: Time.now.utc.iso8601(3), status: status, event_id: header.call("PMS-Event-Id"),
       event_type: header.call("PMS-Event-Type"), delivery_id: header.call("PMS-Delivery-Id"),
       attempt: header.call("PMS-Delivery-Attempt").to_i, replay: header.call("PMS-Replay") == "true",
       correlation_id: header.call("X-Correlation-Id"),
