@@ -3,22 +3,12 @@
 
 # Creates the mock_pms and mock_pms_test databases if missing, runs migrations,
 # and seeds (unless --test-db-only).
-require "uri"
 require "sequel"
 require_relative "../config/settings"
+require_relative "../lib/mock_pms/db"
 
 test_only = ARGV.include?("--test-db-only")
 ENV["SERVICE_NAME"] ||= "mock_pms-tool"
-
-def ensure_database!(url)
-  uri = URI.parse(url)
-  name = uri.path.delete_prefix("/")
-  admin = uri.dup.tap { |u| u.path = "/postgres" }.to_s
-  Sequel.connect(admin) do |db|
-    exists = !db[:pg_database].where(datname: name).empty?
-    db.run("CREATE DATABASE #{db.literal(name.to_sym)}") unless exists
-  end
-end
 
 def migrate!(url)
   Sequel.extension :migration
@@ -30,7 +20,7 @@ end
 urls = [ENV.fetch("TEST_DATABASE_URL")]
 urls.unshift(ENV.fetch("DATABASE_URL")) unless test_only
 urls.each do |url|
-  ensure_database!(url)
+  MockPms.ensure_database!(url)
   migrate!(url)
 end
 

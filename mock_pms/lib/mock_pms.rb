@@ -60,6 +60,7 @@ module MockPms
   def self.boot!(migrate: false)
     return if @booted
 
+    ensure_database! if migrate
     connect_db!
     migrate! if migrate
     LIB_FILES.each { |f| require_relative "mock_pms/#{f}" }
