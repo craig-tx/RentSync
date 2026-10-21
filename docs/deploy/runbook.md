@@ -215,9 +215,14 @@ the Elastic IPs survive host replacement.
 
 ## First deploy
 
-This assumes Bootstrap and DNS are done, with all three workspaces applied once. Each host
-boots with Caddy only and prints `no image deployed yet`. The first image goes out with the
-**Deploy** workflow:
+This assumes Bootstrap and DNS are done, **including the switch to Let's Encrypt production
+certificates** (§DNS), so every workspace has been applied with the production `acme_ca`. The
+Deploy workflow's final check verifies the certificate from the internet, and a staging-CA
+certificate fails it. Switching before the first deploy is also free, because the hosts it
+replaces hold no data yet.
+
+Each host boots with Caddy only and prints `no image deployed yet`. The first image goes out
+with the **Deploy** workflow:
 
 1. In GitHub → **Actions** → **Deploy** → **Run workflow**, choose `deployment_id`
    `dev-staging` and set `image_tag` to the full SHA of the current `main` commit
@@ -302,7 +307,7 @@ curl -s https://pms.rentsync.org/healthz | jq -r .version   # the previous SHA
 ```
 
 To return to a specific version instead, run **Deploy** with that SHA in `image_tag`. It must
-still be in ECR, which keeps the last 20 images.
+still be in ECR, which keeps the last 100 images.
 
 ## Host replacement
 

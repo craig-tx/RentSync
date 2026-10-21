@@ -132,7 +132,7 @@ us-east-1 on-demand prices, 730 hours a month:
 | gp3 root disks | 3 × 16 GiB × $0.08 | 3.84 |
 | gp3 data volumes | 3 × 10 GiB × $0.08 | 2.40 |
 | EBS snapshots (7 daily, incremental, ~5 GiB changed) | ~5 GiB × $0.05 | ~0.25 |
-| ECR (lifecycle keeps 20 images) | < 1 GiB | ~0.10 |
+| ECR (lifecycle keeps 100 images) | ~2 GiB | ~0.20 |
 | SSM Parameter Store (standard tier), DLM, IAM, budgets (first 2 free) | — | 0.00 |
 | Data transfer out (demo traffic) | < 10 GiB | < 0.90 |
 | **Total** | | **≈ 55** |
@@ -432,16 +432,22 @@ tagged `rentsync:backup=daily`.
 
 **Restore procedure** (US5 AC3, runbook):
 
-1. Set the `data_snapshot_id` workspace variable to the chosen snapshot.
-2. Add the documented override to the code: a `removed { from = module.host.aws_ebs_volume.data
-   … lifecycle { destroy = false } }` block for the current volume, and a new volume address
-   created from the snapshot.
-3. Apply.
+1. Release the current volume from Terraform's management with
+   `terraform state rm 'module.host.aws_ebs_volume.data'`, run against the deployment's HCP
+   workspace. The volume stays in AWS, untouched.
+2. Set the `data_snapshot_id` workspace variable to the chosen snapshot.
+3. Apply. Terraform creates a new volume from the snapshot and replaces the attachment and the
+   instance.
 
 This is deliberate by construction: `prevent_destroy` cannot be switched off by a variable, so
-destroying or replacing a data volume always needs a reviewed code change (FR-034). The old
-volume is kept, unmanaged, for forensics, and deleted by hand later. Implementation finalizes the
-exact `removed` and `moved` shape and rehearses it on staging (quickstart §8).
+replacing a data volume always needs an explicit, recorded operator action (FR-034). The old
+volume is kept, unmanaged, for forensics, and deleted by hand later. Teardown uses the same
+release step (runbook §Teardown).
+
+*Implementation note:* the plan first called for a `removed { … destroy = false }` block.
+Terraform rejects a `removed` block for a resource the module still declares, so the procedure
+uses `terraform state rm`, the equivalent explicit action. Full steps are in runbook
+§Backup restore. Task T083 rehearses it on `dev-staging`.
 
 **Alternatives considered**:
 
@@ -466,7 +472,7 @@ on the runner.
 **Decision**: `shared-us/mock_pms`, in the shared workspace.
 
 - Tags are immutable, and images are scanned on push.
-- A lifecycle policy keeps the last 20 images.
+- A lifecycle policy keeps the last 100 images. prod-us moves only on approval, so the image it runs, and its rollback target, must outlive many merges.
 - Host roles get read access; the GitHub Actions role gets push access.
 - The repository has `force_delete = false`. Teardown empties it first (runbook).
 - The repository is owned by `shared-us`, so its name starts with that DeploymentId. Every

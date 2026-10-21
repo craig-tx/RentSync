@@ -183,7 +183,8 @@ OpenObserve again. **Expected**: telemetry resumes.
   days there are at most 7 per volume.
 - Plan a change that would destroy the staging data volume, for example a changed
   `availability_zone`. **Expected**: the plan errors with `prevent_destroy`.
-- Restore staging from the latest snapshot through runbook §Restore (research R14).
+- Restore staging from the latest snapshot through runbook §Backup restore (`terraform state rm`
+  of the current volume, then `data_snapshot_id`; research R14).
   **Expected**: staging serves the data as of that snapshot.
 
 ## 9. Secrets and cost (SC-004, SC-009, FR-035)
@@ -225,8 +226,9 @@ After a day, Cost Explorer grouped by the `DeploymentId` tag shows separate spen
 
 ## 10. Teardown (runbook §Teardown)
 
-1. Merge the documented override that removes `prevent_destroy`.
-2. Destroy production, then staging, then shared.
-3. Delete the remaining snapshots and the A records.
+1. For each deployment, release its data volume from Terraform with `terraform state rm`, the
+   documented override (FR-034). `prevent_destroy` stays in the code.
+2. Queue destroys for production, then staging, then shared, emptying ECR before shared.
+3. Delete the released volumes, any snapshots you don't need, and the A records.
 
 **Expected**: Cost Explorer shows no further charges after the next day.

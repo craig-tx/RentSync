@@ -186,3 +186,11 @@ The constitution's Development Workflow section requires an entry at the end of 
 - T092 (the 30-day check).
 
 **Next task:** the operator performs runbook §Bootstrap (T053). Everything after it needs live infrastructure.
+
+**Final review fixes (same session):**
+- **Certificate switch before the first deploy:** the Deploy workflow's external check verifies the certificate, and a Let's Encrypt staging certificate fails it. T064 and runbook §First deploy now have the switch to the production CA happen before the first deploy. That is also free then, because no host holds data yet.
+- **`rentsync.service` retries:** a one-shot with no retry would have left a host stopped after one transient first-boot failure (US5 AC5). It now has `Restart=on-failure`, `RestartSec=30` and `StartLimitIntervalSec=0`. The instance also depends on its IAM policy and the SSM-core attachment.
+- **Restore and teardown docs:** research R14, quickstart §8 and §10, and the T079/T081 notes now match the runbook's `terraform state rm` procedure.
+- **OpenObserve password validation:** it now requires upper, lower, digit and special characters, matching OpenObserve v1.0.4's own rule, with a test.
+- **ECR retention:** raised from 20 to 100 images, so prod-us's image and its rollback target can't expire while many merges wait for approval.
+- **Verified:** EC2 never deletes an existing network interface attached at launch (`DeleteOnTermination` can be true only for interfaces created at launch). So host replacement keeps the fixed private IP and the Elastic IP.

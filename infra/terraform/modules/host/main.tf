@@ -42,6 +42,9 @@ resource "aws_instance" "this" {
   user_data_base64            = base64gzip(local.user_data)
   user_data_replace_on_change = true
 
+  # An existing interface attached at launch is never deleted on termination (EC2 allows
+  # DeleteOnTermination=true only for interfaces created at launch), so a replacement keeps the
+  # fixed private IP and the Elastic IP associated with it.
   primary_network_interface {
     network_interface_id = aws_network_interface.this.id
   }
@@ -69,7 +72,8 @@ resource "aws_instance" "this" {
 
   # The host reaches the internet only through the Elastic IP on its interface, and cloud-init
   # installs Docker on first boot, so the association must exist before the instance starts.
-  depends_on = [aws_eip_association.this]
+  # It also needs its role permissions before rentsync.service reads SSM on first boot.
+  depends_on = [aws_eip_association.this, aws_iam_role_policy.host, aws_iam_role_policy_attachment.ssm_core]
 }
 
 # The address belongs to the network interface, so it survives instance replacement.

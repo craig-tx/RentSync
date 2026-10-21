@@ -73,9 +73,13 @@ variable "openobserve_root_password" {
   ephemeral   = true
   description = "OpenObserve root password: 8-128 characters with upper, lower, digit and special."
 
+  # OpenObserve v1.0.4 refuses weaker root passwords at startup, which would leave the
+  # telemetry stack down with no clear error, so reject them at plan time instead.
   validation {
-    condition     = length(var.openobserve_root_password) >= 8 && length(var.openobserve_root_password) <= 128
-    error_message = "openobserve_root_password must be 8-128 characters."
+    condition = (length(var.openobserve_root_password) >= 8 && length(var.openobserve_root_password) <= 128 &&
+      can(regex("[a-z]", var.openobserve_root_password)) && can(regex("[A-Z]", var.openobserve_root_password)) &&
+    can(regex("[0-9]", var.openobserve_root_password)) && can(regex("[^a-zA-Z0-9]", var.openobserve_root_password)))
+    error_message = "openobserve_root_password must be 8-128 characters with upper, lower, digit and special characters."
   }
 }
 

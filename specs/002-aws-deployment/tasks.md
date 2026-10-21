@@ -464,7 +464,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 - [X] T042 [P] [US1] Create `infra/terraform/shared/ecr.tf`:
   - `aws_ecr_repository` named `"${var.deployment_id}/mock_pms"`, with `IMMUTABLE` tags,
     `scan_on_push = true`, and `force_delete = false`;
-  - `aws_ecr_lifecycle_policy` that keeps the last 20 images (R16).
+  - `aws_ecr_lifecycle_policy` that keeps the last 100 images (R16; raised from 20 so prod-us's image and its rollback target never expire).
 - [X] T043 [US1] Create `infra/terraform/shared/telemetry.tf`:
   - security groups use standalone `aws_vpc_security_group_ingress_rule` and `aws_vpc_security_group_egress_rule` resources, never inline `ingress`/`egress` blocks (T040 relies on `referenced_security_group_id`);
   - `aws_security_group` `${local.name}-otlp-client` (no ingress, all egress);
@@ -670,9 +670,13 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
   `POST /admin/events/{evt}/replay` and `POST /admin/replays` calls against `$BASE`, with that
   deployment's `ADMIN_TOKEN` read through `aws ssm get-parameter --with-decryption` in the
   operator's own shell.
-- [ ] T064 [US2] **🧑 OPERATOR**: apply `rentsync-dev-staging`, then `rentsync-prod-us`
-  (confirm). Run `deploy.yml` for `dev-staging`, then `prod-us` (approve). Switch `acme_ca` to
-  Let's Encrypt production once DNS resolves, and apply.
+- [ ] T064 [US2] **🧑 OPERATOR**:
+  1. Once DNS resolves, switch `acme_ca` to Let's Encrypt production in all three workspaces,
+     and apply `rentsync-dev-staging`, then `rentsync-prod-us` (confirm), with the US2 files.
+     Do this **before** the first deploy: the hosts hold no data yet, so the replacement is
+     free, and `deploy-to.yml`'s external check verifies the certificate, which a staging-CA
+     certificate fails.
+  2. Run `deploy.yml` for `dev-staging`, then `prod-us` (approve).
 - [ ] T065 [US2] Run quickstart §3 (the certificate, the HTTP→HTTPS 308, `/metrics` 404) and §4
   in full on `dev-staging`, then on `prod-us`. Record each 001 section's result per deployment in
   `docs/ai-build-log.md`, and reset chaos rates to 0 afterwards.
@@ -827,7 +831,9 @@ Ingest stays inside the VPC.
   - what to expect (the same IP, Caddy logs `certificate loaded`, pending deliveries resume);
   - the 30-minute bound (SC-007);
   - reboot recovery.
-- [X] T079 [US5] Fill in runbook §Backup restore (research R14). Write the exact, deliberate
+- [X] T079 [US5] Fill in runbook §Backup restore (research R14). *Done with `terraform state rm`
+  instead of the `removed` block below: Terraform rejects `removed` for a resource the module
+  still declares (research R14 implementation note).* Write the exact, deliberate
   override procedure:
   1. choose a snapshot (`aws ec2 describe-snapshots --filters Name=tag:DeploymentId,Values=<id>`);
   2. set the workspace variable `data_snapshot_id`;
@@ -850,7 +856,9 @@ Ingest stays inside the VPC.
     update the OpenObserve user through its UI or API, and `--reload` both environment hosts.
 
   Include how to check that the old admin token gets 401.
-- [X] T081 [US5] Fill in runbook §Teardown (quickstart §10):
+- [X] T081 [US5] Fill in runbook §Teardown (quickstart §10). *Done by releasing each data
+  volume with `terraform state rm`, rather than a PR that flips `prevent_destroy`, which
+  `check_prevent_destroy.sh` would reject in CI:*
   1. a PR that temporarily sets `prevent_destroy = false`, the documented override;
   2. destroy `prod-us`, then `dev-staging`, then `shared-us`, emptying ECR first with
      `aws ecr batch-delete-image`;

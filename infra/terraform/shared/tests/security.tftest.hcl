@@ -64,3 +64,13 @@ run "registry" {
     error_message = "ECR tags must be immutable and scanned on push (R16)."
   }
 }
+
+run "weak_openobserve_password_rejected" {
+  command = plan
+
+  variables {
+    openobserve_root_password = "alllowercase1" # no upper case, no special character
+  }
+
+  expect_failures = [var.openobserve_root_password]
+}

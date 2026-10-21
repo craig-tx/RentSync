@@ -17,11 +17,13 @@ resource "aws_ecr_lifecycle_policy" "mock_pms" {
   policy = jsonencode({
     rules = [{
       rulePriority = 1
-      description  = "Keep the last 20 images"
+      # Generous: prod-us moves only on approval, so many merges can land between promotions,
+      # and the image prod runs (and its rollback target) must not expire.
+      description = "Keep the last 100 images"
       selection = {
         tagStatus   = "any"
         countType   = "imageCountMoreThan"
-        countNumber = 20
+        countNumber = 100
       }
       action = { type = "expire" }
     }]
