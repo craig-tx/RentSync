@@ -754,7 +754,7 @@ Ingest stays inside the VPC.
 
 ### Implementation for User Story 4
 
-- [ ] T072 [US4] Create `.github/workflows/release.yml`:
+- [X] T072 [US4] Create `.github/workflows/release.yml`:
   - triggers on `workflow_run` for `workflows: [CI]`, `types: [completed]`, `branches: [main]`,
     and runs only when `github.event.workflow_run.conclusion == 'success'`;
   - its jobs:
@@ -765,7 +765,7 @@ Ingest stays inside the VPC.
 
     The URLs come from each Environment's `SITE_URL` (T051).
   - Both deploy jobs pass the **same** SHA. Nothing is rebuilt (FR-027).
-- [ ] T073 [US4] Fill in runbook §Release and promotion and §Rollback:
+- [X] T073 [US4] Fill in runbook §Release and promotion and §Rollback:
   - the merge → staging → approve → production flow;
   - where to watch it;
   - what a self-rollback looks like (`rolled back to <old>`, a red workflow);

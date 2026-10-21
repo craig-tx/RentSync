@@ -252,11 +252,57 @@ Avoid `docker compose config` on a host: it prints the rendered secrets.
 
 ## Release and promotion
 
-TBD (task T073).
+Releases happen outside Terraform (ADR 0006, research R9). Every merge to `main` whose **CI**
+run succeeds starts **Release** (`.github/workflows/release.yml`):
+
+1. **`build`** builds `mock_pms` for arm64 from the merge commit and pushes
+   `<ECR>/shared-us/mock_pms:<sha>`. Tags are immutable, and an existing tag is skipped.
+   Releases are skipped until the bootstrap has set `ECR_REPOSITORY_URL`.
+2. **`deploy-dev-staging`** runs `rentsync-deploy <sha>` on the `dev-staging` host, then checks
+   `https://pms-staging.rentsync.org/healthz` for `status=ok`, `version=<sha>` and
+   `deployment_id=dev-staging`. The target is 15 minutes from merge (SC-005).
+3. **`deploy-prod-us`** waits for you. Open the run → **Review deployments** → `prod-us` →
+   **Approve and deploy**. It deploys the **same** SHA (FR-027) and checks
+   `https://pms.rentsync.org/healthz`. The target is 10 minutes after approval.
+
+Watch it under GitHub → **Actions** → **Release**. Releases run one at a time: a newer merge
+waits for the current one.
+
+**What a failed release looks like.** If the new image never reports healthy within about
+2 minutes, `rentsync-deploy` puts the previous image back by itself. The job log ends with:
+
+```text
+rentsync-deploy: <sha> failed its health check
+rolled back to <previous sha>
+status: Failed
+```
+
+The workflow goes red and GitHub emails you. The environment keeps serving the previous
+version, and SSM still records it as `image_tag`. Fix forward with a new merge. If the
+rollback also failed, the log says `FAILED: environment unhealthy`; see §First deploy for
+how to inspect the host.
+
+**Migrations must be expand-only.** A rollback runs version N−1's code against version N's
+schema. So a release may add tables, columns or indexes, but never drop or rename one in the
+same release that stops using it. Remove the old column one release later, once nothing
+deployed reads it (research R9).
 
 ## Rollback
 
-TBD (task T073).
+There is one documented action (FR-029). In GitHub → **Actions** → **Deploy** → **Run
+workflow**, choose the `deployment_id`, leave `image_tag` empty, and tick **rollback**. A
+`prod-us` run waits for approval.
+
+`rentsync-deploy --rollback` deploys `previous_image_tag` and swaps the two parameters. A second
+rollback therefore returns to where you started. The data is untouched: no reseed, and no
+down-migration (SC-006, under 10 minutes). Afterwards, check:
+
+```bash
+curl -s https://pms.rentsync.org/healthz | jq -r .version   # the previous SHA
+```
+
+To return to a specific version instead, run **Deploy** with that SHA in `image_tag`. It must
+still be in ECR, which keeps the last 20 images.
 
 ## Host replacement
 

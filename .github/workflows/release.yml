@@ -1,0 +1,42 @@
+# Release (feature 002 research R9, US4): every green main build is released to dev-staging,
+# then promoted to prod-us after the prod-us Environment's required reviewer approves.
+# Both deployments get the same image tag; nothing is rebuilt between them (FR-027).
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+# One release at a time; a newer merge waits for the current one instead of cancelling it.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Skipped until the bootstrap has set ECR_REPOSITORY_URL (runbook §Bootstrap).
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && vars.ECR_REPOSITORY_URL != '' }}
+    uses: ./.github/workflows/build-image.yml
+    with:
+      sha: ${{ github.event.workflow_run.head_sha }}
+
+  deploy-dev-staging:
+    needs: build
+    uses: ./.github/workflows/deploy-to.yml
+    with:
+      deployment_id: dev-staging
+      image_tag: ${{ github.event.workflow_run.head_sha }}
+
+  # Waits here for approval (prod-us Environment reviewer). Its URL comes from SITE_URL.
+  deploy-prod-us:
+    needs: deploy-dev-staging
+    uses: ./.github/workflows/deploy-to.yml
+    with:
+      deployment_id: prod-us
+      image_tag: ${{ github.event.workflow_run.head_sha }}
