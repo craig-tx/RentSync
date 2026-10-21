@@ -25,3 +25,8 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+*.tfplan
+crash.log
+crash.*.log
+# Child modules use the lock files of the roots that call them.
+infra/terraform/modules/**/.terraform.lock.hcl

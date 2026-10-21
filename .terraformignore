@@ -1,0 +1,9 @@
+# HCP Terraform uploads the repository for each run. The Terraform roots read
+# infra/host/ and infra/otel/, so only unrelated trees are excluded here.
+.git/
+mock_pms/
+specs/
+docs/
+.specify/
+.claude/
+**/.terraform/

@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Renders /run/rentsync/env (tmpfs, 0600) from SSM Parameter Store and /etc/rentsync/host.env
+# (feature 002 research R11, contracts/host-interface.md). Compose reads it as env_file and
+# --env-file. Never prints a value, and never runs with xtrace.
+set -euo pipefail
+set +x
+
+etc="${RENTSYNC_ETC:-/etc/rentsync}"
+out_dir="${RENTSYNC_RUN:-/run/rentsync}"
+# shellcheck source=/dev/null
+. "$etc/host.env"
+
+umask 077
+mkdir -p "$out_dir"
+tmp="$(mktemp "$out_dir/env.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+
+declare -A param=()
+for path in $SSM_READ_PATHS; do
+  while IFS=$'\t' read -r name value; do
+    [ -n "$name" ] || continue
+    param["${name#"$path"/}"]="$value"
+  done < <(aws ssm get-parameters-by-path --region "$AWS_REGION" --path "$path" --recursive \
+             --with-decryption --query 'Parameters[].[Name,Value]' --output text)
+done
+
+# Values are single-quoted: Compose's env-file parser would otherwise expand "$x", cut at " #"
+# and strip quotes, silently changing a password such as "Pa$sw0rd! #1". Single-quoted values
+# are taken literally; a value that itself contains a single quote or a newline is refused.
+emit() {
+  case "$2" in
+    *"'"* | *$'\n'*)
+      echo "rentsync-render-env: $1 contains a single quote or newline, which the env file cannot carry" >&2
+      exit 1
+      ;;
+  esac
+  printf "%s='%s'\n" "$1" "$2" >> "$tmp"
+}
+
+# Check every required parameter here, in the main shell, before writing anything. A check
+# inside "$(...)" would not stop the script (set -e ignores it there), and a host would start
+# with an empty ADMIN_TOKEN. infra/host/test/render_env_test.sh covers this.
+case "$HOST_ROLE" in
+  environment) required=(admin_token postgres_password image_tag user password) ;;
+  telemetry) required=(openobserve/root_email openobserve/root_password openobserve/db_password) ;;
+  *) echo "rentsync-render-env: unknown HOST_ROLE '$HOST_ROLE'" >&2; exit 1 ;;
+esac
+missing=0
+for key in "${required[@]}"; do
+  if [ -z "${param[$key]:-}" ]; then
+    echo "rentsync-render-env: missing SSM parameter $key under $SSM_READ_PATHS" >&2
+    missing=1
+  fi
+done
+[ "$missing" -eq 0 ] || exit 1
+
+# Non-secret settings from host.env, minus the ones only scripts use.
+while IFS= read -r line; do
+  key="${line%%=*}"
+  case "$key" in ''|'#'*|SSM_READ_PATHS|VOLUME_ID) continue ;; esac
+  value="${line#*=}"
+  value="${value#\"}"
+  emit "$key" "${value%\"}"
+done < "$etc/host.env"
+
+emit COMPOSE_PROJECT_NAME "rentsync-$DEPLOYMENT_ID"
+
+case "$HOST_ROLE" in
+  environment)
+    emit POSTGRES_PASSWORD "${param[postgres_password]}"
+    emit DATABASE_URL "postgres://postgres:${param[postgres_password]}@postgres:5432/$DB_NAME"
+    emit REDIS_URL "redis://redis:6379/0"
+    emit ADMIN_TOKEN "${param[admin_token]}"
+    emit IMAGE_TAG "${param[image_tag]}"
+    emit PREVIOUS_IMAGE_TAG "${param[previous_image_tag]:-none}"
+    emit OPENOBSERVE_USER "${param[user]}"
+    emit OPENOBSERVE_PASSWORD "${param[password]}"
+    ;;
+  telemetry)
+    emit ZO_ROOT_USER_EMAIL "${param[openobserve/root_email]}"
+    emit ZO_ROOT_USER_PASSWORD "${param[openobserve/root_password]}"
+    emit OPENOBSERVE_DB_PASSWORD "${param[openobserve/db_password]}"
+    ;;
+esac
+
+mv "$tmp" "$out_dir/env"
+trap - EXIT
+echo "rentsync-render-env: wrote $out_dir/env (${#param[@]} parameters)"

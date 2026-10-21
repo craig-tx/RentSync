@@ -60,6 +60,7 @@ module MockPms
   def self.boot!(migrate: false)
     return if @booted
 
+    Settings.deployment_id # fail fast on an invalid DEPLOYMENT_ID
     ensure_database! if migrate
     connect_db!
     migrate! if migrate

@@ -1,0 +1,45 @@
+# Release (feature 002 research R9, US4): every green main build is released to dev-staging,
+# then promoted to prod-us after the prod-us Environment's required reviewer approves.
+# Both deployments get the same image tag; nothing is rebuilt between them (FR-027).
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+# No workflow-level concurrency group: one would hold every later merge while a prod-us approval
+# is pending, and GitHub keeps only one pending run per group. Serialization is per deployment,
+# in deploy-to.yml: dev-staging keeps receiving merges, and a newer pending prod-us promotion
+# replaces an older unapproved one, so you always approve the latest.
+
+jobs:
+  build:
+    # Skipped until the bootstrap has set ECR_REPOSITORY_URL (runbook §Bootstrap).
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && vars.ECR_REPOSITORY_URL != '' }}
+    uses: ./.github/workflows/build-image.yml
+    with:
+      sha: ${{ github.event.workflow_run.head_sha }}
+
+  deploy-dev-staging:
+    needs: build
+    uses: ./.github/workflows/deploy-to.yml
+    with:
+      deployment_id: dev-staging
+      image_tag: ${{ github.event.workflow_run.head_sha }}
+      image_digest: ${{ needs.build.outputs.digest }}
+
+  # Waits here for approval (prod-us Environment reviewer). Its URL comes from SITE_URL.
+  # The same digest as staging: production runs the exact image staging verified.
+  deploy-prod-us:
+    needs: [build, deploy-dev-staging]
+    uses: ./.github/workflows/deploy-to.yml
+    with:
+      deployment_id: prod-us
+      image_tag: ${{ github.event.workflow_run.head_sha }}
+      image_digest: ${{ needs.build.outputs.digest }}

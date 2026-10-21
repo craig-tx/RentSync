@@ -1,4 +1,4 @@
-# OpenTelemetry Collector bridge (research R16, ADR-0004).
+# OpenTelemetry Collector bridge (research R16, ADR-0004; feature 002 research R8, R17).
 # The services write JSON logs to stdout and serve Prometheus /metrics; this
 # Collector converts both to OTLP and sends them to OpenObserve.
 
@@ -45,6 +45,9 @@ receivers:
       - type: move
         from: attributes["service.instance.id"]
         to: resource["service.instance.id"]
+      - type: move
+        from: attributes["deployment.id"]
+        to: resource["deployment.id"]
       - type: remove
         field: attributes.timestamp
 
@@ -86,16 +89,30 @@ processors:
           - set(attributes["service.version"], attributes["service_version"]) where attributes["service_version"] != nil
           - set(attributes["deployment.environment"], attributes["deployment_environment"]) where attributes["deployment_environment"] != nil
           - delete_key(attributes, "service_version")
+          - set(attributes["deployment.id"], attributes["deployment_id"]) where attributes["deployment_id"] != nil
           - delete_key(attributes, "deployment_environment")
+          - delete_key(attributes, "deployment_id")
           - delete_key(attributes, "service_name")
           - delete_key(attributes, "service.instance.id") where attributes["service.name"] == "mock_pms-web"
+
+  # Every record leaves with both deployment attributes (constitution VI), including the
+  # Collector's own metrics, which carry neither. insert never overwrites a service's own value.
+  resource/deployment:
+    attributes:
+      - key: deployment.environment
+        value: ${env:DEPLOYMENT_ENVIRONMENT:-local}
+        action: insert
+      - key: deployment.id
+        value: ${env:DEPLOYMENT_ID:-local-dev}
+        action: insert
 
 exporters:
   # Loss bound (research R16): the sending queue is in memory and not persisted, so a
   # Collector restart loses whatever is queued — at most queue_size batches during an
   # OpenObserve outage. Service logs stay in Docker's files; metric totals stay in Redis.
   otlp_http/openobserve:
-    endpoint: http://openobserve:5080/api/default
+    # Configuration only (constitution VI): local .env and deployed hosts set this.
+    endpoint: ${env:OPENOBSERVE_OTLP_ENDPOINT:-http://openobserve:5080/api/default}
     auth:
       authenticator: basicauth/openobserve
     sending_queue:
@@ -117,9 +134,9 @@ service:
   pipelines:
     logs:
       receivers: [file_log/docker]
-      processors: [memory_limiter, attributes/redact, batch]
+      processors: [memory_limiter, resource/deployment, attributes/redact, batch]
       exporters: [otlp_http/openobserve]
     metrics:
       receivers: [prometheus]
-      processors: [memory_limiter, transform/metrics_resource, batch]
+      processors: [memory_limiter, transform/metrics_resource, resource/deployment, batch]
       exporters: [otlp_http/openobserve]
