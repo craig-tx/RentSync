@@ -35,6 +35,8 @@ module MockPms
     scenarios/base
     scenarios/tenant_move_out
     scenarios/nsf_wave
+    scenarios/month_end_burst
+    events/replayer
     admin/idempotency
     middleware/correlation_id
     middleware/request_metrics

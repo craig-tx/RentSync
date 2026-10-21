@@ -20,6 +20,9 @@ require "time"
 require "uri"
 
 class ChaosCheck
+  # --generate alternates month-end bursts with NSF waves: bursts alone run out of
+  # open periods as leases reach the end of their terms.
+  GENERATORS = [["month_end_burst", { share: 1.0, window_s: 60 }], ["nsf_wave", { count: 50 }]].freeze
   DETERMINISM_CHAOS = { seed: 1, duplicate_rate: 0.2, out_of_order_rate: 0.2, delay_rate: 0.2, delay_min_s: 1,
                         delay_max_s: 3, malformed_rate: 0.2, server_error_rate: 0 }.freeze
 
@@ -77,11 +80,12 @@ class ChaosCheck
 
   def generate
     target = Integer(@options[:generate])
-    scenario = @options.fetch(:scenario, "month_end_burst")
     created = 0
-    while created < target
-      result = admin_json(:post, "/admin/scenarios/#{scenario}", { share: 1.0, window_s: 60 })
-      abort "scenario #{scenario} created no events" if result["events_created"].zero?
+    GENERATORS.cycle.with_index do |(scenario, body), i|
+      break if created >= target
+
+      result = admin_json(:post, "/admin/scenarios/#{scenario}", body)
+      abort "no scenario can create more events" if result["events_created"].zero? && i > 4
       created += result["events_created"]
       puts "#{scenario}: +#{result['events_created']} (#{created}/#{target})"
     end
@@ -136,15 +140,14 @@ class ChaosCheck
     ["server_error", config["server_error_rate"], errors, n]
   end
 
-  # For flagged (reordered) deliveries: how many arrived after an event that occurred later.
+  # For flagged (reordered) deliveries: how many were overtaken, i.e. a delivery created
+  # later (listings are in creation order) reached the receiver first.
   def overtaken(firsts, log)
     arrival = log.group_by { |e| e["delivery_id"] }.transform_values { |es| es.map { |e| e["received_at"] }.min }
-    flagged = firsts.select { |d| d["chaos"].key?("reorder_hold_s") && arrival[d["id"]] }
-    count = flagged.count do |d|
-      firsts.any? do |o|
-        later = o["id"] != d["id"] && o["scheduled_at"].to_s > d["scheduled_at"].to_s
-        later && arrival[o["id"]] && arrival[o["id"]] < arrival[d["id"]]
-      end
+    flagged = firsts.each_index.select { |i| firsts[i]["chaos"].key?("reorder_hold_s") && arrival[firsts[i]["id"]] }
+    count = flagged.count do |i|
+      mine = arrival[firsts[i]["id"]]
+      firsts[(i + 1)..].any? { |o| arrival[o["id"]] && arrival[o["id"]] < mine }
     end
     "#{count}/#{flagged.size}"
   end

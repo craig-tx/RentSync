@@ -108,6 +108,41 @@ module MockPms
           end
         end
 
+        post "events/:event_id/replay" do
+          with_idempotency do
+            event = find!(MockPms::Event, params[:event_id])
+            client = find!(MockPms::Client, params[:client_id])
+            delivery = Events::Replayer.replay_one!(event: event, client: client)
+            [202, json_safe(delivery_json(delivery))]
+          rescue Events::Replayer::Conflict => e
+            [409, json_safe(Errors.body("conflict", e.message))]
+          end
+        end
+
+        post :replays do
+          with_idempotency do
+            client = find!(MockPms::Client, params[:client_id])
+            from = Time.iso8601(params[:from].to_s)
+            to = Time.iso8601(params[:to].to_s)
+            queued = Events::Replayer.replay_range!(client: client, from: from, to: to, types: params[:types])
+            [202, { "queued" => queued }]
+          rescue Events::Replayer::Conflict => e
+            [409, json_safe(Errors.body("conflict", e.message))]
+          rescue ArgumentError
+            [422, json_safe(Errors.body("invalid_parameter", "from and to must be ISO 8601 date-times"))]
+          end
+        end
+
+        post :reset do
+          with_idempotency do
+            seed = params[:seed] ? Integer(params[:seed]) : Settings.seed
+            anchor = params[:anchor_date] ? Date.iso8601(params[:anchor_date].to_s) : Settings.seed_anchor_date
+            [200, json_safe(Seed::Reset.run!(seed: seed, anchor_date: anchor))]
+          rescue ArgumentError
+            [422, json_safe(Errors.body("invalid_parameter", "seed must be an integer; anchor_date YYYY-MM-DD"))]
+          end
+        end
+
         get :events do
           dataset = MockPms::Event.dataset
           dataset = dataset.where(type: params[:type].to_s) if params[:type]

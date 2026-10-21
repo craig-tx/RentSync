@@ -709,19 +709,19 @@ same `Idempotency-Key` returns the same `run_id`. Admin calls without the token 
 
 ### Tests for User Story 5 (write first; they must fail) ⚠️
 
-- [ ] T091 [P] [US5] Write `mock_pms/spec/unit/scenarios/month_end_burst_spec.rb`.
+- [X] T091 [P] [US5] Write `mock_pms/spec/unit/scenarios/month_end_burst_spec.rb`.
   - `MonthEndBurst.run!(share: 0.8, window_s: 120, operator: nil)` records a payment against the open rent charge for `ceil(share × active leases with an open charge)` leases.
   - Each payment's `received_at` and its event's `occurred_at` are spread evenly across the `window_s` before now.
   - It writes `payment_applications`, and emits one `payment.created` per payment through the recorder, so chaos still applies.
   - The default `share` is 0.8, which keeps SC-008's 70% minimum.
   - `operator_id` limits the scenario to one operator.
-- [ ] T092 [P] [US5] Write `mock_pms/spec/requests/replay_spec.rb`.
+- [X] T092 [P] [US5] Write `mock_pms/spec/requests/replay_spec.rb`.
   - **Single replay**: `POST /admin/events/{id}/replay` with `{"client_id"}` returns 202 and a `Delivery` with `replay: true`, for the original event.
   - **Single replay refusals**: it returns 409 when the client has no active grant for the event's operator, or no `subscriber_url`.
   - **Range replay**: `POST /admin/replays` with `{client_id, from, to, types?}` returns 202 with `{queued: n}`. It covers `occurred_at >= from AND < to`, and deliveries are scheduled in `occurred_at` order. It returns 409 under the same conditions as the single replay.
   - **Replay deliveries**: the worker sends `PMS-Replay: true` with the original `PMS-Event-Id`, `type`, `occurred_at`, and payload (FR-029).
   - **Seeded events**: they can be replayed even though they never had a delivery.
-- [ ] T093 [P] [US5] Write `mock_pms/spec/requests/reset_spec.rb`.
+- [X] T093 [P] [US5] Write `mock_pms/spec/requests/reset_spec.rb`.
   - `POST /admin/reset` with `{seed: 42, anchor_date: "2026-10-20"}` returns `{seed, anchor_date, data_digest}`, and the digest equals the one from `bin/reseed --seed 42 --anchor 2026-10-20`.
   - Clients, grants, and deliveries are cleared, and both `chaos_counters` rows go back to 0. Redis metric hashes, `admin_idempotency_keys`, and earlier `seed_runs` rows are kept.
   - The endpoint requires the admin token.
@@ -729,12 +729,12 @@ same `Idempotency-Key` returns the same `run_id`. Admin calls without the token 
 
 ### Implementation for User Story 5
 
-- [ ] T094 [US5] Implement `mock_pms/lib/mock_pms/scenarios/month_end_burst.rb`, register it in the scenario registry (T070), and make T091 pass.
-- [ ] T095 [US5] Implement `mock_pms/lib/mock_pms/events/replayer.rb`, which provides `replay_one!(event:, client:)` and `replay_range!(client:, from:, to:, types:)`.
+- [X] T094 [US5] Implement `mock_pms/lib/mock_pms/scenarios/month_end_burst.rb`, register it in the scenario registry (T070), and make T091 pass.
+- [X] T095 [US5] Implement `mock_pms/lib/mock_pms/events/replayer.rb`, which provides `replay_one!(event:, client:)` and `replay_range!(client:, from:, to:, types:)`.
   - Both check for an active grant and a `subscriber_url`, raising a 409 error otherwise.
   - They insert `deliveries` rows with `replay: true`, with `chaos` decided by `Decider` as usual. For a range replay, `scheduled_at` is staggered by 1 ms per event so the original order is kept.
   - Then add `POST /admin/events/{event_id}/replay` and `POST /admin/replays` (wrapped in `with_idempotency`) to `mock_pms/lib/mock_pms/api/admin.rb`, and make the worker send the `PMS-Replay: true` header. This makes T092 pass.
-- [ ] T096 [US5] Add `POST /admin/reset` to `mock_pms/lib/mock_pms/api/admin.rb`. It calls `Seed::Reset.run!` (T046), resets the chaos counters, and makes T093 pass.
+- [X] T096 [US5] Add `POST /admin/reset` to `mock_pms/lib/mock_pms/api/admin.rb`. It calls `Seed::Reset.run!` (T046), resets the chaos counters, and makes T093 pass.
 
 **Checkpoint**: quickstart §8 passes. All five user stories work independently.
 
