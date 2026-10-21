@@ -873,7 +873,7 @@ Ingest stays inside the VPC.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T084 [P] Fill in `docs/deploy/production-differences.md` (FR-036), giving the production
+- [X] T084 [P] Fill in `docs/deploy/production-differences.md` (FR-036), giving the production
   equivalent and the reason for each demo choice:
   - one VPC vs separate VPCs and accounts;
   - EC2 per environment vs ECS Fargate across availability zones;
@@ -886,14 +886,14 @@ Ingest stays inside the VPC.
 
   Also list the R2 single coarse Terraform role, the R8 root ingest credentials and plain-HTTP
   OTLP inside the VPC, and the single availability zone.
-- [ ] T085 [P] Write `docs/adr/0005-demo-aws-topology.md`: single VPC, one EC2 host per
+- [X] T085 [P] Write `docs/adr/0005-demo-aws-topology.md`: single VPC, one EC2 host per
   deployment, DeploymentId naming and side-by-side deployments, and fixed ENIs and EIPs. Use the
   context, decision, alternatives, and consequences format of the existing ADRs.
-- [ ] T086 [P] Write `docs/adr/0006-releases-via-ssm.md` (research R9): releases outside
+- [X] T086 [P] Write `docs/adr/0006-releases-via-ssm.md` (research R9): releases outside
   Terraform, SSM Run Command, the self-rollback, and the expand-only migrations rule.
-- [ ] T087 [P] Write `docs/adr/0007-secrets-ssm-write-only.md` (research R11): SSM SecureString,
+- [X] T087 [P] Write `docs/adr/0007-secrets-ssm-write-only.md` (research R11): SSM SecureString,
   write-only arguments, and ephemeral passwords, with Secrets Manager rejected.
-- [ ] T088 [P] Update `README.md`: the live URLs, a short architecture paragraph linking to
+- [X] T088 [P] Update `README.md`: the live URLs, a short architecture paragraph linking to
   `docs/deploy/runbook.md`, `docs/deploy/production-differences.md`, and ADRs 0005–0007, and a
   note that this is a cost-conscious demo (constitution §Scope).
 - [ ] T089 Run quickstart §9 and §9a:

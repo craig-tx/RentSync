@@ -147,3 +147,42 @@ The constitution's Development Workflow section requires an entry at the end of 
 **Mistake caught:** this session overwrote the existing `.gitattributes` (`* text=auto eol=lf`) without reading it first. It was restored before commit. The original already covers LF for all host files.
 
 **Next task:** the operator performs T053 (runbook §Bootstrap), then T054. Meanwhile, the remaining code tasks can proceed without cloud access: US2 T056–T063, US3 T066–T069, US4 T072–T073, US5 T076–T081, Polish T084–T088.
+
+### 2026-10-21 (continued) — interactive (operator remote): feature 002 code tasks past the operator gate
+
+**Done:**
+- **PR #3** opened as a draft, so CI runs on the branch. The first CI run passed all three jobs: `test`, `infra` (its first Linux run) and `telemetry-smoke`.
+- **US2 (T056–T063):**
+  - the environment Compose stack, where each container gets only the variables it needs;
+  - `Caddyfile.env`;
+  - `rentsync-deploy`, plus `deploy_test.sh` with stub `docker` and `aws`. It covers deploy, no-op, self-rollback, manual rollback, reload with nothing deployed, and bad input;
+  - the user-data wiring, plus a test that keeps the gzipped user data under EC2's 16 KB limit (11.6 KB today);
+  - the workflows `build-image.yml`, `deploy-to.yml` and `deploy.yml` (actionlint clean);
+  - runbook §First deploy and §Replaying webhooks.
+- **US3 (T066–T069):**
+  - the telemetry Compose stack and Caddyfile. OpenObserve v1.0.4 was verified locally against a Postgres metadata store (107 tables, `/healthz` 200);
+  - telemetry-role coverage in `render_env_test.sh`.
+
+  All pinned images publish arm64, so the R4 `t3.small` fallback is not needed.
+- **US4 (T072–T073):** `release.yml` (dev-staging, then an approved prod-us with the same SHA), and runbook §Release, §Rollback.
+- **US5 (T076–T081):**
+  - the DLM daily snapshot policy, test-first;
+  - the CI guards removed;
+  - runbook §Host replacement, §Backup restore, §Secret rotation, §Adding a side-by-side deployment and §Teardown.
+- **Polish (T084–T088):** `production-differences.md`, ADRs 0005–0007, and the README deployment section.
+
+**Decisions and deviations:**
+- **Reload action:** `deploy.yml` and `deploy-to.yml` gained a `reload` option, because re-deploying the running SHA is a no-op. A rotated secret would otherwise never reach the containers.
+- **Restore and teardown** release the protected data volume with `terraform state rm`, not the `removed` block the tasks describe. Terraform rejects a `removed` block for a resource the module still declares. The restore rehearsal on `dev-staging` (T083) will confirm the procedure.
+- **Release guard:** `release.yml` skips when `ECR_REPOSITORY_URL` is unset, so merging before the bootstrap produces no red runs.
+- **Least privilege per container:** containers receive only the variables they use, rather than the whole rendered env file. Caddy never sees the admin token.
+
+**Blocked (operator):**
+- T053 (bootstrap) and T054 (first applies and DNS);
+- T064, T070 and T082 (applies, deploys and approvals);
+- T074 (the prod-us reviewer);
+- the live verifications T055, T065, T071, T075, T083 and T089;
+- T090–T091 (merge-time: remove the Sync Impact Report, mark the PR ready);
+- T092 (the 30-day check).
+
+**Next task:** the operator performs runbook §Bootstrap (T053). Everything after it needs live infrastructure.
