@@ -54,7 +54,7 @@ purpose for a demo, and are listed in the production-differences document:
 | Actions | Resources |
 |---|---|
 | `ecr:GetAuthorizationToken` | `*` |
-| `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:DescribeImages` | `arn:aws:ecr:us-east-1:<account>:repository/shared-us/mock_pms` |
+| `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:DescribeImages` | `arn:aws:ecr:us-east-1:<account>:repository/*/mock_pms` (any shared deployment's repository; `docs/deploy/iam/github-actions-policy.json`) |
 | `ssm:SendCommand` | `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`, and `arn:aws:ec2:us-east-1:<account>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = true` |
 | `ssm:GetCommandInvocation`, `ssm:ListCommandInvocations` | `*` |
 

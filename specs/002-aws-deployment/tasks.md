@@ -520,13 +520,13 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
     `value = "none"` and `lifecycle { ignore_changes = [value] }`.
 
   T023 and T039 must pass. Commit.
-- [ ] T050 [P] [US1] Write the IAM policy documents from contracts/bootstrap-iam.md, as valid
+- [X] T050 [P] [US1] Write the IAM policy documents from contracts/bootstrap-iam.md, as valid
   JSON with an `<account>` placeholder:
   - `docs/deploy/iam/hcp-terraform-trust.json` and `hcp-terraform-policy.json`;
   - `docs/deploy/iam/github-actions-trust.json` and `github-actions-policy.json`.
 
   Validate each with `jq . file`.
-- [ ] T051 [US1] Fill in runbook §Bootstrap in `docs/deploy/runbook.md` (FR-006, under one
+- [X] T051 [US1] Fill in runbook §Bootstrap in `docs/deploy/runbook.md` (FR-006, under one
   hour). Give numbered console click paths for:
   1. the two IAM OIDC providers;
   2. the roles `rentsync-hcp-terraform` and `rentsync-github-actions`, pasting the T050 JSON;
@@ -547,7 +547,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 
   End with a table of every non-secret value (account ID, region, organization, role ARNs) and
   where each is entered. **Never** ask for a credential in chat.
-- [ ] T052 [US1] Fill in runbook §DNS:
+- [X] T052 [US1] Fill in runbook §DNS:
   - the three NameCheap A records (`telemetry`, `pms-staging`, `pms`), with the output each one
     takes its value from (data-model.md §DNS record);
   - TTL of 5 minutes during bring-up;

@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "HcpTerraformRentSyncWorkspaces",
+      "Effect": "Allow",
+      "Principal": { "Federated": "arn:aws:iam::<account>:oidc-provider/app.terraform.io" },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": { "app.terraform.io:aud": "aws.workload.identity" },
+        "StringLike": {
+          "app.terraform.io:sub": "organization:craig-personal:project:RentSync:workspace:rentsync-*:run_phase:*"
+        }
+      }
+    }
+  ]
+}

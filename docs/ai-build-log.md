@@ -89,3 +89,55 @@ The constitution's Development Workflow section requires an entry at the end of 
 **Blocked:** nothing.
 
 **Next task:** open a pull request for `001-mock-pms`, merge once CI is green, then `/speckit-specify` the Terraform Cloud and AWS deployment as feature 002 (see the project memory).
+
+### 2026-10-21 — interactive (operator remote): feature 002 (AWS deployment), spec through `/speckit-implement` T001–T052
+
+**Done:**
+- **Constitution v1.2.0:** a MINOR amendment adds DeploymentId and `deployment.id` to Principle VI. Every deployment-owned name, path, database and AWS tag derives from it, so deployments can run side by side in one account. The Sync Impact Report stays until merge (T090).
+- **Spec:** clarified with DeploymentIds `prod-us`, `dev-staging` and `shared-us` (FR-038–FR-042, SC-011). ElastiCache was rejected on cost.
+- **Planning:** plan, research (R1–R17), data model, contracts, quickstart and tasks (92 tasks). `/speckit-analyze` findings were all resolved (2 CRITICAL, 3 HIGH, 6 MEDIUM, 5 LOW).
+- **Phase 1 (T001–T007):**
+  - provider pins: aws 6.69.1, random 3.9.1, with lock files for linux, windows and darwin;
+  - an `infra` CI job;
+  - `.terraformignore`;
+  - runbook and production-differences skeletons.
+- **Phase 2, mock PMS (T008–T022), test-first:**
+  - `Settings.deployment_id`, validated, fails fast at boot;
+  - `deployment.id` on logs and on `target_info`;
+  - `/healthz` and `/healthz/live` report `version` and `deployment_id`;
+  - `bin/setup --deploy` never reseeds a database that has data;
+  - the Collector endpoint comes from configuration, and a `resource/deployment` processor puts the deployment attributes on the Collector's own metrics;
+  - local and CI databases now follow the DeploymentId (`mock_pms_local_dev`, `mock_pms_ci`).
+
+  Verified: 172 examples, 0 failures; RuboCop clean; `bin/telemetry_smoke` live, including the Collector self-metric with `deployment.id=local-dev`.
+- **Phase 2 and US1 infrastructure (T023–T049):** the host module, the shared and environment roots, the host scripts and the systemd units. Verified locally:
+  - `terraform test`: shared 5/5, environment 9/9, module 2/2, with mock AWS and the real random provider;
+  - the static checks (prevent_destroy, root-volume tags, no SecureString `value`, no `key_name`), each shown to catch a planted violation;
+  - shellcheck 0.10.0 clean;
+  - the loop-device boot test on `amazonlinux:2023`, which formats once and never again.
+- **US1 documents (T050–T052):** IAM policy JSON in `docs/deploy/iam/`, and runbook §Bootstrap and §DNS.
+
+**Developer action:** re-copy `.env` from `.env.example`, or add `DEPLOYMENT_ID=local-dev` and `OPENOBSERVE_OTLP_ENDPOINT` and rename the databases to `mock_pms_local_dev`/`_test`. The old `mock_pms` database is simply left unused. This session did that edit on the operator's `.env`; a backup is in the session scratchpad.
+
+**Blocked (operator needed):**
+- T053, the bootstrap (AWS OIDC providers and roles, HCP project, variable set, workspaces, remote state sharing, variables, GitHub variables and Environments). Follow runbook §Bootstrap.
+- T054, the first applies and DNS. T055 then verifies against live infrastructure.
+
+**Decisions and deviations from tasks.md:**
+- The host module takes `files` and `host_env` instead of a pre-rendered `user_data`, because the template needs the data volume's ID. It also adds the base host files itself (boot and render scripts, units, `daemon.json`), so the roots don't duplicate them.
+- `daemon.json` is written by cloud-init directly instead of being installed by `rentsync-boot`. A Docker systemd drop-in (`RequiresMountsFor=/srv/data`) stops restart-policy containers from starting before the data volume mounts on reboot. This is an addition to research R6.
+- The loop-device test image is 512 MiB (sparse), because XFS refuses filesystems under 300 MB.
+- Host-level assertions (IMDSv2, encryption, root tags, fixed IP) live in `modules/host/tests/`, because a root's tests can't see resources inside a module. CI runs the module tests too.
+- Tests use the **real** random provider, because mocked providers can't serve ephemeral resources (Terraform 1.16.6). It runs locally and needs no network after init.
+- ECR pull permission is optional in the module, so the telemetry host gets none.
+- `rentsync-start` exits cleanly when a host has no stack yet. This happens between US1 and US2/US3 applies.
+- The release role's ECR resource is `repository/*/mock_pms`, so a future shared deployment needs no IAM change (contract updated).
+- Docker Compose is pinned to v5.6.0 (released 2026-10-02) rather than v5.6.1 (released the same day as this session), with sha256 checksums from its release.
+
+**Test corrections (no assertion weakened):**
+- `setup_deploy_spec` used the wrong migration table name. Sequel's is `schema_info`.
+- The `ops_spec` `target_info` regex now also requires `deployment_id`, which makes it stricter.
+
+**Mistake caught:** this session overwrote the existing `.gitattributes` (`* text=auto eol=lf`) without reading it first. It was restored before commit. The original already covers LF for all host files.
+
+**Next task:** the operator performs T053 (runbook §Bootstrap), then T054. Meanwhile, the remaining code tasks can proceed without cloud access: US2 T056–T063, US3 T066–T069, US4 T072–T073, US5 T076–T081, Polish T084–T088.

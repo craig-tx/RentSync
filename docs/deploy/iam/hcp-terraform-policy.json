@@ -1,0 +1,81 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Ec2InRegion",
+      "Effect": "Allow",
+      "Action": "ec2:*",
+      "Resource": "*",
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "us-east-1" } }
+    },
+    {
+      "Sid": "RentSyncRolesAndProfiles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
+        "iam:TagRole", "iam:UntagRole", "iam:ListRoleTags",
+        "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:ListRolePolicies",
+        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListAttachedRolePolicies",
+        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
+        "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile",
+        "iam:TagInstanceProfile", "iam:UntagInstanceProfile", "iam:ListInstanceProfilesForRole",
+        "iam:PassRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::<account>:role/rentsync-*",
+        "arn:aws:iam::<account>:instance-profile/rentsync-*"
+      ]
+    },
+    {
+      "Sid": "ReadManagedPolicies",
+      "Effect": "Allow",
+      "Action": ["iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicies", "iam:ListInstanceProfiles", "iam:ListRoles"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RentSyncParameters",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters", "ssm:DeleteParameter", "ssm:DeleteParameters",
+        "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:ssm:us-east-1:<account>:parameter/rentsync/*"
+    },
+    {
+      "Sid": "DescribeParameters",
+      "Effect": "Allow",
+      "Action": "ssm:DescribeParameters",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Repositories",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "arn:aws:ecr:us-east-1:<account>:repository/*"
+    },
+    {
+      "Sid": "RegistryAuth",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "SnapshotLifecycle",
+      "Effect": "Allow",
+      "Action": "dlm:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "RentSyncBudgets",
+      "Effect": "Allow",
+      "Action": "budgets:*",
+      "Resource": "arn:aws:budgets::<account>:budget/rentsync-*"
+    },
+    {
+      "Sid": "AwsManagedKeysOnly",
+      "Effect": "Allow",
+      "Action": ["kms:DescribeKey", "kms:ListAliases"],
+      "Resource": "*"
+    }
+  ]
+}
