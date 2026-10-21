@@ -4,6 +4,7 @@ require "sequel"
 
 module MockPms
   MIGRATIONS_DIR = File.expand_path("../../db/migrations", __dir__)
+  MIGRATION_LOCK_ID = 4_001_001
 
   class << self
     attr_reader :db
@@ -17,13 +18,22 @@ module MockPms
       @db.extension :pg_array, :pg_json
       Sequel::Model.db = @db
       Sequel::Model.require_valid_table = false
-      Sequel::Model.plugin :timestamps, update_on_create: true
       @db
     end
 
+    # Runs pending migrations. Every web and worker process calls this at boot, so a
+    # Postgres advisory lock makes concurrent instances wait their turn instead of
+    # racing: a single-runner job holding a lock in the shared store (Constitution X).
     def migrate!
       Sequel.extension :migration
-      Sequel::Migrator.run(db, MIGRATIONS_DIR)
+      db.synchronize do
+        db.get(Sequel.function(:pg_advisory_lock, MIGRATION_LOCK_ID))
+        begin
+          Sequel::Migrator.run(db, MIGRATIONS_DIR)
+        ensure
+          db.get(Sequel.function(:pg_advisory_unlock, MIGRATION_LOCK_ID))
+        end
+      end
     end
   end
 end

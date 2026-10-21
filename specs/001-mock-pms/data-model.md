@@ -134,7 +134,7 @@ authoritative (see the spec Assumptions).
 | | | primary key `(payment_seq, charge_seq)` |
 
 - The amounts applied for a payment must not add up to more than the payment.
-- The amounts applied to a charge must not add up to more than the charge.
+- The amounts applied to a charge by **settled** payments must not add up to more than the charge. A reversed payment keeps its PMS-reported application, so a repaid NSF month has two applications on one charge.
 
 ### reversals
 

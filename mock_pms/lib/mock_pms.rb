@@ -12,6 +12,15 @@ require_relative "mock_pms/redis"
 module MockPms
   LIB_FILES = %w[
     logging
+    models/base
+    models/business
+    models/oauth
+    presenters
+    pagination
+    oauth/service
+    seed/wordlists
+    seed/generator
+    seed/digest
     metrics
     metrics/buffer
     metrics/flusher
@@ -22,6 +31,9 @@ module MockPms
     api/errors
     api/ops
     api/admin_base
+    api/oauth
+    api/v1
+    api/admin
     app
   ].freeze
 

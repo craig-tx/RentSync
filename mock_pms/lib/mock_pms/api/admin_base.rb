@@ -24,8 +24,9 @@ module MockPms
           request.body.rewind
           raw = request.body.read
           request.body.rewind
-          code, body = Admin::Idempotency.call(key: headers["idempotency-key"] || headers["Idempotency-Key"],
-                                               method: request.request_method, path: request.path, body: raw, &)
+          key = headers["idempotency-key"] || headers["Idempotency-Key"]
+          code, body = MockPms::Admin::Idempotency.call(key: key, method: request.request_method,
+                                                        path: request.path, body: raw, &)
           status code
           body
         end

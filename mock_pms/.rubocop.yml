@@ -35,6 +35,7 @@ Metrics/ModuleLength:
 Metrics/BlockLength:
   Exclude:
     - "spec/**/*"
+    - "db/migrations/**/*"
     - "lib/mock_pms/api/**/*"
 
 Metrics/CyclomaticComplexity:
@@ -50,7 +51,16 @@ Layout/LineLength:
   Max: 120
 
 Naming/MethodParameterName:
-  AllowedNames: [by, db, id, io, le, n, tx, v, k]
+  AllowedNames: [by, c, db, id, io, k, l, le, n, o, p, r, t, tx, v]
 
 Naming/PredicateMethod:
   Enabled: false
+
+# Sequel virtual-row blocks build SQL; `x > 0` is required there, not `x.positive?`.
+Style/NumericPredicate:
+  Exclude:
+    - "db/migrations/**/*"
+
+Naming/VariableNumber:
+  EnforcedStyle: snake_case
+  CheckSymbols: false

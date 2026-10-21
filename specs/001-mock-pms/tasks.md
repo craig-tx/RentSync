@@ -236,7 +236,7 @@ spec US1 scenarios 1–5 (quickstart §3–§4).
 
 ### Tests for User Story 1 (write first; they must fail) ⚠️
 
-- [ ] T031 [P] [US1] Write `mock_pms/spec/unit/oauth/lifecycle_spec.rb`, testing `MockPms::OAuth::Service` against the test database with a frozen clock.
+- [X] T031 [P] [US1] Write `mock_pms/spec/unit/oauth/lifecycle_spec.rb`, testing `MockPms::OAuth::Service` against the test database with a frozen clock.
   - An approval issues a code. The code `expires_at` is "issue time + 60 s".
   - A code can be exchanged only once: the second exchange gets `invalid_grant`.
   - An expired code gets `invalid_grant`. So does a `redirect_uri` mismatch.
@@ -246,12 +246,12 @@ spec US1 scenarios 1–5 (quickstart §3–§4).
   - Validation order: an unknown digest is `:invalid`, a revoked grant is `:invalid`, a token past `expires_at` is `:expired`, and anything else is `:valid`.
   - Revoking the grant invalidates both its access and refresh tokens.
   - When the same operator approves the same client again, the existing active grant is reused.
-- [ ] T032 [P] [US1] Write `mock_pms/spec/unit/pagination_spec.rb`, testing `MockPms::Pagination`.
+- [X] T032 [P] [US1] Write `mock_pms/spec/unit/pagination_spec.rb`, testing `MockPms::Pagination`.
   - Cursors round-trip as URL-safe base64 of the last `seq`.
   - `limit` defaults to 50. A `limit` above 200, below 1, or that isn't an integer is **rejected** with 422 `{"error":{"code":"invalid_parameter",...}}`; it is never clamped (contract `minimum: 1`, `maximum: 200`). A malformed `cursor` is also rejected with 422.
   - **Stability**: with 120 rows and pages of 50, inserting 10 rows while paging means no original row is skipped or repeated, and the new rows show up after the original ones.
   - An `updated_since` filter narrows the results without changing the `seq` order.
-- [ ] T033 [P] [US1] Write `mock_pms/spec/unit/seed/determinism_spec.rb`, testing `MockPms::Seed::Generator` and `MockPms::Seed::Digest`.
+- [X] T033 [P] [US1] Write `mock_pms/spec/unit/seed/determinism_spec.rb`, testing `MockPms::Seed::Generator` and `MockPms::Seed::Digest`.
   - Two runs with `seed: 42, anchor_date: 2026-10-20` produce identical `data_digest`s, with a `TRUNCATE ... RESTART IDENTITY CASCADE` between them.
   - `seed: 7` produces a different digest.
   - The digest excludes `seq`, `password_digest`, and all OAuth, delivery, and harness tables.
@@ -265,18 +265,18 @@ spec US1 scenarios 1–5 (quickstart §3–§4).
     - charges span the 12 months ending with the anchor month;
     - no rent charge `period` falls after a lease's `actual_end_date`;
     - every reversal's `amount_cents` equals its payment's amount.
-- [ ] T034 [P] [US1] Write `mock_pms/spec/requests/oauth_spec.rb`, which drives the HTTP endpoints from contracts/openapi.yaml.
+- [X] T034 [P] [US1] Write `mock_pms/spec/requests/oauth_spec.rb`, which drives the HTTP endpoints from contracts/openapi.yaml.
   - **Authorize page**: `GET /oauth/authorize` with a registered client renders HTML. With an unknown `client_id` or an unregistered `redirect_uri`, it returns 400 and does not redirect.
   - **Approval**: `POST /oauth/authorize` with valid credentials and `decision=approve` returns 302 to `redirect_uri?code=…&state=xyz`. `decision=deny` returns 302 to `?error=access_denied&state=xyz`. Wrong credentials return 200 with the form re-rendered.
   - **Token endpoint**: `POST /oauth/token` accepts both `client_secret_basic` and `client_secret_post`. The response JSON matches `TokenResponse` (`token_type: "Bearer"`, `scope: "read"`). A bad client secret returns 401 `invalid_client`.
   - The token endpoint is never rate limited and never chaos-affected. Check this again in US3 and US4.
-- [ ] T035 [P] [US1] Write `mock_pms/spec/requests/v1_spec.rb`.
+- [X] T035 [P] [US1] Write `mock_pms/spec/requests/v1_spec.rb`.
   - **Auth**: an expired token returns 401 with `WWW-Authenticate: Bearer error="invalid_token", error_description="token expired"`. A revoked or unknown token returns 401 with `error_description="token invalid"`.
   - **Scoping**: each of `/v1/properties`, `/v1/tenants`, `/v1/leases`, `/v1/charges`, and `/v1/payments` returns only the token operator's records, with `{data, next_cursor}`.
   - **Single records**: `GET /v1/{resource}/{id}` for another operator's ID returns 404.
   - **Filters**: `property_id`, `tenant_id`, and `status` on leases; `lease_id` with `from`/`to` (`due_date`) on charges; and `lease_id` with `from`/`to` (`received_at`) on payments.
   - **Shapes**: every record matches its openapi schema. Amounts are `{amount_cents, currency}`. Reversed payments include a `reversal` object and `applied_to`.
-- [ ] T036 [P] [US1] Write `mock_pms/spec/requests/admin_clients_spec.rb`.
+- [X] T036 [P] [US1] Write `mock_pms/spec/requests/admin_clients_spec.rb`.
   - `POST /admin/clients` returns 201 with `client_id` (`client_` prefix), `client_secret`, and `signing_secret`. The `client_secret` is shown only in this response.
   - Afterwards, only `secret_digest` (the SHA-256) is stored. No row of `admin_idempotency_keys` contains the `client_secret` or `signing_secret` value.
   - `POST /admin/clients` ignores an `Idempotency-Key` header. Each request registers a new client, because the response carries a one-time secret.
@@ -288,7 +288,7 @@ spec US1 scenarios 1–5 (quickstart §3–§4).
 
 ### Implementation for User Story 1
 
-- [ ] T037 [US1] Create migration `mock_pms/db/migrations/002_business.rb`. Every table **except `payment_applications`** gets `seq bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY`, `id text UNIQUE NOT NULL`, and `created_at`/`updated_at timestamptz NOT NULL`. `payment_applications` has only its composite primary key. Every foreign key is NOT NULL unless the data model says otherwise.
+- [X] T037 [US1] Create migration `mock_pms/db/migrations/002_business.rb`. Every table **except `payment_applications`** gets `seq bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY`, `id text UNIQUE NOT NULL`, and `created_at`/`updated_at timestamptz NOT NULL`. `payment_applications` has only its composite primary key. Every foreign key is NOT NULL unless the data model says otherwise.
   - **`operators`**:
     - `name text NOT NULL`
     - `login text UNIQUE NOT NULL`
@@ -340,7 +340,7 @@ spec US1 scenarios 1–5 (quickstart §3–§4).
     - `reason text CHECK (reason IN ('nsf','account_closed','stop_payment'))`
     - `reversed_at timestamptz`
     - `amount_cents integer`
-- [ ] T038 [US1] Create migration `mock_pms/db/migrations/003_oauth.rb`.
+- [X] T038 [US1] Create migration `mock_pms/db/migrations/003_oauth.rb`.
   - **`clients`**:
     - `seq`, `id` (`client_` prefix)
     - `name text`
@@ -370,7 +370,7 @@ spec US1 scenarios 1–5 (quickstart §3–§4).
     - `expires_at timestamptz NOT NULL`
     - `created_at`
   - **`refresh_tokens`**: the same columns as `access_tokens`, plus `used_at timestamptz NULL`.
-- [ ] T039 [P] [US1] Create Sequel models in `mock_pms/lib/mock_pms/models/` for the business tables: `operator.rb`, `property.rb`, `tenant.rb`, `lease.rb`, `charge.rb`, `payment.rb`, `payment_application.rb`, and `reversal.rb`.
+- [X] T039 [P] [US1] Create Sequel models in `mock_pms/lib/mock_pms/models/` for the business tables: `operator.rb`, `property.rb`, `tenant.rb`, `lease.rb`, `charge.rb`, `payment.rb`, `payment_application.rb`, and `reversal.rb`.
   - Set up the associations from the data-model Relationships section.
   - Add validations that mirror the database constraints.
   - Add model-level invariants:
@@ -378,21 +378,21 @@ spec US1 scenarios 1–5 (quickstart §3–§4).
     - a payment's applications must not add up to more than the payment, and a charge's must not add up to more than the charge;
     - a reversal's `reversed_at` "must be later than the payment's `received_at`", and its `amount_cents` "must equal the payment's full amount";
     - charges with a `period` after the lease's `actual_end_date` are rejected.
-- [ ] T040 [P] [US1] Create Sequel models `mock_pms/lib/mock_pms/models/{client,grant,authorization_code,access_token,refresh_token}.rb`. Add `Grant#active?` and the dataset method `Grant.active`.
-- [ ] T041 [US1] Implement `mock_pms/lib/mock_pms/oauth/service.rb`, `MockPms::OAuth::Service`, making T031 pass.
+- [X] T040 [P] [US1] Create Sequel models `mock_pms/lib/mock_pms/models/{client,grant,authorization_code,access_token,refresh_token}.rb`. Add `Grant#active?` and the dataset method `Grant.active`.
+- [X] T041 [US1] Implement `mock_pms/lib/mock_pms/oauth/service.rb`, `MockPms::OAuth::Service`, making T031 pass.
   - **Issuing**: `approve!(client:, operator:, redirect_uri:, code_challenge:, method:)` reuses or creates the active grant and issues a code (32 or more random bytes, stored as a SHA-256 digest).
   - **Code exchange**: `exchange_code!(client:, code:, redirect_uri:, code_verifier:)` claims the code with a single-use update, `UPDATE authorization_codes SET used_at = now() WHERE code_digest = ? AND used_at IS NULL AND expires_at > now()`. Zero rows changed means `invalid_grant`. The token pair is issued in the same transaction.
   - **Refresh**: `refresh!(client:, refresh_token:)` rotates the pair with the same single-use update on `refresh_tokens`.
   - **Validation**: `validate_access_token(raw)` returns `[:valid, grant] | [:expired, nil] | [:invalid, nil]`, checking in the order from data-model.md.
   - **Revocation**: `revoke!(grant)`.
   - Use `MockPms::Clock` for every time check.
-- [ ] T042 [US1] Implement `mock_pms/lib/mock_pms/api/oauth.rb` and `mock_pms/lib/mock_pms/views/authorize.html.erb`, making T034 pass.
+- [X] T042 [US1] Implement `mock_pms/lib/mock_pms/api/oauth.rb` and `mock_pms/lib/mock_pms/views/authorize.html.erb`, making T034 pass.
   - **`GET /oauth/authorize`**: validates the client and an exact `redirect_uri` match, then renders the minimal sign-in-and-approve form with stdlib ERB, escaping all values.
   - **`POST /oauth/authorize`**: checks the operator's password with bcrypt, then redirects with a code or `error=access_denied`.
   - **`POST /oauth/token`**: handles both client-auth methods. Errors follow RFC 6749, as `{error, error_description}`, using the statuses in the contract.
   - Mount the API in `MockPms::App` (T027).
-- [ ] T043 [P] [US1] Implement `mock_pms/lib/mock_pms/pagination.rb`, `MockPms::Pagination.paginate(dataset, limit:, cursor:)`, making T032 pass. It orders by `seq ASC`, takes the keyset `WHERE seq > decoded_cursor`, fetches `limit + 1` rows to find out whether a next page exists, and returns `[rows, next_cursor_or_nil]`.
-- [ ] T044 [US1] Implement `mock_pms/lib/mock_pms/seed/wordlists.rb` and `mock_pms/lib/mock_pms/seed/generator.rb`, `MockPms::Seed::Generator.run(seed:, anchor_date:)`, following research R5. Part of T033 passes after this task.
+- [X] T043 [P] [US1] Implement `mock_pms/lib/mock_pms/pagination.rb`, `MockPms::Pagination.paginate(dataset, limit:, cursor:)`, making T032 pass. It orders by `seq ASC`, takes the keyset `WHERE seq > decoded_cursor`, fetches `limit + 1` rows to find out whether a next page exists, and returns `[rows, next_cursor_or_nil]`.
+- [X] T044 [US1] Implement `mock_pms/lib/mock_pms/seed/wordlists.rb` and `mock_pms/lib/mock_pms/seed/generator.rb`, `MockPms::Seed::Generator.run(seed:, anchor_date:)`, following research R5. Part of T033 passes after this task.
   - Use one `Random.new(seed)` for everything.
   - Public IDs come from `Ids.generate(prefix, rng:)`.
   - Every timestamp comes from the simulated history anchored on `anchor_date`. The wall clock is never used.
@@ -402,33 +402,33 @@ spec US1 scenarios 1–5 (quickstart §3–§4).
   - **Payment behavior per month**: about 70% on time, about 15% late (3, 7, 12, or 20+ days, with a `late_fee` charge), about 8% partial (half later completed, half never completed), about 3% NSF reversal (each followed by a repayment or left unpaid), and the rest unpaid. At least one NSF reversal MUST target a partial payment, and it reverses that payment's full amount.
   - **Move-outs**: 4 tenants move out mid-lease. Their lease is set to `ended_early` with `actual_end_date`, and the tenant to `former`. No charges are generated after the move-out.
   - **`payment_applications`**: written in the way the PMS reports applications.
-- [ ] T045 [US1] Implement `mock_pms/lib/mock_pms/seed/digest.rb`, `MockPms::Seed::Digest.compute`, and write `seed_runs` in migration `mock_pms/db/migrations/004_seed_runs.rb`. The `seed_runs` columns are `seq`, `seed bigint`, `anchor_date date`, `data_digest text`, and `ran_at timestamptz`. T033 passes fully after this task.
+- [X] T045 [US1] Implement `mock_pms/lib/mock_pms/seed/digest.rb`, `MockPms::Seed::Digest.compute`, and write `seed_runs` in migration `mock_pms/db/migrations/004_seed_runs.rb`. The `seed_runs` columns are `seq`, `seed bigint`, `anchor_date date`, `data_digest text`, and `ran_at timestamptz`. T033 passes fully after this task.
   - The digest is a canonical JSON dump of the `/v1`-visible fields of operators (without `password_digest`), properties, tenants, leases, charges, and payments (with applications and reversals).
   - Within each table, rows are ordered by `id`. Keys are sorted, and timestamps are UTC ISO 8601 at second precision.
   - The digest is the SHA-256 of that dump.
   - Seeded events are added to the digest in T068.
-- [ ] T046 [US1] Implement `mock_pms/lib/mock_pms/seed/reset.rb`, `MockPms::Seed::Reset.run!(seed:, anchor_date:)`. It runs `TRUNCATE ... RESTART IDENTITY CASCADE` on every business, OAuth, event, and delivery table, and on `worker_heartbeats`. It resets both `chaos_counters` rows to 0. It **keeps `admin_idempotency_keys` and `seed_runs`**, which are audit and harness state rather than seed state, so an idempotent `/admin/reset` can still find its own key afterwards. It then regenerates the data and records a `seed_runs` row. It returns `{seed, anchor_date, data_digest}`.
+- [X] T046 [US1] Implement `mock_pms/lib/mock_pms/seed/reset.rb`, `MockPms::Seed::Reset.run!(seed:, anchor_date:)`. It runs `TRUNCATE ... RESTART IDENTITY CASCADE` on every business, OAuth, event, and delivery table, and on `worker_heartbeats`. It resets both `chaos_counters` rows to 0. It **keeps `admin_idempotency_keys` and `seed_runs`**, which are audit and harness state rather than seed state, so an idempotent `/admin/reset` can still find its own key afterwards. It then regenerates the data and records a `seed_runs` row. It returns `{seed, anchor_date, data_digest}`.
   - It does not clear Redis metrics.
   - Then wire `bin/setup` to call it (T028).
   - Create `mock_pms/bin/reseed`, which takes `--seed N --anchor YYYY-MM-DD` and prints the digest.
-- [ ] T047 [P] [US1] Create `mock_pms/bin/seed_report`. It prints counts per operator (properties, leases, tenants), the payment-behavior mix per category, the `ended_early` leases, and the operator logins and passwords for the approval page. It uses `Logging.service_name = "mock_pms-tool"`, and prints the report itself on stdout, separate from the log lines.
-- [ ] T048 [P] [US1] Create presenters `mock_pms/lib/mock_pms/presenters/{property,tenant,lease,charge,payment}.rb`. Each one turns a model into the exact `/v1` JSON shape in contracts/openapi.yaml:
+- [X] T047 [P] [US1] Create `mock_pms/bin/seed_report`. It prints counts per operator (properties, leases, tenants), the payment-behavior mix per category, the `ended_early` leases, and the operator logins and passwords for the approval page. It uses `Logging.service_name = "mock_pms-tool"`, and prints the report itself on stdout, separate from the log lines.
+- [X] T048 [P] [US1] Create presenters `mock_pms/lib/mock_pms/presenters/{property,tenant,lease,charge,payment}.rb`. Each one turns a model into the exact `/v1` JSON shape in contracts/openapi.yaml:
   - public `id`s only, never `seq`;
   - `property_id`, `tenant_id`, and `lease_id` as public IDs;
   - money as `{amount_cents, currency}`;
   - for payments, `applied_to: [{charge_id, amount_cents}]` and `reversal`, which is either null or `{id, reason, reversed_at, amount_cents}`.
 
   The webhook envelope in US2 reuses these presenters.
-- [ ] T049 [US1] Implement `mock_pms/lib/mock_pms/api/v1.rb`, making T035 pass.
+- [X] T049 [US1] Implement `mock_pms/lib/mock_pms/api/v1.rb`, making T035 pass.
   - A `before` hook reads `Authorization: Bearer` and calls `OAuth::Service.validate_access_token`. An expired or invalid token gets 401 with the matching `WWW-Authenticate` value.
   - The grant's `operator_seq` is stored in `env["mock_pms.operator_seq"]` and the client's `seq` in `env["mock_pms.client_seq"]`. US3 reads the latter.
   - It serves the list endpoints for the five resources, with the filters from T035, `updated_since`, and `Pagination`. Every dataset is scoped `WHERE operator_seq = ?`.
   - It serves `GET /v1/{resource}/{id}`, which returns 404 when the record is not in scope.
   - Mount the API in `MockPms::App`.
-- [ ] T050 [US1] Implement `mock_pms/lib/mock_pms/api/admin.rb` client and grant endpoints, making T036 pass. Mount them in `AdminBase`. Use `with_idempotency` on `POST /admin/grants/{grant_id}/revoke`. `POST /admin/clients` does **not** use it, because its response contains the one-time `client_secret` (R4; see T026).
+- [X] T050 [US1] Implement `mock_pms/lib/mock_pms/api/admin.rb` client and grant endpoints, making T036 pass. Mount them in `AdminBase`. Use `with_idempotency` on `POST /admin/grants/{grant_id}/revoke`. `POST /admin/clients` does **not** use it, because its response contains the one-time `client_secret` (R4; see T026).
   - **`POST /admin/clients`**: generates `client_secret` (stored only as its SHA-256), and `signing_secret` (prefix `whsec_`, stored as given).
   - **Other endpoints**: `GET /admin/clients`, `PATCH /admin/clients/{client_id}`, `GET /admin/grants`, and `POST /admin/grants/{grant_id}/revoke` (calls `OAuth::Service.revoke!`; idempotent).
-- [ ] T051 [P] [US1] Write `docs/adr/0002-hand-written-oauth-server.md` (ADR-0002), from research R3.
+- [X] T051 [P] [US1] Write `docs/adr/0002-hand-written-oauth-server.md` (ADR-0002), from research R3.
   - **Context**: the narrow flow needed, and that Doorkeeper requires Rails.
   - **Decision**: opaque random tokens, stored as SHA-256 digests, with single-use codes and rotating refresh tokens.
   - **Alternatives**: Doorkeeper; `rack-oauth2`; JWT (rejected because revocation would not be immediate).

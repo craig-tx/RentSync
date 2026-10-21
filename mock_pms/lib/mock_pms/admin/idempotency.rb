@@ -27,13 +27,16 @@ module MockPms
         !dataset.insert_conflict.returning(:key).insert(key: key, request_digest: digest).empty?
       end
 
+      # Releases the key if the handler does not finish, whether it raised or threw
+      # (Grape's error! uses throw), so the client can retry.
       def run_claimed(key)
+        completed = false
         status, body = yield
         dataset.where(key: key).update(response_status: status, response_body: Sequel.pg_jsonb_wrap(body))
+        completed = true
         [status, body]
-      rescue StandardError
-        dataset.where(key: key).delete
-        raise
+      ensure
+        dataset.where(key: key).delete unless completed
       end
 
       def replay(key, digest)

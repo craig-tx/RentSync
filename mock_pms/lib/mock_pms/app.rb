@@ -24,7 +24,7 @@ module MockPms
   # CorrelationId -> RequestMetrics -> RateLimiter -> ChaosErrors -> Grape.
   module App
     # APIs mounted after the foundation (OAuth, V1, Admin) register here.
-    def self.apis = @apis ||= []
+    def self.apis = @apis ||= [API::OAuth, API::V1, API::Admin]
 
     def self.middlewares = @middlewares ||= []
 
