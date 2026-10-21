@@ -173,15 +173,16 @@ infra/
 │   ├── environment/                # rentsync-dev-staging + rentsync-prod-us (same code)
 │   │   ├── versions.tf  main.tf  secrets.tf  variables.tf  outputs.tf
 │   │   └── tests/*.tftest.hcl
-│   └── modules/host/               # instance, ENI, EIP, data volume, role, user data
-│       ├── main.tf  iam.tf  variables.tf  outputs.tf
-│       └── cloud-init.yaml.tftpl
+│   ├── modules/host/               # instance, ENI, EIP, data volume, role, user data
+│   │   ├── main.tf  iam.tf  variables.tf  outputs.tf
+│   │   └── cloud-init.yaml.tftpl
+│   └── check_prevent_destroy.sh    # static checks terraform test can't express
 └── host/
     ├── compose.env.yaml            # environment host stack (R7)
     ├── compose.telemetry.yaml      # telemetry host stack
     ├── Caddyfile.env  Caddyfile.telemetry
     ├── daemon.json                 # Docker log rotation
-    ├── bin/rentsync-boot  bin/rentsync-deploy  bin/rentsync-render-env
+    ├── bin/rentsync-boot  bin/rentsync-deploy  bin/rentsync-render-env  bin/rentsync-start
     ├── systemd/rentsync-boot.service  rentsync.service  rentsync-prune.{service,timer}
     └── test/boot_volume_test.sh    # "format only if empty" on a loop device
 
@@ -192,12 +193,14 @@ mock_pms/
 
 .github/workflows/
 ├── ci.yml                          # + infra job (fmt, validate, test, shellcheck)
-├── release.yml                     # build arm64 → staging → (approval) production
+├── build-image.yml                 # reusable: arm64 build, push to ECR (skip if tag exists)
+├── deploy-to.yml                   # reusable: SSM deploy + external /healthz check (URL from Environment SITE_URL)
+├── release.yml                     # build arm64 → dev-staging → (approval) prod-us
 └── deploy.yml                      # manual deploy / rollback
 
 docs/
 ├── adr/0005-demo-aws-topology.md  0006-releases-via-ssm.md  0007-secrets-ssm-write-only.md
-└── deploy/runbook.md  production-differences.md
+└── deploy/runbook.md  production-differences.md  iam/*.json (bootstrap policies)
 ```
 
 **Structure Decision**:
@@ -221,6 +224,9 @@ Constitution VIII requires a one-line justification for each new dependency:
 | `aws-actions/configure-aws-credentials` | The standard GitHub OIDC-to-AWS role exchange, with no stored keys. |
 | `aws-actions/amazon-ecr-login` | ECR registry login for the image push. |
 | `docker/build-push-action` (+ `docker/setup-buildx-action`) | Reproducible image build and push, with layer caching to meet SC-005. |
+| `hashicorp/setup-terraform` (CI) | Installs the pinned Terraform version for fmt, validate and test in CI (research R15). |
+| Docker Compose v2 plugin (hosts, version pinned and checksum-verified) | Amazon Linux 2023 packages Docker but not the Compose plugin. Compose runs each host's stack (research R7). |
+| `jq` (hosts, from the Amazon Linux 2023 repository) | `rentsync-deploy` parses `/healthz` JSON to check `status`, `version` and `deployment_id` (FR-028). |
 | AWS CLI and the SSM Session Manager plugin (operator machine) | Shell access with no inbound port (FR-010). Not a project runtime dependency. |
 | `nmap`, `gitleaks` (operator machine, optional) | Validation only: the port scan (SC-003) and the secret scan (SC-004). GitHub secret scanning covers the latter in CI. |
 

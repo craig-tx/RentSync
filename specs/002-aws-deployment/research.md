@@ -282,8 +282,9 @@ successfully on `main`.
    same steps against the production host and URL, with the **same tag**. Its approval gate is
    the promotion approval (FR-027). Nothing is rebuilt.
 
-Each deploy job is one call to a reusable workflow that takes `deployment_id` and `url`. A
-side-by-side deployment adds an Environment and one job, with no new logic.
+Each deploy job is one call to a reusable workflow that takes `deployment_id`. The URL comes
+from the GitHub Environment variable `SITE_URL`. A side-by-side deployment adds an Environment
+and one job, with no new logic.
 
 **`.github/workflows/deploy.yml`** (`workflow_dispatch`) takes `deployment_id` and `image_tag`,
 or `rollback: true`. It is the one documented action for rollback (FR-029) and for manual

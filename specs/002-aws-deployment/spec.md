@@ -159,7 +159,7 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 **Network and hosts**
 
 - **FR-007**: There MUST be exactly one virtual network (VPC) holding all hosts. Its documentation MUST state that real production would use separate networks, and normally separate accounts, for each environment.
-- **FR-008**: There MUST be exactly three hosts: staging, production, and shared telemetry. Each MUST have a fixed public IP address (Elastic IP) that survives the host being replaced.
+- **FR-008**: The three initial deployments MUST have exactly three hosts: staging (`dev-staging`), production (`prod-us`), and shared telemetry (`shared-us`). Side-by-side deployments (FR-042) add their own. Each MUST have a fixed public IP address (Elastic IP) that survives the host being replaced.
 - **FR-009**: Inbound access from the internet MUST be limited to TCP 80 and 443 on every host. No SSH or other administrative port may be open to the internet.
 - **FR-010**: Operators MUST have a documented administrative shell path to each host that needs no inbound port.
 - **FR-011**: The telemetry ingestion port MUST accept connections only from the environment hosts inside the network. It MUST NOT be reachable from the internet.
@@ -177,7 +177,7 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 
 - **FR-018**: The telemetry host MUST run the telemetry backend (OpenObserve) with its own metadata database, both as containers. A TLS-terminating reverse proxy MUST serve its UI at its own rentsync.org hostname.
 - **FR-019**: The telemetry UI MUST require sign-in, and its credentials MUST come from the secret store.
-- **FR-020**: Telemetry data MUST be stored on durable storage that survives the host being replaced.
+- **FR-020**: Telemetry data MUST be stored on durable storage that survives the host being replaced, as FR-031 specifies.
 
 **DNS**
 

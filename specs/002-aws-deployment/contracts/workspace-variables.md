@@ -69,8 +69,8 @@ Terraform, so the value never reaches state or plan files.
 | `AWS_ROLE_ARN` | Actions variable | `arn:aws:iam::<account>:role/rentsync-github-actions` |
 | `ECR_REPOSITORY_URL` | Actions variable | shared output `ecr_repository_url` |
 | `AWS_REGION` | Actions variable | `us-east-1` |
-| `dev-staging` | Environment (named by DeploymentId) | no protection rules; branch `main` only |
-| `prod-us` | Environment (named by DeploymentId) | required reviewer: the operator; branch `main` only |
+| `dev-staging` | Environment (named by DeploymentId) | no protection rules; branch `main` only; Environment variable `SITE_URL = https://pms-staging.rentsync.org` |
+| `prod-us` | Environment (named by DeploymentId) | required reviewer: the operator; branch `main` only; `SITE_URL = https://pms.rentsync.org` |
 
 None of these values are secrets. GitHub Actions authenticates to AWS through OIDC, so there is
 no access key anywhere.

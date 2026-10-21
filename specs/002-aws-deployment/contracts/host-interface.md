@@ -9,7 +9,9 @@ at boot.
 rentsync-deploy <image_tag>    deploy that tag (40-char git SHA)
 rentsync-deploy --rollback     deploy previous_image_tag
 rentsync-deploy --reload       re-render secrets and (re)start the current image_tag
-                               (boot, secret rotation); a no-op start if image_tag is "none"
+                               (boot, secret rotation); if image_tag is "none", starts only Caddy
+                               (certificates can issue before the first deploy)
+                               and prints "no image deployed yet"
 ```
 
 **Behavior**:

@@ -111,10 +111,11 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
 
   Steps that point at files that don't exist yet must not fail the job: guard them with
   `if [ -e ... ]`, and remove the guards in T076.
-- [ ] T005 [P] Add this line to the Dependencies table in
-  `specs/002-aws-deployment/plan.md`: "`hashicorp/setup-terraform` (CI) — installs the pinned
-  Terraform version for fmt/validate/test in CI (research R15)." Constitution VIII requires a
-  justification for every dependency.
+- [ ] T005 [P] Check that the Dependencies table in `specs/002-aws-deployment/plan.md` has a
+  justification line for every dependency introduced by this task list:
+  `hashicorp/setup-terraform`, the Docker Compose v2 plugin, `jq` on the hosts, and each
+  GitHub Action used in T060 and T061. Constitution VIII requires one for every dependency.
+  Add any that are missing before using the dependency.
 - [ ] T006 [P] Create `docs/deploy/runbook.md`. Give it the headings listed below, in this order;
   each heading body is "TBD (task Txxx)" until filled in.
   - Bootstrap
@@ -208,7 +209,14 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
     `resource["deployment.id"]`;
   - in `transform/metrics_resource`, add
     `set(attributes["deployment.id"], attributes["deployment_id"]) where attributes["deployment_id"] != nil`
-    and `delete_key(attributes, "deployment_id")`.
+    and `delete_key(attributes, "deployment_id")`;
+  - add a processor `resource/deployment` that `insert`s `deployment.environment` =
+    `${env:DEPLOYMENT_ENVIRONMENT}` and `deployment.id` = `${env:DEPLOYMENT_ID}` (insert sets
+    them only when missing), and add it to **both** pipelines after `memory_limiter`. Without it,
+    the Collector's own metrics (the `otel-collector` scrape job) would carry neither attribute
+    (constitution VI);
+  - add `DEPLOYMENT_ENVIRONMENT` and `DEPLOYMENT_ID` to the Collector's environment in
+    `compose.yaml`, which already loads them from `env_file: .env`.
 
   Update the file's header comment to mention research 002 R8.
 - [ ] T019 Update `.env.example`:
@@ -223,7 +231,9 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   Note in `docs/ai-build-log.md` that developers must re-copy `.env` from `.env.example`. The old
   `mock_pms` database is simply left unused.
 - [ ] T020 Extend `mock_pms/bin/telemetry_smoke`. It must also assert that at least one log
-  record and one metric in OpenObserve carry `deployment.id` equal to `DEPLOYMENT_ID`.
+  record, one `mock_pms_*` metric, and one Collector self-metric (for example
+  `otelcol_exporter_sent_log_records`) in OpenObserve carry `deployment.id` equal to
+  `DEPLOYMENT_ID` and `deployment.environment` equal to `DEPLOYMENT_ENVIRONMENT`.
 - [ ] T021 [P] Add `version` (string) and `deployment_id` (string) to the `/healthz` and
   `/healthz/live` response schemas in `specs/001-mock-pms/contracts/openapi.yaml`, at lines
   729–745.
@@ -246,7 +256,8 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
     - the instance `Name` tag is `rentsync-pr-42-host`;
     - the IAM role is named `rentsync-pr-42-host`;
     - every `aws_ssm_parameter` name starts with `/rentsync/pr-42/`;
-    - the provider's `default_tags` include `DeploymentId = "pr-42"`;
+    - `local.default_tags["DeploymentId"] == "pr-42"`. Mocked providers don't compute
+      `tags_all`, so the real tags are proven live in T055;
   - `disjoint`: plan with `prod-us` and with `dev-staging`, and assert that the name sets
     don't intersect.
 - [ ] T024 [P] Write `infra/terraform/shared/tests/deployment_id.tftest.hcl` with the same
@@ -279,7 +290,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   | `root_volume_gib` | number, default 16 |
   | `data_volume_gib` | number, default 10 |
   | `data_snapshot_id` | string, default null |
-  | `ssm_read_paths` | list(string) |
+  | `ssm_read_paths` | list(string), bare paths such as `/rentsync/<id>`, with no `/*` |
   | `ssm_write_params` | list(string) |
   | `ecr_repository_arn` | string |
   | `extra_tags` | map(string), default {} |
@@ -291,7 +302,10 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
     - the AMI and type, attached to the ENI as its primary interface (confirm the argument name
       for the pinned provider, per research R3);
     - `metadata_options { http_tokens = "required" }` and **no** `key_name`;
-    - a gp3 root disk of `root_volume_gib`, encrypted;
+    - a gp3 root disk of `root_volume_gib`, encrypted, with
+      `root_block_device { tags = { Name = "rentsync-<id>-root", DeploymentId = var.deployment_id, Project = "rentsync", ManagedBy = "terraform" } }`.
+      Provider `default_tags` don't reach root volumes (constitution VI). Do **not** use
+      `volume_tags`, which would fight the data volume's own tags;
     - `user_data_base64 = base64gzip(var.user_data)` and `user_data_replace_on_change = true`;
     - the instance profile, and tags `Name = rentsync-<id>-host` plus `extra_tags`.
   - `aws_eip.this` (`domain = "vpc"`), associated through `aws_eip_association` with the
@@ -309,7 +323,10 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
     - `ecr:GetAuthorizationToken` on `*`;
     - `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer`, and
       `ecr:BatchCheckLayerAvailability` on `var.ecr_repository_arn`;
-    - `ssm:GetParameter*` on each `var.ssm_read_paths` ARN;
+    - `ssm:GetParameter`, `ssm:GetParameters`, and `ssm:GetParametersByPath` on **both**
+      `arn:…:parameter<path>` and `arn:…:parameter<path>/*` for each `var.ssm_read_paths`
+      entry. `GetParametersByPath` is authorized against the path itself, so `/*` alone would
+      deny `rentsync-render-env`;
     - `ssm:PutParameter` on each `var.ssm_write_params` ARN;
     - `kms:Decrypt` on `*`, with the condition `kms:ViaService = ssm.<region>.amazonaws.com`.
 - [ ] T029 Create `infra/terraform/modules/host/outputs.tf`, exposing `instance_id`, `public_ip`
@@ -318,8 +335,8 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   from path to `{content, permissions}`, and `host_env`, a map of non-secret key/values. It must:
   1. write every file, plus `/etc/rentsync/host.env`, which contains `host_env` and
      `VOLUME_ID`;
-  2. `dnf install -y docker`, then install the Docker Compose v2 plugin binary, with its version
-     pinned as a template variable;
+  2. `dnf install -y docker jq`, then install the Docker Compose v2 plugin binary, with its
+     version pinned as a template variable and its checksum verified;
   3. `systemctl enable --now docker rentsync-boot.service rentsync.service rentsync-prune.timer`.
 
   It contains no secrets (research R6).
@@ -356,27 +373,48 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   - if `HOST_ROLE=environment`, it runs `rentsync-deploy --reload`;
   - if `HOST_ROLE=telemetry`, it runs `rentsync-render-env`, then
     `docker compose -f /opt/rentsync/compose.yaml up -d`.
-- [ ] T036 Create `infra/terraform/environment/main.tf` (variables and outputs come in T047):
-  - `provider "aws"` with `region` and the convention's `default_tags`;
+- [ ] T036 Create `infra/terraform/environment/main.tf`:
+  - `locals`:
+    - `name = "rentsync-${var.deployment_id}"`;
+    - `ssm_prefix = "/rentsync/${var.deployment_id}"`;
+    - `db_name = "mock_pms_${replace(var.deployment_id, "-", "_")}"`;
+    - `default_tags = { DeploymentId = var.deployment_id, Project = "rentsync", ManagedBy = "terraform" }`;
+  - `provider "aws"` with `region` and `default_tags { tags = local.default_tags }`;
   - `data "terraform_remote_state" "shared"`, using backend `remote` with
-    `organization = "craig-personal"` and `workspaces = { name = var.shared_workspace }`;
-  - `locals { name = "rentsync-${var.deployment_id}", ssm_prefix = "/rentsync/${var.deployment_id}", db_name = "mock_pms_${replace(var.deployment_id, "-", "_")}" }`.
-- [ ] T037 Create `infra/terraform/shared/main.tf` with the provider, `default_tags`, and
-  `locals { name = "rentsync-${var.deployment_id}", ssm_prefix = "/rentsync/${var.deployment_id}" }`.
+    `organization = "craig-personal"` and `workspaces = { name = var.shared_workspace }`.
+
+  Also create `infra/terraform/environment/variables.tf` with every variable in
+  contracts/workspace-variables.md §`rentsync-dev-staging` / `rentsync-prod-us`. Apply these
+  rules:
+  - `deployment_id` is validated by the regex;
+  - `environment` is validated to `staging` or `production`;
+  - `admin_token` is `sensitive` and `ephemeral`, with `validation` that its length is ≥ 32 and
+    it is not `"change-me-admin-token"`;
+  - `shared_workspace` defaults to `"rentsync-shared-us"`.
+- [ ] T037 Create `infra/terraform/shared/main.tf` with
+  `locals { name = "rentsync-${var.deployment_id}", ssm_prefix = "/rentsync/${var.deployment_id}", default_tags = { ... as T036 } }`
+  and the provider with `default_tags { tags = local.default_tags }`.
   Create `infra/terraform/shared/variables.tf` with every variable in
   contracts/workspace-variables.md §`rentsync-shared-us`. Apply these rules:
   - `deployment_id` is validated by the regex;
   - `openobserve_root_password` is `sensitive = true` and `ephemeral = true`, and validated to
     8–128 characters;
   - `budget_email` and `acme_email` have no default.
-- [ ] T038 Create `infra/terraform/check_prevent_destroy.sh`. It greps
-  `infra/terraform/modules/host/main.tf` and fails unless the `aws_ebs_volume` `data` block
-  contains `prevent_destroy = true` (FR-034). `terraform test` cannot see lifecycle settings,
-  which is why this is a script. Make it executable with `git update-index --chmod=+x`.
+- [ ] T038 Create `infra/terraform/check_prevent_destroy.sh`, which runs static checks that
+  `terraform test` cannot express. It fails unless all of the following hold:
+  1. the `aws_ebs_volume` `data` block in `infra/terraform/modules/host/main.tf` contains
+     `prevent_destroy = true` (FR-034);
+  2. the `root_block_device` block there contains `tags` (constitution VI);
+  3. no `aws_ssm_parameter` block anywhere under `infra/terraform/` with
+     `type = "SecureString"` contains a `value =` argument; only `value_wo` is allowed (R11).
+
+  Make it executable with `git update-index --chmod=+x`.
 
 **Checkpoint**:
 - The mock PMS emits `deployment.id` and passes all specs.
-- T023, T024, T025, and T038 pass.
+- T025 passes. T038 passes for the files that exist so far.
+- T023 and T024 are written and **fail**, because the resources they test come in US1. They
+  pass at T046 (shared) and T049 (environment).
 - `terraform validate` passes in both roots.
 
 ---
@@ -402,8 +440,9 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
     no rule on port 22 (FR-009);
   - the instance has `metadata_options.http_tokens == "required"` and a null `key_name`;
   - the data volume is `encrypted`;
-  - every `aws_ssm_parameter` with `type == "SecureString"` has a null `value` (only `value_wo`;
-    R11);
+  - every `SecureString` `aws_ssm_parameter` has `value_wo_version` set to its `*_version`
+    variable. `value` is unknown at plan time under mocks, so the "no `value =`" rule lives in
+    T038's static check (R11);
   - the `admin_token` cases `"change-me-admin-token"` and a 31-character string both hit
     `expect_failures = [var.admin_token]` (FR-025).
 - [ ] T040 [P] [US1] Write `infra/terraform/shared/tests/security.tftest.hcl` with mocked
@@ -427,12 +466,13 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
     `scan_on_push = true`, and `force_delete = false`;
   - `aws_ecr_lifecycle_policy` that keeps the last 20 images (R16).
 - [ ] T043 [US1] Create `infra/terraform/shared/telemetry.tf`:
+  - security groups use standalone `aws_vpc_security_group_ingress_rule` and `aws_vpc_security_group_egress_rule` resources, never inline `ingress`/`egress` blocks (T040 relies on `referenced_security_group_id`);
   - `aws_security_group` `${local.name}-otlp-client` (no ingress, all egress);
   - `aws_security_group` `${local.name}-sg`: 80 and 443 from anywhere, 5080 from the otlp-client
     group, all egress;
   - `module "telemetry_host"` (`../modules/host`):
     - `private_ip = var.telemetry_private_ip`;
-    - `ssm_read_paths = ["${local.ssm_prefix}/*"]` and `ssm_write_params = []`;
+    - `ssm_read_paths = [local.ssm_prefix]` and `ssm_write_params = []`;
     - `extra_tags = {}` (not deployable);
     - user data from the cloud-init template, with only the Phase 2 base files for now. US3
       adds the stack.
@@ -457,27 +497,19 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   - `ingest_ssm_path = "${local.ssm_prefix}/openobserve/ingest"`.
 
   T024 and T040 must pass.
-- [ ] T047 [US1] Create `infra/terraform/environment/variables.tf` with every variable in
-  contracts/workspace-variables.md §`rentsync-dev-staging` / `rentsync-prod-us`. Apply these
-  rules:
-  - `environment` is validated to `staging` or `production`;
-  - `admin_token` is `sensitive` and `ephemeral`, with `validation` that its length is ≥ 32 and
-    it is not `"change-me-admin-token"`;
-  - `shared_workspace` defaults to `"rentsync-shared-us"`.
-
-  Also create `infra/terraform/environment/outputs.tf` with `public_ip`, `instance_id`, and
-  `url = "https://${var.hostname}"`.
+- [ ] T047 [US1] Create `infra/terraform/environment/outputs.tf` with `public_ip`,
+  `instance_id`, and `url = "https://${var.hostname}"`. The variables already exist (T036).
 - [ ] T048 [US1] Add the security group and host to `infra/terraform/environment/main.tf`:
-  - `aws_security_group` `${local.name}-sg`: 80 and 443 from anywhere, all egress, in the shared
+  - `aws_security_group` `${local.name}-sg`, with standalone rule resources as in T043: 80 and 443 from anywhere, all egress, in the shared
     VPC;
   - `module "host"`:
     - `security_group_ids = [sg, shared.otlp_client_security_group_id]`;
-    - `ssm_read_paths = ["${local.ssm_prefix}/*", "${shared.ingest_ssm_path}/*"]`;
+    - `ssm_read_paths = [local.ssm_prefix, shared.ingest_ssm_path]`;
     - `ssm_write_params` = the `image_tag` and `previous_image_tag` parameter ARNs;
     - `extra_tags = { "rentsync:deployable" = "true" }`;
     - `data_snapshot_id = var.data_snapshot_id`;
     - user data with the Phase 2 base files, and `host_env` containing `HOST_ROLE=environment`,
-      `DEPLOYMENT_ID`, `DEPLOYMENT_ENVIRONMENT`, `HOSTNAME`, `DB_NAME`, `AWS_REGION`,
+      `DEPLOYMENT_ID`, `DEPLOYMENT_ENVIRONMENT`, `SITE_HOSTNAME`, `DB_NAME`, `AWS_REGION`,
       `SSM_READ_PATHS`, `ECR_REPOSITORY_URL`, and `OPENOBSERVE_OTLP_ENDPOINT`.
 - [ ] T049 [US1] Create `infra/terraform/environment/secrets.tf`:
   - `SecureString` `${local.ssm_prefix}/admin_token`, with `value_wo = var.admin_token` and
@@ -508,7 +540,9 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   5. remote state sharing from `rentsync-shared-us` to the two environment workspaces;
   6. every workspace variable, with `openssl rand -hex 32` for each `admin_token`;
   7. the GitHub variables `AWS_ROLE_ARN`, `AWS_REGION`, and `ECR_REPOSITORY_URL`, and the
-     Environments `dev-staging` and `prod-us`;
+     Environments `dev-staging` and `prod-us`. Each Environment gets an Environment variable
+     `SITE_URL`: `https://pms-staging.rentsync.org` and `https://pms.rentsync.org`. That is the
+     only place deployment URLs are recorded;
   8. activating the `DeploymentId` cost allocation tag.
 
   End with a table of every non-secret value (account ID, region, organization, role ARNs) and
@@ -519,16 +553,22 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   - TTL of 5 minutes during bring-up;
   - verification with `dig +short`;
   - switching `acme_ca` from Let's Encrypt staging to production after DNS resolves.
-- [ ] T053 [US1] **🧑 OPERATOR**: perform runbook §Bootstrap.
+- [ ] T053 [US1] **🧑 OPERATOR**: perform runbook §Bootstrap. Record the elapsed time in
+  `docs/ai-build-log.md`, against FR-006's one-hour limit.
 - [ ] T054 [US1] **🧑 OPERATOR**: apply `rentsync-shared-us` (confirm), then
   `rentsync-dev-staging`, then `rentsync-prod-us` (confirm), with `acme_ca` set to the Let's
   Encrypt staging endpoint. Then add the A records (runbook §DNS), and record the three
-  public IPs in runbook §DNS.
+  public IPs in runbook §DNS. Record the elapsed time from the first apply to three hosts
+  serving HTTPS, excluding DNS propagation, in `docs/ai-build-log.md`, against SC-001's 60
+  minutes.
 - [ ] T055 [US1] Run quickstart §2 and §9a's tag audit:
   - `nmap` against each IP;
   - `aws ssm start-session`;
   - search the downloaded state for each admin token;
-  - `aws resourcegroupstaggingapi` to find untagged resources.
+  - `aws resourcegroupstaggingapi` to find untagged resources, root volumes included;
+  - download each HCP run's plan and apply logs and search them for each admin token and the
+    OpenObserve password (SC-004);
+  - `chronyc tracking` on each host, which should show a synchronized source (FR-012).
 
   Record the results in `docs/ai-build-log.md`. Stop and log any failure.
 
@@ -563,7 +603,7 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
   `mock_pms:4001` and the 001 tools keep working.
 - [ ] T057 [P] [US2] Create `infra/host/Caddyfile.env`:
   - a global block with `email {$ACME_EMAIL}` and `acme_ca {$ACME_CA}`;
-  - a site `{$HOSTNAME}` with `respond /metrics 404` and `reverse_proxy mock_pms:4001`.
+  - a site `{$SITE_HOSTNAME}` with `respond /metrics 404` and `reverse_proxy mock_pms:4001`.
 
   Caddy redirects HTTP to HTTPS automatically (FR-014).
 - [ ] T058 [US2] Write `infra/host/bin/rentsync-deploy` to the exact behavior and exit codes in
@@ -603,20 +643,19 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
      `context: mock_pms`, `platforms: linux/arm64`, `build-args: GIT_SHA=<sha>`,
      `tags: ${{ vars.ECR_REPOSITORY_URL }}:<sha>`, and the GitHub Actions cache.
 - [ ] T061 [P] [US2] Create `.github/workflows/deploy-to.yml`, a reusable workflow that takes
-  the inputs `deployment_id`, `url`, `image_tag`, and `rollback` (bool). Its job:
+  the inputs `deployment_id`, `image_tag`, and `rollback` (bool). The URL comes from the
+  Environment variable `vars.SITE_URL`, never from an input. Its job:
   - uses `environment: ${{ inputs.deployment_id }}` and `concurrency: deploy-${{ inputs.deployment_id }}`;
   - assumes the role through OIDC;
   - runs `aws ssm send-command --document-name AWS-RunShellScript --targets Key=tag:DeploymentId,Values=<id>`
     with the command `/usr/local/bin/rentsync-deploy <tag|--rollback>`, and a 15-minute timeout;
   - waits with `aws ssm wait command-executed`, prints the stdout and stderr from
     `get-command-invocation`, and fails if the status is not `Success`;
-  - then runs `curl -fsS <url>/healthz | jq`, asserting `status=="ok"` and
+  - then runs `curl -fsS ${{ vars.SITE_URL }}/healthz | jq`, asserting `status=="ok"` and
     `deployment_id==<id>`, and also `version==<tag>` when not rolling back.
 - [ ] T062 [US2] Create `.github/workflows/deploy.yml` (`on: workflow_dispatch`). Its inputs are
   `deployment_id` (choice: `dev-staging` or `prod-us`), `image_tag` (string, optional), and
   `rollback` (boolean). It:
-  - maps the deployment to its URL from a single `env`/`case` table in this file (the only place
-    URLs live);
   - calls `build-image.yml` when an `image_tag` is given and missing;
   - calls `deploy-to.yml`.
 
@@ -670,7 +709,7 @@ Ingest stays inside the VPC.
   First confirm that the v1.0.4 image has an arm64 variant (research R4). If it doesn't, set
   `telemetry_instance_type = "t3.small"` and log the change.
 - [ ] T067 [P] [US3] Create `infra/host/Caddyfile.telemetry`: the same global block as T057, and
-  a site `{$HOSTNAME}` with `reverse_proxy openobserve:5080`.
+  a site `{$SITE_HOSTNAME}` with `reverse_proxy openobserve:5080`.
 - [ ] T068 [US3] Extend `infra/host/bin/rentsync-render-env` for `HOST_ROLE=telemetry`. It maps
   `openobserve/root_email`, `root_password`, and `db_password` to `ZO_ROOT_USER_EMAIL`,
   `ZO_ROOT_USER_PASSWORD`, and `OPENOBSERVE_DB_PASSWORD`. For `HOST_ROLE=environment`, it maps
@@ -681,7 +720,7 @@ Ingest stays inside the VPC.
   - `compose.telemetry.yaml` → `/opt/rentsync/compose.yaml`;
   - `Caddyfile.telemetry` → `/opt/rentsync/Caddyfile`;
   - the scripts, units, and `daemon.json`;
-  - `host_env` with `HOST_ROLE=telemetry`, `DEPLOYMENT_ID`, `HOSTNAME = var.telemetry_hostname`,
+  - `host_env` with `HOST_ROLE=telemetry`, `DEPLOYMENT_ID`, `SITE_HOSTNAME = var.telemetry_hostname`,
     `PRIVATE_IP`, `DB_NAME = "openobserve_${replace(var.deployment_id, "-", "_")}"`, `ACME_*`,
     `AWS_REGION`, and `SSM_READ_PATHS`.
 
@@ -720,11 +759,11 @@ Ingest stays inside the VPC.
     and runs only when `github.event.workflow_run.conclusion == 'success'`;
   - its jobs:
     1. `build`, which uses `build-image.yml` with `sha = github.event.workflow_run.head_sha`;
-    2. `deploy-dev-staging`, which uses `deploy-to.yml` with `dev-staging` and
-       `https://pms-staging.rentsync.org`;
-    3. `deploy-prod-us`, which uses `deploy-to.yml` with `prod-us` and
-       `https://pms.rentsync.org`, and `needs: deploy-dev-staging`. Its approval gate is the
-       `prod-us` Environment reviewer.
+    2. `deploy-dev-staging`, which uses `deploy-to.yml` with `deployment_id: dev-staging`;
+    3. `deploy-prod-us`, which uses `deploy-to.yml` with `deployment_id: prod-us`, and
+       `needs: deploy-dev-staging`. Its approval gate is the `prod-us` Environment reviewer.
+
+    The URLs come from each Environment's `SITE_URL` (T051).
   - Both deploy jobs pass the **same** SHA. Nothing is rebuilt (FR-027).
 - [ ] T073 [US4] Fill in runbook §Release and promotion and §Rollback:
   - the merge → staging → approve → production flow;
@@ -820,8 +859,8 @@ Ingest stays inside the VPC.
 
   Also fill in runbook §Adding a side-by-side deployment (FR-042): a new workspace on
   `infra/terraform/environment` with a new `deployment_id`, `private_ip`, `hostname`, and
-  secrets; a GitHub Environment; one entry in `deploy.yml`'s table and choice list; an A record.
-  Nothing else changes.
+  secrets; a GitHub Environment with its `SITE_URL`; one entry in `deploy.yml`'s
+  `deployment_id` choice list; an A record. Nothing else changes.
 - [ ] T082 [US5] **🧑 OPERATOR**: apply `rentsync-shared-us` (DLM), and approve any applies the
   T083 rehearsals need.
 - [ ] T083 [US5] Run quickstart §7 (reboot, then replacement, on `dev-staging`) and §8 (the
