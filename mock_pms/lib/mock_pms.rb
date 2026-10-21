@@ -38,6 +38,8 @@ module MockPms
     admin/idempotency
     middleware/correlation_id
     middleware/request_metrics
+    rate_limit/limiter
+    middleware/rate_limiter
     api/errors
     api/ops
     api/admin_base

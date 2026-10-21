@@ -26,7 +26,7 @@ module MockPms
     # APIs mounted after the foundation (OAuth, V1, Admin) register here.
     def self.apis = @apis ||= [API::OAuth, API::V1, API::Admin]
 
-    def self.middlewares = @middlewares ||= []
+    def self.middlewares = @middlewares ||= [Middleware::RateLimiter]
 
     def self.build
       @grape ||= begin

@@ -21,7 +21,7 @@ module MockPms
         def authenticate!
           header = headers["authorization"] || headers["Authorization"] || ""
           raw = header.start_with?("Bearer ") ? header.delete_prefix("Bearer ") : nil
-          status, grant = MockPms::OAuth::Service.validate_access_token(raw)
+          status, grant = env["mock_pms.token_check"] || MockPms::OAuth::Service.validate_access_token(raw)
           return remember(grant) if status == :valid
 
           description = status == :expired ? "token expired" : "token invalid"

@@ -580,14 +580,14 @@ about 60 successes in total. With Redis stopped, `/v1` returns 503 `rate_limiter
 
 ### Tests for User Story 3 (write first; they must fail) ⚠️
 
-- [ ] T075 [P] [US3] Write `mock_pms/spec/unit/rate_limit/token_bucket_spec.rb`, against a real Redis, passing `now_ms` explicitly.
+- [X] T075 [P] [US3] Write `mock_pms/spec/unit/rate_limit/token_bucket_spec.rb`, against a real Redis, passing `now_ms` explicitly.
   - With capacity 60, 60 calls at the same `now_ms` are allowed, and the 61st is denied with `retry_after_ms = 1000`.
   - At `now_ms + 1000` exactly one more call is allowed.
   - Different client keys are independent.
   - 100 calls from 10 threads at the same `now_ms` allow exactly 60 (atomicity).
   - The key's `PTTL` is no more than the full-refill time plus 1 s.
   - A per-client `rate_limit_per_minute` overrides the default.
-- [ ] T076 [P] [US3] Write `mock_pms/spec/requests/rate_limit_spec.rb`.
+- [X] T076 [P] [US3] Write `mock_pms/spec/requests/rate_limit_spec.rb`.
   - For one token, the request just over the limit to `/v1/properties` gets 429 with the envelope `{"error":{"code":"rate_limited",...}}` and `Retry-After` set to `ceil(retry_after_ms/1000)`, which is at least 1.
   - `/oauth/token`, `/oauth/authorize`, `/admin/*`, `/healthz`, and `/metrics` are never limited (FR-022).
   - After a flush, the 429 and 503 responses are counted in `mock_pms_http_requests_total` under `route="/v1/{resource}"` (the T023 fallback label). The raw path never appears as a label.
@@ -597,20 +597,20 @@ about 60 successes in total. With Redis stopped, `/v1` returns 503 `rate_limiter
 
 ### Implementation for User Story 3
 
-- [ ] T077 [US3] Create `mock_pms/lib/mock_pms/rate_limit/token_bucket.lua`, making T075 pass. The script does the following:
+- [X] T077 [US3] Create `mock_pms/lib/mock_pms/rate_limit/token_bucket.lua`, making T075 pass. The script does the following:
   1. `KEYS[1]` is the bucket hash. `ARGV` is `capacity`, `refill_per_ms`, and optionally `now_ms`. When `now_ms` is absent, the script uses `redis.call('TIME')` (R8).
   2. It reads `tokens` and `ts_ms` (a missing bucket counts as full), refills up to capacity, and then either takes a token or computes `retry_after_ms = ceil((1 - tokens) / refill_per_ms)`.
   3. It writes the bucket back with `HSET` and sets `PEXPIRE` to `ceil(capacity/refill_per_ms) + 1000`.
   4. It returns `{allowed(0|1), retry_after_ms, floor(remaining)}`.
-- [ ] T078 [US3] Implement `mock_pms/lib/mock_pms/rate_limit/limiter.rb`, `MockPms::RateLimit::Limiter.check(client_id:, capacity:)`. It calls the script through `MockPms::Redis.evalsha`, using key `Redis.key("rl", client_id)` and `refill_per_ms = capacity / 60_000.0`.
-- [ ] T079 [US3] Implement `mock_pms/lib/mock_pms/middleware/rate_limiter.rb` and insert it into the rate-limiter slot of `MockPms::App` (T027). It makes T076 pass.
+- [X] T078 [US3] Implement `mock_pms/lib/mock_pms/rate_limit/limiter.rb`, `MockPms::RateLimit::Limiter.check(client_id:, capacity:)`. It calls the script through `MockPms::Redis.evalsha`, using key `Redis.key("rl", client_id)` and `refill_per_ms = capacity / 60_000.0`.
+- [X] T079 [US3] Implement `mock_pms/lib/mock_pms/middleware/rate_limiter.rb` and insert it into the rate-limiter slot of `MockPms::App` (T027). It makes T076 pass.
   - It applies only to `/v1/*`.
   - It resolves the bearer token with `OAuth::Service.validate_access_token`. On anything other than `:valid`, it passes the request through so that `V1` returns 401.
   - It uses the client's `rate_limit_per_minute` or `Settings.rate_limit_per_minute`.
   - On deny, it returns 429 with `Retry-After`. On a Redis error, it returns 503 `rate_limiter_unavailable` and logs an error.
   - It increments `mock_pms_rate_limited_total{client_id}` in the metrics buffer.
-- [ ] T080 [P] [US3] Create `mock_pms/bin/hammer`. It takes `--token T --requests N --path P [--targets url1,url2]`, alternates requests round-robin across the targets, and prints a count per status and the first `Retry-After` it sees.
-- [ ] T081 [P] [US3] Write `docs/adr/0003-redis-token-bucket-rate-limiter.md` (ADR-0003), from research R8.
+- [X] T080 [P] [US3] Create `mock_pms/bin/hammer`. It takes `--token T --requests N --path P [--targets url1,url2]`, alternates requests round-robin across the targets, and prints a count per status and the first `Retry-After` it sees.
+- [X] T081 [P] [US3] Write `docs/adr/0003-redis-token-bucket-rate-limiter.md` (ADR-0003), from research R8.
   - **Context**: FR-021/022 and Constitution X.
   - **Decision**: a Redis Lua token bucket, with Redis `TIME` as the single clock source and fail-closed behavior.
   - **Alternatives**: an in-process `Mutex` bucket (the earlier design, which requires a single process); a Postgres counter; Rack::Attack; an `INCR` fixed window.
