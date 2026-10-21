@@ -2,7 +2,8 @@
 # Deploys a mock PMS image on an environment host and proves it healthy, or puts the previous
 # image back (feature 002 research R9; contracts/host-interface.md §rentsync-deploy).
 #
-#   rentsync-deploy <image_tag>   deploy that tag (40-character git SHA)
+#   rentsync-deploy <ref>         deploy <sha>@sha256:<digest> (releases always pin the digest,
+#                                 so the host pulls exactly the image CI built), or a bare <sha>
 #   rentsync-deploy --rollback    deploy previous_image_tag
 #   rentsync-deploy --reload      re-render secrets and restart image_tag (boot, secret rotation);
 #                                 with no image deployed yet, starts only Caddy
@@ -25,11 +26,11 @@ health_interval="${RENTSYNC_HEALTH_INTERVAL_S:-3}"
 # shellcheck source=/dev/null
 . "$etc/host.env"
 
-usage() { echo "usage: rentsync-deploy <40-char git sha> | --rollback | --reload" >&2; exit 64; }
+usage() { echo "usage: rentsync-deploy <40-char git sha>[@sha256:<64 hex>] | --rollback | --reload" >&2; exit 64; }
 [ $# -eq 1 ] || usage
 case "$1" in
   --rollback | --reload) mode="$1" ;;
-  *) [[ "$1" =~ ^[0-9a-f]{40}$ ]] || usage; mode=deploy ;;
+  *) [[ "$1" =~ ^[0-9a-f]{40}(@sha256:[0-9a-f]{64})?$ ]] || usage; mode=deploy ;;
 esac
 
 mkdir -p "$run_dir"
@@ -65,7 +66,7 @@ health() {
 healthy_as() {
   local tag="$1" i
   for ((i = 1; i <= health_tries; i++)); do
-    [ "$(health)" = "ok $tag $DEPLOYMENT_ID" ] && return 0
+    [ "$(health)" = "ok ${tag%%@*} $DEPLOYMENT_ID" ] && return 0 # the version is the SHA part
     sleep "$health_interval"
   done
   echo "rentsync-deploy: /healthz did not report ok for $tag within $((health_tries * health_interval)) s: $(health)"
@@ -103,7 +104,7 @@ case "$mode" in
     ;;
   deploy)
     target="$1"
-    if [ "$target" = "$current" ] && [ "$(health)" = "ok $target $DEPLOYMENT_ID" ]; then
+    if [ "$target" = "$current" ] && [ "$(health)" = "ok ${target%%@*} $DEPLOYMENT_ID" ]; then
       echo "already running $target"
       exit 0
     fi

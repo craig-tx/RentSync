@@ -6,7 +6,11 @@ Runs as root, invoked through SSM Run Command (`AWS-RunShellScript`) or by `rent
 at boot.
 
 ```text
-rentsync-deploy <image_tag>    deploy that tag (40-char git SHA)
+rentsync-deploy <ref>          deploy <sha>@sha256:<digest> (what releases always pass), or a
+                               bare 40-char <sha>. The host pulls <ecr>:<ref>, so a pinned
+                               digest makes Docker refuse any other image under that tag.
+                               The whole <ref> is recorded in image_tag; /healthz.version is
+                               checked against the <sha> part
 rentsync-deploy --rollback     deploy previous_image_tag
 rentsync-deploy --reload       re-render secrets and (re)start the current image_tag
                                (boot, secret rotation); if image_tag is "none", starts only Caddy

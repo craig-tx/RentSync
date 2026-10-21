@@ -266,12 +266,21 @@ Terraform only creates the place an image runs. The deployed tag is runtime stat
 successfully on `main`.
 
 1. **`build`** (runs on `ubuntu-24.04-arm`):
-   - assumes `rentsync-github-actions` through GitHub OIDC;
+   - assumes `rentsync-github-build` through GitHub OIDC. Only jobs on `main` are trusted, and
+     no other role can push images;
    - builds `mock_pms` with `GIT_SHA=<full sha>`;
-   - pushes `<account>.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_pms:<sha>`.
+   - pushes `<account>.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_pms:<sha>`;
+   - outputs the image **digest**.
 
    The ECR repository has **immutable tags**, so a tag is always one image. The build skips the
-   push if the tag already exists, which makes re-runs idempotent.
+   push if the tag already exists, which makes re-runs idempotent. Both deploys pass
+   `<sha>@sha256:<digest>`, so each host pulls exactly the image the build produced.
+
+   *Security review, 2026-10-21:* release roles once trusted `environment:*`, and builds also
+   ran under the deploy role. A branch job naming a new GitHub Environment could then push an
+   image under an upcoming commit's tag, and that image would reach production past the
+   reviewer. Each role now trusts exact subjects only (contracts/bootstrap-iam.md), and deploys
+   pin digests.
 2. **`deploy-dev-staging`** (GitHub Environment `dev-staging`, named by DeploymentId):
    - `aws ssm send-command` with `AWS-RunShellScript`, targeted at
      `tag:DeploymentId=dev-staging`, runs `rentsync-deploy <sha>`;
@@ -508,10 +517,11 @@ deployment, such as a future `shared-eu`.
 **What makes side-by-side work**: names never collide, because they all carry the ID.
 
 - Addresses are configuration (R3).
-- The release role's permissions key on the tag `rentsync:deployable = true`, and its trust on
-  `environment:*`, so neither names a deployment. Production is the one deliberate exception:
-  its hosts are `protected`, and a separate role trusted only for the `prod-us` Environment
-  deploys them (code review 2026-10-21).
+- The release role's permissions key on the tag `rentsync:deployable = true`, so they name no
+  deployment. Its trust lists exact GitHub Environments: adding a deployment adds one line
+  there, a deliberate security exception to "no shared change" (security review 2026-10-21; a
+  wildcard let any branch job assume the role). Production hosts are `protected`, and a
+  separate role trusted only for the `prod-us` Environment deploys them.
 - The OTLP path uses a membership security group (R8, R12).
 
 Adding `pr-42` is therefore:

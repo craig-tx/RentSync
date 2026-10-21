@@ -32,11 +32,14 @@ jobs:
     with:
       deployment_id: dev-staging
       image_tag: ${{ github.event.workflow_run.head_sha }}
+      image_digest: ${{ needs.build.outputs.digest }}
 
   # Waits here for approval (prod-us Environment reviewer). Its URL comes from SITE_URL.
+  # The same digest as staging: production runs the exact image staging verified.
   deploy-prod-us:
-    needs: deploy-dev-staging
+    needs: [build, deploy-dev-staging]
     uses: ./.github/workflows/deploy-to.yml
     with:
       deployment_id: prod-us
       image_tag: ${{ github.event.workflow_run.head_sha }}
+      image_digest: ${{ needs.build.outputs.digest }}

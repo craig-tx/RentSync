@@ -108,7 +108,7 @@ Non-secret parameters (`String`):
 |---|---|---|
 | `/rentsync/shared-us/openobserve/root_email` | Terraform | UI sign-in user |
 | `/rentsync/shared-us/openobserve/ingest/user` | Terraform | Collector basic-auth user |
-| `/rentsync/<deployment_id>/image_tag` | `rentsync-deploy` after a healthy deploy. Terraform creates it with `ignore_changes = [value]` and initial value `none` | tag to run at boot and after replacement |
+| `/rentsync/<deployment_id>/image_tag` | `rentsync-deploy` after a healthy deploy. Terraform creates it with `ignore_changes = [value]` and initial value `none` | image to run at boot and after replacement: `<sha>@sha256:<digest>` for releases, which pins the exact image |
 | `/rentsync/<deployment_id>/previous_image_tag` | `rentsync-deploy` | rollback target |
 
 ## Release

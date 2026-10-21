@@ -209,3 +209,13 @@ The constitution's Development Workflow section requires an entry at the end of 
   8. **Old `.env` broke the local Collector:** its settings now have defaults, so an old `.env` still works.
   9. **Misplaced specs:** `ops_spec` heartbeat examples moved back under `GET /healthz`.
   10. **Unjustified dependencies:** justifications for the rehearsal images added to plan.md.
+
+**`/security-review` (same session):**
+- **Two candidate findings, each checked separately for false positives.**
+  - **Rejected (2/10): HCP role escalation.** The HCP Terraform role can attach any policy to a `rentsync-*` role. No untrusted party can trigger a run: HCP doesn't run speculative plans for fork PRs, and only the owner can push. It is a documented demo trade-off and missing hardening, not a vulnerability. Hardening ideas are recorded in production-differences (separate plan and apply roles, permission boundaries).
+  - **Confirmed (8/10, MEDIUM): image poisoning past the prod gate.** The release role trusted `environment:*`. GitHub auto-creates unprotected Environments, so any branch job naming a new Environment could assume the role. It could then push an image under an upcoming `main` commit's tag before CI finished. `build-image.yml` skipped the build because the tag existed, ECR tags are immutable, and hosts pulled by tag. The poisoned image would reach dev-staging and then prod-us past the reviewer.
+- **Fixed, as the operator accepted:**
+  1. **Exact trust only.** No wildcards: `rentsync-github-actions` trusts only `environment:dev-staging`, and the prod role only `environment:prod-us`.
+  2. **Builds separated.** The new `rentsync-github-build` role trusts only `ref:refs/heads/main` and is the only role that can push images. The deploy role lost ECR push.
+  3. **Deploys pinned by digest.** `build-image.yml` outputs the digest, both deploys pass `<sha>@sha256:<digest>`, `rentsync-deploy` accepts and records that ref, and `/healthz` is checked against the SHA part. `deploy_test.sh` adds a digest-pinned deploy and a malformed digest.
+- **Bootstrap now has four roles.** A new GitHub variable `AWS_BUILD_ROLE_ARN` holds the build role. The Environments' "restrict to main" setting is now required. Adding a side-by-side deployment adds one exact subject to the release role's trust. That is a deliberate exception to "no shared change", documented in R17 and the runbook.

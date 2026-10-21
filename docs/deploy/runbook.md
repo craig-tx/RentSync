@@ -32,7 +32,7 @@ two providers:
 | `https://app.terraform.io` | `aws.workload.identity` |
 | `https://token.actions.githubusercontent.com` | `sts.amazonaws.com` |
 
-### 2. AWS: the two bootstrap roles
+### 2. AWS: the bootstrap roles
 
 Each policy file in [`iam/`](iam/) uses `<account>` as a placeholder. Replace it with your
 12-digit account ID before pasting.
@@ -43,19 +43,22 @@ Each policy file in [`iam/`](iam/) uses `<account>` as a placeholder. Replace it
 2. Open IAM → **Roles** → **Create role** → **Custom trust policy**. Paste
    [`iam/hcp-terraform-trust.json`](iam/hcp-terraform-trust.json), attach the
    `rentsync-hcp-terraform` policy, and name the role `rentsync-hcp-terraform`.
-3. Create the policy `rentsync-github-actions` from
-   [`iam/github-actions-policy.json`](iam/github-actions-policy.json).
-4. Create the role `rentsync-github-actions` from
-   [`iam/github-actions-trust.json`](iam/github-actions-trust.json), and attach the
-   `rentsync-github-actions` policy. It builds images and deploys every **non-production**
-   host.
+3. Create the policy `rentsync-github-build` from
+   [`iam/github-build-policy.json`](iam/github-build-policy.json), and the role
+   `rentsync-github-build` from [`iam/github-build-trust.json`](iam/github-build-trust.json).
+   It trusts only jobs on `main`, and it is the only role that can push images.
+4. Create the policy `rentsync-github-actions` from
+   [`iam/github-actions-policy.json`](iam/github-actions-policy.json), and the role
+   `rentsync-github-actions` from [`iam/github-actions-trust.json`](iam/github-actions-trust.json).
+   It trusts only the `dev-staging` Environment, deploys **non-production** hosts, and cannot
+   push images.
 5. Create the policy `rentsync-github-actions-prod` from
    [`iam/github-actions-prod-policy.json`](iam/github-actions-prod-policy.json), and the role
    `rentsync-github-actions-prod` from
    [`iam/github-actions-prod-trust.json`](iam/github-actions-prod-trust.json). Its trust accepts
    only the `prod-us` GitHub Environment, and it is the only role that can run commands on
    production hosts. IAM, not just the workflow, enforces the approval gate.
-6. Copy the three role ARNs into the table at the end of this section.
+6. Copy the four role ARNs into the table at the end of this section.
 7. As you paste each policy, open the policy editor's **Policy validation** panel (IAM Access
    Analyzer) and resolve any error or security warning before saving.
 
@@ -149,7 +152,8 @@ Everything else keeps the defaults in `variables.tf` (contracts/workspace-variab
 ### 7. GitHub: variables and Environments
 
 1. Go to **Settings** → **Secrets and variables** → **Actions** → **Variables**, and add
-   `AWS_ROLE_ARN` (the `rentsync-github-actions` ARN) and `AWS_REGION` (`us-east-1`). Add
+   `AWS_BUILD_ROLE_ARN` (the `rentsync-github-build` ARN), `AWS_ROLE_ARN` (the
+   `rentsync-github-actions` ARN) and `AWS_REGION` (`us-east-1`). Add
    `ECR_REPOSITORY_URL` after the first `rentsync-shared-us` apply, from its
    `ecr_repository_url` output.
 2. Go to **Settings** → **Environments** and create `dev-staging` and `prod-us`. In each
@@ -160,7 +164,8 @@ Everything else keeps the defaults in `variables.tf` (contracts/workspace-variab
    - in **`prod-us` only**, add the Environment variable `AWS_ROLE_ARN` = the
      `rentsync-github-actions-prod` ARN. It overrides the repository variable for production
      jobs;
-   - restrict deployment branches to `main`.
+   - restrict deployment branches to `main`. This is **required, not optional**: the release
+     roles trust these Environments by name, so a branch must not be able to run a job in them.
 
    The `prod-us` required reviewer is added in task T074.
 3. Go to **Settings** → **Code security** and confirm that secret scanning and push protection
@@ -182,6 +187,7 @@ Every value below is non-secret. Fill them in as you go.
 | Region | `us-east-1` | variable defaults; GitHub `AWS_REGION` |
 | HCP organization | `craig-personal` | `versions.tf` (`cloud` block) |
 | `rentsync-hcp-terraform` role ARN | step 2 | variable set `TFC_AWS_RUN_ROLE_ARN` |
+| `rentsync-github-build` role ARN | step 2 | GitHub repository variable `AWS_BUILD_ROLE_ARN` |
 | `rentsync-github-actions` role ARN | step 2 | GitHub repository variable `AWS_ROLE_ARN` |
 | `rentsync-github-actions-prod` role ARN | step 2 | GitHub `prod-us` Environment variable `AWS_ROLE_ARN` |
 | AMI ID | step 3 | `rentsync-shared-us` `ami_id` |
@@ -238,10 +244,12 @@ replaces hold no data yet.
 Each host boots with Caddy only and prints `no image deployed yet`. The first image goes out
 with the **Deploy** workflow:
 
-1. In GitHub → **Actions** → **Deploy** → **Run workflow**, choose `deployment_id`
-   `dev-staging` and set `image_tag` to the full SHA of the current `main` commit
-   (`git rev-parse origin/main`).
-   - The `build` job builds the arm64 image and pushes it to ECR, unless that tag already exists.
+1. In GitHub → **Actions** → **Deploy** → **Run workflow**, with **Use workflow from: `main`**
+   (only `main` may build images), choose `deployment_id` `dev-staging` and set `image_tag` to
+   the full SHA of the current `main` commit (`git rev-parse origin/main`).
+   - The `build` job builds the arm64 image and pushes it to ECR, unless that tag already
+     exists, and outputs the image digest. The deploy pins `<sha>@sha256:<digest>`, so the host
+     runs exactly that image.
    - The `deploy` job runs `rentsync-deploy <sha>` on the host through SSM Run Command, then
      checks `$SITE_URL/healthz` from the internet.
    - On the first deploy, `bin/setup --deploy` creates and migrates `mock_pms_dev_staging` and
@@ -515,8 +523,9 @@ Replays are idempotent from the receiver's point of view, because the event ID i
 ## Adding a side-by-side deployment
 
 Every name a deployment owns derives from its DeploymentId (constitution VI), so a new one,
-for example `pr-42`, runs next to the others in the same account. Nothing existing changes
-(FR-042):
+for example `pr-42`, runs next to the others in the same account. No existing deployment's
+code or variables change (FR-042). The only edit to shared configuration is one line in the
+release role's trust policy, step 2:
 
 1. **HCP:** create workspace `rentsync-pr-42` on `infra/terraform/environment`, tagged
    `rentsync-environment`, like the others in §Bootstrap step 5. Pick its apply method. Add it
@@ -527,11 +536,15 @@ for example `pr-42`, runs next to the others in the same account. Nothing existi
    - a free `private_ip` in `10.40.1.0/24`, such as `10.40.1.42`;
    - `acme_email` and `acme_ca`;
    - a fresh `admin_token`.
-2. **GitHub:** create Environment `pr-42` with `SITE_URL = https://pms-pr-42.rentsync.org`. Add
-   `pr-42` to the `deployment_id` choice list in `.github/workflows/deploy.yml`, which is the
-   only code change.
-3. **NameCheap:** add an A record `pms-pr-42` → the workspace's `public_ip` output.
-4. Apply, then run **Deploy** for `pr-42`.
+2. **AWS IAM:** add `"repo:craig-tx/RentSync:environment:pr-42"` to the `sub` list in the
+   `rentsync-github-actions` trust policy
+   ([`iam/github-actions-trust.json`](iam/github-actions-trust.json)). Trust uses exact names,
+   so a job in an unlisted Environment can't assume the role (security review 2026-10-21).
+3. **GitHub:** create Environment `pr-42` with `SITE_URL = https://pms-pr-42.rentsync.org`,
+   limited to `main`. Add `pr-42` to the `deployment_id` choice list in
+   `.github/workflows/deploy.yml`, which is the only code change.
+4. **NameCheap:** add an A record `pms-pr-42` → the workspace's `public_ip` output.
+5. Apply, then run **Deploy** for `pr-42` from `main`.
 
 It gets its own host, volume, role, parameters (`/rentsync/pr-42/…`), database
 (`mock_pms_pr_42`), Compose project and telemetry label (`deployment.id=pr-42`). It costs

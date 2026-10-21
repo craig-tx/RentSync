@@ -45,5 +45,6 @@ jobs:
     with:
       deployment_id: ${{ inputs.deployment_id }}
       image_tag: ${{ inputs.image_tag }}
+      image_digest: ${{ needs.build.outputs.digest }}
       rollback: ${{ inputs.rollback }}
       reload: ${{ inputs.reload }}

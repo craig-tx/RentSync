@@ -39,30 +39,48 @@ purpose for a demo, and are listed in the production-differences document:
 | Budgets | `budgets:*` | `arn:aws:budgets::<account>:budget/rentsync-*` |
 | KMS | `kms:DescribeKey`, `kms:ListAliases` | `*` (AWS-managed keys only; no key is created) |
 
-## Role `rentsync-github-actions` (releases)
+## GitHub release roles: one job, one role, exact trust
 
-**Trust**: the GitHub OIDC provider, with:
+The security review on 2026-10-21 found that a wildcard trust (`environment:*`) let any branch
+job that names a new GitHub Environment assume the release role. Such a job could push an image
+under an upcoming commit's tag and get it to production past the reviewer. Each role below
+therefore trusts **exact** subjects with `StringEquals`, and only one role can push images.
+Every trust uses `token.actions.githubusercontent.com:aud = sts.amazonaws.com`.
 
-- `token.actions.githubusercontent.com:aud = sts.amazonaws.com`;
-- `sub` like `repo:craig-tx/RentSync:environment:*` or
-  `repo:craig-tx/RentSync:ref:refs/heads/main`. GitHub Environments are named by DeploymentId
-  (`dev-staging`, `prod-us`), and the wildcard means a new deployment needs no trust change. The
-  `ref` form is for the build job.
+### Role `rentsync-github-build` (image builds)
 
-**Permissions**:
+**Trust**: `sub` **exactly** `repo:craig-tx/RentSync:ref:refs/heads/main`. Only jobs running on
+`main` can build: `release.yml` and `deploy.yml` dispatched from `main`. See
+`docs/deploy/iam/github-build-trust.json`.
+
+**Permissions** (`docs/deploy/iam/github-build-policy.json`):
 
 | Actions | Resources |
 |---|---|
 | `ecr:GetAuthorizationToken` | `*` |
-| `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:DescribeImages` | `arn:aws:ecr:us-east-1:<account>:repository/*/mock_pms` (any shared deployment's repository; `docs/deploy/iam/github-actions-policy.json`) |
+| `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:DescribeImages` | `arn:aws:ecr:us-east-1:<account>:repository/*/mock_pms` |
+
+It is the **only** principal that can push images. Builds output the image digest, and every
+deploy pins `<sha>@sha256:<digest>` (research R9).
+
+### Role `rentsync-github-actions` (non-production deploys)
+
+**Trust**: `sub` **exactly** `repo:craig-tx/RentSync:environment:dev-staging`. The `dev-staging`
+Environment is limited to `main` (runbook ?Bootstrap step 7). Adding a side-by-side deployment
+adds its Environment's exact subject to this list. That is a one-line change and the only IAM
+edit a new deployment needs. See `docs/deploy/iam/github-actions-trust.json`.
+
+**Permissions** (`docs/deploy/iam/github-actions-policy.json`):
+
+| Actions | Resources |
+|---|---|
 | `ssm:SendCommand` | `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`, and `arn:aws:ec2:us-east-1:<account>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = true` |
 | `ssm:GetCommandInvocation`, `ssm:ListCommandInvocations` | `*` |
 
-This role cannot touch production: it may run commands only on hosts tagged
-`rentsync:deployable = true`, and production hosts are tagged `protected` (Terraform variable
-`protected = true` in `rentsync-prod-us`). It also does every image build.
+It cannot push images, and it cannot touch production: production hosts are tagged
+`protected` (Terraform variable `protected = true` in `rentsync-prod-us`).
 
-## Role `rentsync-github-actions-prod` (production releases)
+### Role `rentsync-github-actions-prod` (production releases)
 
 Added after the 2026-10-21 code review. Without it, any job that could assume the release role
 could run commands on production, and the `prod-us` approval would be enforced only by the
@@ -82,10 +100,12 @@ reviewer. See `docs/deploy/iam/github-actions-prod-trust.json`.
 
 It has no ECR access: production only runs images the release role already built.
 
-**How a job picks its role**: workflows use `vars.AWS_ROLE_ARN`. The repository-level variable
-is `rentsync-github-actions`. The `prod-us` Environment defines its own `AWS_ROLE_ARN` =
-`rentsync-github-actions-prod`, which overrides the repository value for jobs in that
-Environment.
+**How a job picks its role**:
+- **Build jobs** use the repository variable `AWS_BUILD_ROLE_ARN` (`rentsync-github-build`).
+- **Deploy jobs** use `vars.AWS_ROLE_ARN`. The repository-level value is
+  `rentsync-github-actions`. The `prod-us` Environment defines its own `AWS_ROLE_ARN` =
+  `rentsync-github-actions-prod`, which overrides the repository value for jobs in that
+  Environment.
 
 ## Roles created by Terraform (not bootstrap)
 

@@ -8,7 +8,8 @@
 #   4. --rollback swaps image_tag and previous_image_tag;
 #   5. --reload with nothing deployed starts only Caddy;
 #   6. a malformed tag is rejected with exit 64;
-#   7. a healthy deploy that SSM cannot record exits 3 and keeps serving the new image.
+#   7. a healthy deploy that SSM cannot record exits 3 and keeps serving the new image;
+#   8. a digest-pinned <sha>@sha256:<digest> deploys and is recorded whole; a bad digest is 64.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -54,7 +55,7 @@ cat > "$work/bin/docker" <<STUB
 echo "docker \$*" >> "$work/docker.log"
 case " \$* " in
   *" up "*" caddy"*) echo caddy > "$work/running" ;;
-  *" up "*) printf '%s' "\${MOCK_PMS_IMAGE##*:}" > "$work/running" ;;
+  *" up "*) ref="\${MOCK_PMS_IMAGE#*/mock_pms:}"; printf '%s' "\${ref%%@*}" > "$work/running" ;;
   *" exec -T "*)
     tag="\$(cat "$work/running" 2>/dev/null || true)"
     if [ -n "\$tag" ] && [ "\$tag" != "$BAD" ] && [ "\$tag" != caddy ]; then
@@ -107,6 +108,19 @@ echo "$out" | grep -qx "rolled back to $B" || fail "a bad deploy printed: $out"
 # 4. --rollback swaps.
 deploy --rollback | grep -qx "deployed $A" || fail "--rollback did not deploy A"
 [ "$(tags)" = "$A $B" ] || fail "after --rollback, tags are $(tags)"
+
+# 8. A digest-pinned ref deploys (the version check uses its SHA part) and is recorded whole,
+#    so reboots and rollbacks keep pulling exactly that image.
+D="$A@sha256:$(printf 'd%.0s' {1..64})"
+out="$(deploy "$D")" || fail "a digest-pinned deploy failed: $out"
+echo "$out" | grep -qx "deployed $D" || fail "a digest-pinned deploy printed: $out"
+[ "$(cat "$work/running")" = "$A" ] || fail "the digest-pinned image is not running"
+[ "$(cat "$work/ssm/image_tag")" = "$D" ] || fail "SSM did not record the digest-pinned ref: $(cat "$work/ssm/image_tag")"
+set +e
+deploy "$A@sha256:short" 2> /dev/null
+code=$?
+set -e
+[ "$code" -eq 64 ] || fail "a malformed digest exited $code, expected 64"
 
 # 7. The new image is healthy but SSM can't record it: exit 3, still serving the new image.
 set +e

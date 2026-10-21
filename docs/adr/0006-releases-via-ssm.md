@@ -25,6 +25,12 @@ data, so changing it replaces the host.
 - **GitHub Actions builds once.** It builds `linux/arm64` on a native runner, tags the image
   with the full commit SHA, and pushes it to ECR, where tags are immutable. An existing tag is
   skipped.
+  - Only `rentsync-github-build` can push, and its trust accepts only jobs on `main`.
+  - The build outputs the image digest, and both deploys pin `<sha>@sha256:<digest>`, so hosts
+    run exactly the image the build produced.
+  - Every release role trusts exact GitHub subjects with no wildcards. A 2026-10-21 security
+    review showed that an `environment:*` wildcard let a branch job push an image that would
+    reach production past the reviewer.
 - **Deploys run `rentsync-deploy` on the host through SSM Run Command.** Commands target
   `tag:DeploymentId` and `tag:rentsync:deployable`. IAM enforces the promotion gate. The
   non-production release role may run commands only on hosts tagged `true`. Production hosts
