@@ -151,7 +151,7 @@ contains **no secrets**. It writes files from `infra/host/` and enables systemd 
 `user_data_replace_on_change = true`, a change to host configuration replaces the host, through
 the same path US5 exercises.
 
-Boot sequence (`rentsync-boot.service`, type oneshot, before `rentsync.service`):
+Boot sequence (`rentsync-boot`, run as `rentsync.service`'s `ExecStartPre`, so its failures are retried with the service; code review 2026-10-21):
 
 1. **Find the data volume** by its stable ID,
    `/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_vol<id without dash>`. On Nitro instances
@@ -508,8 +508,10 @@ deployment, such as a future `shared-eu`.
 **What makes side-by-side work**: names never collide, because they all carry the ID.
 
 - Addresses are configuration (R3).
-- The release role's permissions key on the tag `rentsync:deployable`, and its trust on
-  `environment:*`, so neither names a deployment.
+- The release role's permissions key on the tag `rentsync:deployable = true`, and its trust on
+  `environment:*`, so neither names a deployment. Production is the one deliberate exception:
+  its hosts are `protected`, and a separate role trusted only for the `prod-us` Environment
+  deploys them (code review 2026-10-21).
 - The OTLP path uses a membership security group (R8, R12).
 
 Adding `pr-42` is therefore:

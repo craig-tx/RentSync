@@ -183,7 +183,7 @@ infra/
     ├── Caddyfile.env  Caddyfile.telemetry
     ├── daemon.json                 # Docker log rotation
     ├── bin/rentsync-boot  bin/rentsync-deploy  bin/rentsync-render-env  bin/rentsync-start
-    ├── systemd/rentsync-boot.service  rentsync.service  rentsync-prune.{service,timer}
+    ├── systemd/rentsync.service (boot as ExecStartPre)  rentsync-prune.{service,timer}  docker-rentsync.conf
     └── test/boot_volume_test.sh    # "format only if empty" on a loop device
 
 mock_pms/
@@ -225,6 +225,7 @@ Constitution VIII requires a one-line justification for each new dependency:
 | `aws-actions/amazon-ecr-login` | ECR registry login for the image push. |
 | `docker/build-push-action` (+ `docker/setup-buildx-action`) | Reproducible image build and push, with layer caching to meet SC-005. |
 | `hashicorp/setup-terraform` (CI) | Installs the pinned Terraform version for fmt, validate and test in CI (research R15). |
+| `docker:27.5.1-dind` and `registry:2.8.3` images (local host rehearsal only, not CI) | `infra/host/test/rehearse/` runs the real host scripts and Compose stacks against real containers before any live apply, with a local registry standing in for ECR. |
 | `xfsprogs` (CI runner, apt) | Provides `mkfs.xfs` for the loop-device test of `rentsync-boot`. It is the same tool the hosts use (research R6, R15). |
 | Docker Compose v2 plugin (hosts, version pinned and checksum-verified) | Amazon Linux 2023 packages Docker but not the Compose plugin. Compose runs each host's stack (research R7). |
 | `jq` (hosts, from the Amazon Linux 2023 repository) | `rentsync-deploy` parses `/healthz` JSON to check `status`, `version` and `deployment_id` (FR-028). |

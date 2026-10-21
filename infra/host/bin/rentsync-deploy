@@ -8,11 +8,12 @@
 #                                 with no image deployed yet, starts only Caddy
 #
 # Exit codes: 0 deployed (or already running), 1 failed and rolled back, 2 failed and the
-# rollback failed too, 64 bad usage, 75 another deploy holds the lock.
+# rollback failed too, 3 deployed and serving but SSM could not record it (set the two
+# parameters by hand; the message names them), 64 bad usage, 75 another deploy holds the lock.
 # Never prints a secret, and never runs with xtrace.
 #
 # Test overrides: RENTSYNC_ETC, RENTSYNC_RUN, RENTSYNC_RENDER, RENTSYNC_HEALTH_TRIES,
-# RENTSYNC_HEALTH_INTERVAL_S (infra/host/test/deploy_test.sh).
+# RENTSYNC_HEALTH_INTERVAL_S, RENTSYNC_PUT_BACKOFF_S (infra/host/test/deploy_test.sh).
 set -euo pipefail
 set +x
 
@@ -42,10 +43,17 @@ compose() {
   docker compose -p "rentsync-$DEPLOYMENT_ID" --project-directory /opt/rentsync \
     -f /opt/rentsync/compose.yaml --env-file "$env_file" "$@"
 }
-env_value() { sed -n "s/^$1=//p" "$env_file"; }
+env_value() { sed -n "s/^$1='\(.*\)'$/\1/p" "$env_file"; } # values are single-quoted
+# Retries, because a throttled write after a healthy start must not leave SSM pointing at the
+# old image: the next reboot or --reload would quietly bring it back.
 put_param() {
-  aws ssm put-parameter --region "$AWS_REGION" --name "$ssm_prefix/$1" --value "$2" \
-    --type String --overwrite > /dev/null
+  local i
+  for i in 1 2 3 4 5; do
+    aws ssm put-parameter --region "$AWS_REGION" --name "$ssm_prefix/$1" --value "$2" \
+      --type String --overwrite > /dev/null && return 0
+    sleep $((i * ${RENTSYNC_PUT_BACKOFF_S:-2}))
+  done
+  return 1
 }
 
 # Prints "status version deployment_id" from the running web container, or nothing.
@@ -103,9 +111,12 @@ case "$mode" in
 esac
 
 if start "$target"; then
+  # image_tag first: if only it is written, a later --reload still runs what is serving.
   if [ "$target" != "$current" ]; then
-    put_param previous_image_tag "$current"
-    put_param image_tag "$target"
+    if ! put_param image_tag "$target" || ! put_param previous_image_tag "$current"; then
+      echo "rentsync-deploy: $target is serving, but SSM could not record it; set $ssm_prefix/image_tag=$target and previous_image_tag=$current by hand"
+      exit 3
+    fi
   fi
   echo "deployed $target"
   exit 0

@@ -65,8 +65,8 @@ variable "admin_token" {
   description = "Bearer token for /admin/*. Generate with openssl rand -hex 32; never the example value."
 
   validation {
-    condition     = length(var.admin_token) >= 32 && var.admin_token != "change-me-admin-token"
-    error_message = "admin_token must be at least 32 characters and not the .env.example value (FR-025)."
+    condition     = length(var.admin_token) >= 32 && var.admin_token != "change-me-admin-token" && can(regex("^[A-Za-z0-9._~-]+$", var.admin_token))
+    error_message = "admin_token must be at least 32 URL-safe characters (openssl rand -hex 32) and not the .env.example value (FR-025)."
   }
 }
 
@@ -86,4 +86,10 @@ variable "data_snapshot_id" {
   type        = string
   default     = null
   description = "Restore only (runbook §Backup restore, research R14)."
+}
+
+variable "protected" {
+  type        = bool
+  default     = false
+  description = "true for production: the host is tagged rentsync:deployable=protected, which only the prod-us release role may run commands on (contracts/bootstrap-iam.md)."
 }

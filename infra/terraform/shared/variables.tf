@@ -78,8 +78,9 @@ variable "openobserve_root_password" {
   validation {
     condition = (length(var.openobserve_root_password) >= 8 && length(var.openobserve_root_password) <= 128 &&
       can(regex("[a-z]", var.openobserve_root_password)) && can(regex("[A-Z]", var.openobserve_root_password)) &&
-    can(regex("[0-9]", var.openobserve_root_password)) && can(regex("[^a-zA-Z0-9]", var.openobserve_root_password)))
-    error_message = "openobserve_root_password must be 8-128 characters with upper, lower, digit and special characters."
+      can(regex("[0-9]", var.openobserve_root_password)) && can(regex("[^a-zA-Z0-9]", var.openobserve_root_password)) &&
+    !strcontains(var.openobserve_root_password, "'") && !strcontains(var.openobserve_root_password, "\n"))
+    error_message = "openobserve_root_password must be 8-128 characters with upper, lower, digit and special characters, and no single quote or newline (the host env file cannot carry them)."
   }
 }
 

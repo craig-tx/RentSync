@@ -7,7 +7,8 @@
 #   3. an unhealthy tag is rolled back to the previous one, exit 1, and SSM is unchanged;
 #   4. --rollback swaps image_tag and previous_image_tag;
 #   5. --reload with nothing deployed starts only Caddy;
-#   6. a malformed tag is rejected with exit 64.
+#   6. a malformed tag is rejected with exit 64;
+#   7. a healthy deploy that SSM cannot record exits 3 and keeps serving the new image.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -31,13 +32,14 @@ ENV
 # Render stub: writes the env file from the fake SSM state.
 cat > "$work/bin/render" <<STUB
 #!/usr/bin/env bash
-printf 'IMAGE_TAG=%s\nPREVIOUS_IMAGE_TAG=%s\n' "\$(cat $work/ssm/image_tag)" "\$(cat $work/ssm/previous_image_tag)" > $work/run/env
+printf "IMAGE_TAG='%s'\nPREVIOUS_IMAGE_TAG='%s'\n" "\$(cat $work/ssm/image_tag)" "\$(cat $work/ssm/previous_image_tag)" > $work/run/env
 STUB
 
 # aws stub: put-parameter writes the fake SSM state; get-login-password prints a token.
 cat > "$work/bin/aws" <<STUB
 #!/usr/bin/env bash
 if [ "\$2" = "put-parameter" ]; then
+  [ -n "\${FAIL_PUT:-}" ] && exit 255
   while [ \$# -gt 0 ]; do
     case "\$1" in --name) name="\${2##*/}" ;; --value) value="\$2" ;; esac
     shift
@@ -69,7 +71,7 @@ state() { printf 'none' > "$work/ssm/image_tag"; printf 'none' > "$work/ssm/prev
 tags() { echo "$(cat "$work/ssm/image_tag") $(cat "$work/ssm/previous_image_tag")"; }
 deploy() {
   PATH="$work/bin:$PATH" RENTSYNC_ETC="$work/etc" RENTSYNC_RUN="$work/run" RENTSYNC_RENDER="$work/bin/render" \
-    RENTSYNC_HEALTH_TRIES=2 RENTSYNC_HEALTH_INTERVAL_S=0 bash "$script" "$@"
+    RENTSYNC_HEALTH_TRIES=2 RENTSYNC_HEALTH_INTERVAL_S=0 RENTSYNC_PUT_BACKOFF_S=0 bash "$script" "$@"
 }
 
 state
@@ -105,6 +107,15 @@ echo "$out" | grep -qx "rolled back to $B" || fail "a bad deploy printed: $out"
 # 4. --rollback swaps.
 deploy --rollback | grep -qx "deployed $A" || fail "--rollback did not deploy A"
 [ "$(tags)" = "$A $B" ] || fail "after --rollback, tags are $(tags)"
+
+# 7. The new image is healthy but SSM can't record it: exit 3, still serving the new image.
+set +e
+out="$(FAIL_PUT=1 deploy "$B")"
+code=$?
+set -e
+[ "$code" -eq 3 ] || fail "an unrecordable deploy exited $code, expected 3"
+echo "$out" | grep -q "SSM could not record it" || fail "an unrecordable deploy printed: $out"
+[ "$(cat "$work/running")" = "$B" ] || fail "B is not serving after an unrecordable deploy"
 
 # 6. Malformed tag.
 set +e

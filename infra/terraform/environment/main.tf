@@ -6,6 +6,8 @@ locals {
   ssm_prefix = "/rentsync/${var.deployment_id}"
   db_name    = "mock_pms_${replace(var.deployment_id, "-", "_")}"
 
+  deployable_tag = var.protected ? "protected" : "true"
+
   default_tags = {
     DeploymentId = var.deployment_id
     Project      = "rentsync"

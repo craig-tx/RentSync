@@ -97,3 +97,29 @@ run "user_data_fits_ec2_limit" {
     error_message = "Gzipped user data is ${output.user_data_gzip_bytes} bytes; EC2's limit is 16384."
   }
 }
+
+run "non_production_hosts_are_deployable_by_the_shared_role" {
+  command = plan
+
+  assert {
+    condition     = local.deployable_tag == "true"
+    error_message = "Non-production hosts must be tagged rentsync:deployable=true."
+  }
+}
+
+run "production_hosts_are_protected" {
+  command = plan
+
+  variables {
+    deployment_id = "prod-us"
+    environment   = "production"
+    hostname      = "pms.rentsync.org"
+    private_ip    = "10.40.1.30"
+    protected     = true
+  }
+
+  assert {
+    condition     = local.deployable_tag == "protected"
+    error_message = "Production hosts must be tagged rentsync:deployable=protected, reachable only by the prod-us release role."
+  }
+}

@@ -47,8 +47,17 @@ Each policy file in [`iam/`](iam/) uses `<account>` as a placeholder. Replace it
    [`iam/github-actions-policy.json`](iam/github-actions-policy.json).
 4. Create the role `rentsync-github-actions` from
    [`iam/github-actions-trust.json`](iam/github-actions-trust.json), and attach the
-   `rentsync-github-actions` policy.
-5. Copy both role ARNs into the table at the end of this section.
+   `rentsync-github-actions` policy. It builds images and deploys every **non-production**
+   host.
+5. Create the policy `rentsync-github-actions-prod` from
+   [`iam/github-actions-prod-policy.json`](iam/github-actions-prod-policy.json), and the role
+   `rentsync-github-actions-prod` from
+   [`iam/github-actions-prod-trust.json`](iam/github-actions-prod-trust.json). Its trust accepts
+   only the `prod-us` GitHub Environment, and it is the only role that can run commands on
+   production hosts. IAM, not just the workflow, enforces the approval gate.
+6. Copy the three role ARNs into the table at the end of this section.
+7. As you paste each policy, open the policy editor's **Policy validation** panel (IAM Access
+   Analyzer) and resolve any error or security warning before saving.
 
 ### 3. AWS: pick the AMI
 
@@ -133,6 +142,7 @@ environment, and paste it straight into HCP. Don't store it anywhere else.
 | `acme_email` | your contact email | your contact email | no |
 | `acme_ca` | the Let's Encrypt staging URL, as above | the Let's Encrypt staging URL, as above | no |
 | `admin_token` | `openssl rand -hex 32` | a different `openssl rand -hex 32` | **yes** |
+| `protected` | `false` (default; leave unset) | `true` | no |
 
 Everything else keeps the defaults in `variables.tf` (contracts/workspace-variables.md).
 
@@ -147,6 +157,9 @@ Everything else keeps the defaults in `variables.tf` (contracts/workspace-variab
    - add the Environment variable `SITE_URL`: `https://pms-staging.rentsync.org` for
      `dev-staging` and `https://pms.rentsync.org` for `prod-us`. This is the only place
      deployment URLs are recorded;
+   - in **`prod-us` only**, add the Environment variable `AWS_ROLE_ARN` = the
+     `rentsync-github-actions-prod` ARN. It overrides the repository variable for production
+     jobs;
    - restrict deployment branches to `main`.
 
    The `prod-us` required reviewer is added in task T074.
@@ -169,7 +182,8 @@ Every value below is non-secret. Fill them in as you go.
 | Region | `us-east-1` | variable defaults; GitHub `AWS_REGION` |
 | HCP organization | `craig-personal` | `versions.tf` (`cloud` block) |
 | `rentsync-hcp-terraform` role ARN | step 2 | variable set `TFC_AWS_RUN_ROLE_ARN` |
-| `rentsync-github-actions` role ARN | step 2 | GitHub `AWS_ROLE_ARN` |
+| `rentsync-github-actions` role ARN | step 2 | GitHub repository variable `AWS_ROLE_ARN` |
+| `rentsync-github-actions-prod` role ARN | step 2 | GitHub `prod-us` Environment variable `AWS_ROLE_ARN` |
 | AMI ID | step 3 | `rentsync-shared-us` `ami_id` |
 | ECR repository URL | `rentsync-shared-us` output `ecr_repository_url` | GitHub `ECR_REPOSITORY_URL` |
 
@@ -305,6 +319,10 @@ down-migration (SC-006, under 10 minutes). Afterwards, check:
 ```bash
 curl -s https://pms.rentsync.org/healthz | jq -r .version   # the previous SHA
 ```
+
+If a `prod-us` release is still waiting for approval, the manual rollback queues behind it,
+because deploys to one deployment run one at a time. Reject the pending release in its run
+(**Review deployments** ? **Reject**), and the rollback proceeds.
 
 To return to a specific version instead, run **Deploy** with that SHA in `image_tag`. It must
 still be in ECR, which keeps the last 100 images.

@@ -100,10 +100,10 @@ processors:
   resource/deployment:
     attributes:
       - key: deployment.environment
-        value: ${env:DEPLOYMENT_ENVIRONMENT}
+        value: ${env:DEPLOYMENT_ENVIRONMENT:-local}
         action: insert
       - key: deployment.id
-        value: ${env:DEPLOYMENT_ID}
+        value: ${env:DEPLOYMENT_ID:-local-dev}
         action: insert
 
 exporters:
@@ -112,7 +112,7 @@ exporters:
   # OpenObserve outage. Service logs stay in Docker's files; metric totals stay in Redis.
   otlp_http/openobserve:
     # Configuration only (constitution VI): local .env and deployed hosts set this.
-    endpoint: ${env:OPENOBSERVE_OTLP_ENDPOINT}
+    endpoint: ${env:OPENOBSERVE_OTLP_ENDPOINT:-http://openobserve:5080/api/default}
     auth:
       authenticator: basicauth/openobserve
     sending_queue:

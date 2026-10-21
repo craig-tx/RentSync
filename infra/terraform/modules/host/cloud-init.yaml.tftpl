@@ -21,5 +21,5 @@ runcmd:
   - chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose
   - systemctl daemon-reload
   - systemctl enable --now docker
-  - systemctl enable rentsync-boot.service rentsync.service rentsync-prune.timer
-  - systemctl start rentsync-boot.service rentsync.service rentsync-prune.timer
+  - systemctl enable rentsync.service rentsync-prune.timer
+  - systemctl start --no-block rentsync.service rentsync-prune.timer

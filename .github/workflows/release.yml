@@ -13,10 +13,10 @@ permissions:
   id-token: write
   contents: read
 
-# One release at a time; a newer merge waits for the current one instead of cancelling it.
-concurrency:
-  group: release
-  cancel-in-progress: false
+# No workflow-level concurrency group: one would hold every later merge while a prod-us approval
+# is pending, and GitHub keeps only one pending run per group. Serialization is per deployment,
+# in deploy-to.yml: dev-staging keeps receiving merges, and a newer pending prod-us promotion
+# replaces an older unapproved one, so you always approve the latest.
 
 jobs:
   build:

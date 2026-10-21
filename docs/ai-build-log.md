@@ -194,3 +194,18 @@ The constitution's Development Workflow section requires an entry at the end of 
 - **OpenObserve password validation:** it now requires upper, lower, digit and special characters, matching OpenObserve v1.0.4's own rule, with a test.
 - **ECR retention:** raised from 20 to 100 images, so prod-us's image and its rollback target can't expire while many merges wait for approval.
 - **Verified:** EC2 never deletes an existing network interface attached at launch (`DeleteOnTermination` can be true only for interfaces created at launch). So host replacement keeps the fixed private IP and the Elastic IP.
+
+**Pre-live review (same session, at the operator's request):**
+- **Rendered user data:** rendered through Terraform from the real files, and validated with `cloud-init schema` on cloud-init 22.2.2, the version on Amazon Linux 2023. All 14 files decode with the right paths and permissions.
+- **Host rehearsal** (`infra/host/test/rehearse/`, new): the real scripts and Compose stacks ran inside a privileged docker:dind "host", with fake SSM, a local registry and a loop-device volume. **The first full run passed**: first boot, first deploy with seeding, Caddy, a second deploy without a reseed, the no-op, the automatic rollback, telemetry with `deployment.id`, `--rollback`, host replacement, and no secrets in logs. A second run, strengthened with a special-character password and a `/metrics.json` check, was **stopped by Claude Code because the machine ran low on memory**. That is not a test failure. It still needs a rerun, when memory allows.
+- **`/code-review high`:** 10 findings, all fixed.
+  1. **Secrets mangled:** secrets were written unquoted to the Compose env file. Verified: `Pa$sw0rd! #x` reached the container as `Pa!`. Values are now single-quoted, and a value containing a quote or newline is refused. Terraform also rejects such passwords at plan time.
+  2. **Stalled releases:** the workflow-level `release` concurrency group would hold dev-staging behind a pending prod approval. Removed; serialization is now per deployment.
+  3. **Approval enforced only by the workflow:** one GitHub role could run commands on production from any Environment. Production hosts are now tagged `rentsync:deployable=protected`, and a new `rentsync-github-actions-prod` role, trusted only for `environment:prod-us`, is the only role IAM lets touch them. The prod-us Environment overrides `AWS_ROLE_ARN`.
+  4. **`/metrics.json` was public:** Caddy now answers `/metrics*` with 404.
+  5. **Telemetry ingest reachable from the internet:** Caddy now refuses OpenObserve's ingestion paths on the public hostname.
+  6. **SSM write failure after a healthy deploy:** `rentsync-deploy` now retries, then exits 3 with instructions. Previously it failed with an AWS CLI code and SSM kept the old tag.
+  7. **Boot failures never retried:** `rentsync-boot` is now `rentsync.service`'s `ExecStartPre`, covered by its retries. The separate unit was removed, and cloud-init starts the service with `--no-block`.
+  8. **Old `.env` broke the local Collector:** its settings now have defaults, so an old `.env` still works.
+  9. **Misplaced specs:** `ops_spec` heartbeat examples moved back under `GET /healthz`.
+  10. **Unjustified dependencies:** justifications for the rehearsal images added to plan.md.

@@ -40,9 +40,10 @@ module "host" {
   ecr_repository_arn = local.shared.ecr_repository_arn
   data_snapshot_id   = var.data_snapshot_id
 
-  # Releases target hosts by DeploymentId; the release role may run commands only on hosts
-  # with this tag (contracts/bootstrap-iam.md).
-  extra_tags = { "rentsync:deployable" = "true" }
+  # Releases target hosts by DeploymentId. The non-production release role may run commands only
+  # on hosts tagged "true"; production hosts are "protected", which only the prod-us role (trusted
+  # solely for the prod-us GitHub Environment) may touch (contracts/bootstrap-iam.md).
+  extra_tags = { "rentsync:deployable" = local.deployable_tag }
 
   # The mock PMS stack (research R7). One copy of each file, read from infra/.
   files = {

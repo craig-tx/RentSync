@@ -10,7 +10,6 @@ locals {
     "/usr/local/bin/rentsync-boot"                       = { content = file("${local.host_dir}/bin/rentsync-boot"), permissions = "0755" }
     "/usr/local/bin/rentsync-render-env"                 = { content = file("${local.host_dir}/bin/rentsync-render-env"), permissions = "0755" }
     "/usr/local/bin/rentsync-start"                      = { content = file("${local.host_dir}/bin/rentsync-start"), permissions = "0755" }
-    "/etc/systemd/system/rentsync-boot.service"          = { content = file("${local.host_dir}/systemd/rentsync-boot.service"), permissions = "0644" }
     "/etc/systemd/system/rentsync.service"               = { content = file("${local.host_dir}/systemd/rentsync.service"), permissions = "0644" }
     "/etc/systemd/system/rentsync-prune.service"         = { content = file("${local.host_dir}/systemd/rentsync-prune.service"), permissions = "0644" }
     "/etc/systemd/system/rentsync-prune.timer"           = { content = file("${local.host_dir}/systemd/rentsync-prune.timer"), permissions = "0644" }

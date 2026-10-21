@@ -58,7 +58,7 @@ backup policy.
 
 | Field | Notes |
 |---|---|
-| deployment | Its DeploymentId (tag `DeploymentId`), which deploys target. Environment hosts also carry `rentsync:deployable = true`, which the release role's `ssm:SendCommand` permission requires |
+| deployment | Its DeploymentId (tag `DeploymentId`), which deploys target. Environment hosts also carry `rentsync:deployable`: `true`, which the release role's `ssm:SendCommand` permission requires, or `protected` for production (`protected = true`), which only the prod-us role may touch |
 | instance | `t4g.small`, Amazon Linux 2023 arm64, pinned AMI. Replaceable |
 | network interface | Standalone ENI with a fixed private IP. **Survives replacement** |
 | Elastic IP | Associated with the ENI. **Survives replacement**. Output for DNS |

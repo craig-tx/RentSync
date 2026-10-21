@@ -15,6 +15,10 @@ BAD="$(printf 'c%.0s' {1..40})" # a re-tag of A: it reports version A, so its he
 repo=/repo
 store=/var/lib/fake-ssm
 ip="$(hostname -i | awk '{print $1}')" # the "private IP" of this host
+# The OpenObserve password holds a literal "$x" and " #" on purpose: Compose would mangle it
+# if the env file were unquoted (code review 2026-10-21).
+# shellcheck disable=SC2016
+special_pw='Re$hearsal #0nly-Pw1'
 step() { printf '\n=== %s\n' "$*"; }
 fail() { echo "REHEARSAL FAIL: $*" >&2; exit 1; }
 
@@ -51,7 +55,7 @@ put /rentsync/pr-42/postgres_password "rehearsalPgPassw0rd"
 put /rentsync/pr-42/image_tag none
 put /rentsync/pr-42/previous_image_tag none
 put /rentsync/shared-us/openobserve/ingest/user "ops@example.test"
-put /rentsync/shared-us/openobserve/ingest/password "Rehearsal-0nly-Passw0rd!"
+put /rentsync/shared-us/openobserve/ingest/password "$special_pw"
 cat > /usr/local/bin/aws <<STUB
 #!/usr/bin/env bash
 # Stub of the AWS CLI calls the host scripts make.
@@ -90,7 +94,7 @@ SITE_HOSTNAME=telemetry.localhost
 ACME_EMAIL=ops@example.test
 ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory
 ZO_ROOT_USER_EMAIL=ops@example.test
-ZO_ROOT_USER_PASSWORD=Rehearsal-0nly-Passw0rd!
+ZO_ROOT_USER_PASSWORD='$special_pw'
 OPENOBSERVE_DB_PASSWORD=rehearsalOoDbPassw0rd
 DB_NAME=openobserve_shared_us
 PRIVATE_IP=$ip
@@ -120,6 +124,7 @@ health="$(curl -sk https://localhost/healthz)"
 echo "$health"
 [ "$(jq -r '.status + " " + .version + " " + .deployment_id' <<< "$health")" = "ok $A pr-42" ] || fail "healthz via Caddy: $health"
 [ "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/metrics)" = 404 ] || fail "/metrics is public"
+[ "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/metrics.json)" = 404 ] || fail "/metrics.json is public"
 code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost/healthz)"
 [[ "$code" =~ ^30[178]$ ]] || fail "HTTP did not redirect (got $code)"
 [ "$(admin -o /dev/null -w '%{http_code}' https://localhost/admin/clients -H 'Authorization: Bearer wrong')" = 401 ] || fail "admin API accepted a wrong token"
@@ -157,7 +162,7 @@ grep -qx "rolled back to $B" /tmp/deploy-bad.log || fail "bad deploy did not rol
 step "telemetry reaches OpenObserve with deployment.id=pr-42"
 admin -X POST https://localhost/admin/scenarios/tenant_move_out -d '{}' > /dev/null
 compose exec -T -e OPENOBSERVE_URL="http://$ip:5080" -e OPENOBSERVE_USER=ops@example.test \
-  -e "OPENOBSERVE_PASSWORD=Rehearsal-0nly-Passw0rd!" -e TELEMETRY_SMOKE_TIMEOUT_S=120 \
+  -e "OPENOBSERVE_PASSWORD=$special_pw" -e TELEMETRY_SMOKE_TIMEOUT_S=120 \
   mock_pms bundle exec bin/telemetry_smoke || fail "telemetry did not arrive with deployment attributes"
 
 step "--rollback swaps to A"
@@ -180,7 +185,7 @@ ls /srv/data/caddy/caddy > /dev/null 2>&1 || fail "Caddy's data did not persist 
 
 step "no secret in the rendered compose project's logs"
 logs="$(compose logs 2>&1)"
-if grep -E "rehearsal-admin-token|rehearsalPgPassw0rd|Rehearsal-0nly-Passw0rd" <<< "$logs"; then
+if grep -F -e rehearsal-admin-token -e rehearsalPgPassw0rd -e "$special_pw" <<< "$logs"; then
   fail "a secret value appeared in container logs"
 fi
 

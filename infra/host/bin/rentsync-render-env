@@ -24,7 +24,18 @@ for path in $SSM_READ_PATHS; do
              --with-decryption --query 'Parameters[].[Name,Value]' --output text)
 done
 
-emit() { printf '%s=%s\n' "$1" "$2" >> "$tmp"; }
+# Values are single-quoted: Compose's env-file parser would otherwise expand "$x", cut at " #"
+# and strip quotes, silently changing a password such as "Pa$sw0rd! #1". Single-quoted values
+# are taken literally; a value that itself contains a single quote or a newline is refused.
+emit() {
+  case "$2" in
+    *"'"* | *$'\n'*)
+      echo "rentsync-render-env: $1 contains a single quote or newline, which the env file cannot carry" >&2
+      exit 1
+      ;;
+  esac
+  printf "%s='%s'\n" "$1" "$2" >> "$tmp"
+}
 
 # Check every required parameter here, in the main shell, before writing anything. A check
 # inside "$(...)" would not stop the script (set -e ignores it there), and a host would start

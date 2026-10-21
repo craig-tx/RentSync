@@ -58,6 +58,35 @@ purpose for a demo, and are listed in the production-differences document:
 | `ssm:SendCommand` | `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`, and `arn:aws:ec2:us-east-1:<account>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = true` |
 | `ssm:GetCommandInvocation`, `ssm:ListCommandInvocations` | `*` |
 
+This role cannot touch production: it may run commands only on hosts tagged
+`rentsync:deployable = true`, and production hosts are tagged `protected` (Terraform variable
+`protected = true` in `rentsync-prod-us`). It also does every image build.
+
+## Role `rentsync-github-actions-prod` (production releases)
+
+Added after the 2026-10-21 code review. Without it, any job that could assume the release role
+could run commands on production, and the `prod-us` approval would be enforced only by the
+workflow, not by IAM.
+
+**Trust**: the GitHub OIDC provider, with `aud = sts.amazonaws.com` and `sub` **exactly**
+`repo:craig-tx/RentSync:environment:prod-us` (StringEquals). GitHub issues that token only to
+a job in the `prod-us` Environment, which is limited to `main` and gated by the required
+reviewer. See `docs/deploy/iam/github-actions-prod-trust.json`.
+
+**Permissions** (`docs/deploy/iam/github-actions-prod-policy.json`):
+
+| Actions | Resources |
+|---|---|
+| `ssm:SendCommand` | `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`, and `arn:aws:ec2:us-east-1:<account>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = protected` |
+| `ssm:GetCommandInvocation`, `ssm:ListCommandInvocations` | `*` |
+
+It has no ECR access: production only runs images the release role already built.
+
+**How a job picks its role**: workflows use `vars.AWS_ROLE_ARN`. The repository-level variable
+is `rentsync-github-actions`. The `prod-us` Environment defines its own `AWS_ROLE_ARN` =
+`rentsync-github-actions-prod`, which overrides the repository value for jobs in that
+Environment.
+
 ## Roles created by Terraform (not bootstrap)
 
 These are listed so the bootstrap policy above covers them:

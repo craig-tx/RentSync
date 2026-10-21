@@ -2,7 +2,9 @@
 # internet (feature 002 research R9; contracts/host-interface.md). Reusable: called by
 # release.yml and deploy.yml. The job runs in the GitHub Environment named by the
 # DeploymentId, so prod-us waits for its required reviewer. The URL comes from that
-# Environment's SITE_URL variable.
+# Environment's SITE_URL variable, and the AWS role from its AWS_ROLE_ARN variable: the prod-us
+# Environment overrides the repository's role with rentsync-github-actions-prod, the only role
+# IAM lets run commands on production (protected) hosts.
 name: Deploy to
 
 on:
@@ -66,7 +68,7 @@ jobs:
           [ "$RELOAD" = "true" ] && arg="--reload"
           command_id="$(aws ssm send-command \
             --document-name AWS-RunShellScript \
-            --targets "Key=tag:DeploymentId,Values=$DEPLOYMENT_ID" "Key=tag:rentsync:deployable,Values=true" \
+            --targets "Key=tag:DeploymentId,Values=$DEPLOYMENT_ID" "Key=tag:rentsync:deployable,Values=true,protected" \
             --parameters "commands=[\"/usr/local/bin/rentsync-deploy $arg\"]" \
             --timeout-seconds 900 --comment "rentsync-deploy $arg" \
             --query Command.CommandId --output text)"
@@ -78,7 +80,7 @@ jobs:
           done
           instance="$(aws ssm list-command-invocations --command-id "$command_id" \
             --query 'CommandInvocations[0].InstanceId' --output text)"
-          [ "$instance" != "None" ] || { echo "no instance tagged DeploymentId=$DEPLOYMENT_ID and rentsync:deployable=true"; exit 1; }
+          [ "$instance" != "None" ] || { echo "no instance tagged DeploymentId=$DEPLOYMENT_ID and rentsync:deployable (true or protected)"; exit 1; }
           aws ssm get-command-invocation --command-id "$command_id" --instance-id "$instance" \
             --query '[StandardOutputContent, StandardErrorContent]' --output text
           echo "status: $status"

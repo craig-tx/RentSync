@@ -1,16 +1,20 @@
-# Renders secrets from SSM and starts the host's Compose stack on every boot (US5 AC5).
+# Mounts the data volume, renders secrets from SSM and starts the host's Compose stack, on
+# every boot (feature 002 research R6, US5 AC5).
 [Unit]
-Description=RentSync stack
-Requires=rentsync-boot.service docker.service
-After=rentsync-boot.service docker.service network-online.target
+Description=RentSync data volume and stack
+Requires=docker.service
+After=docker.service local-fs.target network-online.target
 Wants=network-online.target
-# Keep retrying a failed start (a not-yet-effective IAM policy, a registry hiccup): with no
-# retry, one transient failure would leave the host stopped until someone intervened (US5 AC5).
+# Keep retrying a failed start (a late volume attachment, a not-yet-effective IAM policy, a
+# registry hiccup): with no retry, one transient failure would leave the host stopped until
+# someone intervened. rentsync-boot runs as a pre-step so these retries cover it too; it is
+# idempotent (it never reformats, remounts or re-adds an fstab entry).
 StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+ExecStartPre=/usr/local/bin/rentsync-boot
 ExecStart=/usr/local/bin/rentsync-start
 TimeoutStartSec=900
 Restart=on-failure

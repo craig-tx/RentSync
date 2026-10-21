@@ -43,15 +43,6 @@ RSpec.describe "ops endpoints", type: :request do
       expect(JSON.parse(last_response.body)).to include("version" => MockPms::Settings.service_version,
                                                         "deployment_id" => MockPms::Settings.deployment_id)
     end
-  end
-
-  describe "GET /healthz/live" do
-    it "reports status, version and deployment_id" do
-      get "/healthz/live"
-      expect(last_response.status).to eq(200)
-      expect(JSON.parse(last_response.body)).to eq("status" => "ok", "version" => MockPms::Settings.service_version,
-                                                   "deployment_id" => MockPms::Settings.deployment_id)
-    end
 
     it "is 503 when the worker heartbeat is missing" do
       get "/healthz"
@@ -62,6 +53,15 @@ RSpec.describe "ops endpoints", type: :request do
       beat!(45)
       get "/healthz"
       expect(last_response.status).to eq(503)
+    end
+  end
+
+  describe "GET /healthz/live" do
+    it "reports status, version and deployment_id" do
+      get "/healthz/live"
+      expect(last_response.status).to eq(200)
+      expect(JSON.parse(last_response.body)).to eq("status" => "ok", "version" => MockPms::Settings.service_version,
+                                                   "deployment_id" => MockPms::Settings.deployment_id)
     end
   end
 

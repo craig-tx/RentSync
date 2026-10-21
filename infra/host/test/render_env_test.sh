@@ -48,7 +48,7 @@ env_file="$work/run/env"
 for line in ADMIN_TOKEN=tok-123 POSTGRES_PASSWORD=pw-456 IMAGE_TAG=abc OPENOBSERVE_USER=ops@example.test \
             OPENOBSERVE_PASSWORD=ingest-789 COMPOSE_PROJECT_NAME=rentsync-pr-42 DEPLOYMENT_ID=pr-42 \
             "DATABASE_URL=postgres://postgres:pw-456@postgres:5432/mock_pms_pr_42"; do
-  grep -qxF "$line" "$env_file" || fail "env file lacks $line"
+  grep -qxF "${line%%=*}='${line#*=}'" "$env_file" || fail "env file lacks $line"
 done
 if grep -q "SSM_READ_PATHS\|VOLUME_ID" "$env_file"; then fail "script-only keys leaked into the env file"; fi
 if render 2>&1 | grep -q "tok-123"; then fail "a secret value was printed"; fi
@@ -70,14 +70,25 @@ ENV
 cat > "$work/bin/aws" <<'STUB'
 #!/usr/bin/env bash
 p=/rentsync/shared-us/openobserve
-printf '%s/root_email\tops@example.test\n%s/root_password\troot-pw\n%s/db_password\tdb-pw\n' "$p" "$p" "$p"
+printf '%s/root_email\tops@example.test\n%s/root_password\t%s\n%s/db_password\tdb-pw\n' "$p" "$p" "${ROOT_PW:-root-pw}" "$p"
 printf '%s/ingest/user\tops@example.test\n%s/ingest/password\troot-pw\n' "$p" "$p"
 STUB
 rm -f "$env_file"
 render > /dev/null || fail "telemetry render failed"
 for line in ZO_ROOT_USER_EMAIL=ops@example.test ZO_ROOT_USER_PASSWORD=root-pw OPENOBSERVE_DB_PASSWORD=db-pw \
             DB_NAME=openobserve_shared_us PRIVATE_IP=10.40.1.10 COMPOSE_PROJECT_NAME=rentsync-shared-us; do
-  grep -qxF "$line" "$env_file" || fail "telemetry env file lacks $line"
+  grep -qxF "${line%%=*}='${line#*=}'" "$env_file" || fail "telemetry env file lacks $line"
 done
+
+# 4. Special characters survive literally (Compose would expand $x and cut at " #" if unquoted).
+rm -f "$env_file"
+# shellcheck disable=SC2016 # the literal "$" is the point of this case
+ROOT_PW='Pa$sw0rd! #1' render > /dev/null || fail "render failed with special characters"
+grep -qxF "ZO_ROOT_USER_PASSWORD='Pa\$sw0rd! #1'" "$env_file" || fail "special characters were not preserved"
+
+# 5. A value with a single quote is refused rather than written broken.
+rm -f "$env_file"
+if ROOT_PW="it's-Pw0rd!" render > /dev/null 2>&1; then fail "a value with a single quote was accepted"; fi
+[ ! -e "$env_file" ] || fail "an env file was written for a value with a single quote"
 
 echo "ok: render_env_test"

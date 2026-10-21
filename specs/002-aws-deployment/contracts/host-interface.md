@@ -76,7 +76,10 @@ gains both fields).
 
 ## SSM targeting
 
-Deploys target `Key=tag:DeploymentId,Values=<deployment_id>`. Exactly one instance carries each
-DeploymentId with `rentsync:deployable = true`. The GitHub Actions role may run
-`AWS-RunShellScript` only on instances tagged `rentsync:deployable = true`, so a new deployment
-is deployable with no IAM change.
+Deploys target `Key=tag:DeploymentId,Values=<deployment_id>` and
+`Key=tag:rentsync:deployable,Values=true,protected`. Exactly one instance carries each
+DeploymentId. Non-production hosts are tagged `rentsync:deployable = true`, and only
+`rentsync-github-actions` may run `AWS-RunShellScript` on them. A new deployment is therefore
+deployable with no IAM change. Production hosts are tagged `protected`, and only
+`rentsync-github-actions-prod` may run commands on them. That role is trusted solely for the
+`prod-us` GitHub Environment (contracts/bootstrap-iam.md).

@@ -26,8 +26,11 @@ data, so changing it replaces the host.
   with the full commit SHA, and pushes it to ECR, where tags are immutable. An existing tag is
   skipped.
 - **Deploys run `rentsync-deploy` on the host through SSM Run Command.** Commands target
-  `tag:DeploymentId` and `tag:rentsync:deployable`. The release role may run commands only on
-  instances with the second tag. `rentsync-deploy`:
+  `tag:DeploymentId` and `tag:rentsync:deployable`. IAM enforces the promotion gate. The
+  non-production release role may run commands only on hosts tagged `true`. Production hosts
+  are tagged `protected`, and only `rentsync-github-actions-prod`, whose trust accepts nothing
+  but the `prod-us` Environment, may touch them. A job outside that Environment cannot reach
+  production, whatever its workflow says. `rentsync-deploy`:
   1. takes a lock;
   2. renders secrets from SSM into a tmpfs file;
   3. pulls the image;

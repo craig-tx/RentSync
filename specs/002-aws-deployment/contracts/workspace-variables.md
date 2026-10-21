@@ -56,9 +56,12 @@ Terraform, so the value never reaches state or plan files.
 | `admin_token` | string (validated: ≥ 32 characters, not `change-me-admin-token`) | random, per environment | different random | **yes** |
 | `admin_token_version` | number | `1` | `1` | no |
 | `postgres_password_version` | number | `1` | `1` | no |
+| `protected` | bool | `false` | `true` | no |
 | `data_snapshot_id` | string | `null` | `null` | no |
 
-`data_snapshot_id` is used only by the restore procedure (research R14).
+`data_snapshot_id` is used only by the restore procedure (research R14). `protected = true`
+tags the host `rentsync:deployable = protected`, so only `rentsync-github-actions-prod` can
+deploy to it.
 
 **Outputs**: `public_ip` (for DNS), `instance_id`, `url` (`https://<hostname>`).
 
@@ -70,7 +73,7 @@ Terraform, so the value never reaches state or plan files.
 | `ECR_REPOSITORY_URL` | Actions variable | shared output `ecr_repository_url` |
 | `AWS_REGION` | Actions variable | `us-east-1` |
 | `dev-staging` | Environment (named by DeploymentId) | no protection rules; branch `main` only; Environment variable `SITE_URL = https://pms-staging.rentsync.org` |
-| `prod-us` | Environment (named by DeploymentId) | required reviewer: the operator; branch `main` only; `SITE_URL = https://pms.rentsync.org` |
+| `prod-us` | Environment (named by DeploymentId) | required reviewer: the operator; branch `main` only; `SITE_URL = https://pms.rentsync.org`; `AWS_ROLE_ARN = arn:aws:iam::<account>:role/rentsync-github-actions-prod` (overrides the repository variable) |
 
 None of these values are secrets. GitHub Actions authenticates to AWS through OIDC, so there is
 no access key anywhere.
