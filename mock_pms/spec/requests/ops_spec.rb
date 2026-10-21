@@ -57,6 +57,12 @@ RSpec.describe "ops endpoints", type: :request do
     end
   end
 
+  it "includes database-backed delivery metrics" do
+    beat!(2)
+    get "/metrics"
+    expect(last_response.body).to include("mock_pms_delivery_queue_depth 0", "mock_pms_worker_heartbeat_age_seconds")
+  end
+
   it "returns the error envelope for an unknown route" do
     get "/nope"
     expect(last_response.status).to eq(404)

@@ -54,6 +54,7 @@ module MockPms
           extra = URI.encode_www_form(query.compact)
           base.query = [base.query, extra].compact.reject(&:empty?).join("&")
           redirect base.to_s
+          status 302 # the contract says 302; Grape would answer a POST over HTTP/1.1 with 303
         end
 
         def token_client!

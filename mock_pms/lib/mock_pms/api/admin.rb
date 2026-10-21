@@ -21,6 +21,29 @@ module MockPms
         def find!(model, id)
           model.first(id: id.to_s) || api_error!("not_found", "#{id} not found", 404)
         end
+
+        def delivery_json(delivery)
+          {
+            id: delivery.id, event_id: delivery.event.id, client_id: delivery.client.id, status: delivery.status,
+            attempt_count: delivery.attempt_count, replay: delivery.replay, chaos: delivery.chaos.to_h,
+            scheduled_at: Presenters.time(delivery.scheduled_at),
+            attempts: delivery.attempts.map do |a|
+              { attempt_number: a.attempt_number, started_at: Presenters.time(a.started_at),
+                finished_at: Presenters.time(a.finished_at), outcome: a.outcome, http_status: a.http_status }
+            end
+          }
+        end
+
+        def seq_of(model, id) = model.where(id: id.to_s).get(:seq) || 0
+
+        def paged(dataset)
+          rows, cursor = Pagination.paginate(dataset, limit: params[:limit], cursor: params[:cursor])
+          [rows, cursor]
+        rescue Pagination::Invalid => e
+          api_error!("invalid_parameter", e.message, 422)
+        end
+
+        def json_safe(value) = JSON.parse(JSON.generate(value))
       end
 
       namespace :admin do
@@ -69,9 +92,41 @@ module MockPms
             with_idempotency do
               grant = find!(MockPms::Grant, params[:grant_id])
               MockPms::OAuth::Service.revoke!(grant)
-              [200, JSON.parse(JSON.generate(grant_json(grant)))]
+              [200, json_safe(grant_json(grant))]
             end
           end
+        end
+
+        get :events do
+          dataset = MockPms::Event.dataset
+          dataset = dataset.where(type: params[:type].to_s) if params[:type]
+          dataset = dataset.where(operator_seq: seq_of(MockPms::Operator, params[:operator_id])) if params[:operator_id]
+          if params[:since]
+            since = begin
+              Time.iso8601(params[:since].to_s)
+            rescue ArgumentError
+              api_error!("invalid_parameter", "since must be an ISO 8601 date-time", 422)
+            end
+            dataset = dataset.where { occurred_at >= since }
+          end
+          rows, cursor = paged(dataset.eager(:operator))
+          { data: rows.map { |e| Events::Serializer.envelope(e) }, next_cursor: cursor }
+        end
+
+        get :deliveries do
+          dataset = MockPms::Delivery.dataset
+          dataset = dataset.where(client_seq: seq_of(MockPms::Client, params[:client_id])) if params[:client_id]
+          dataset = dataset.where(event_seq: seq_of(MockPms::Event, params[:event_id])) if params[:event_id]
+          dataset = dataset.where(status: params[:status].to_s) if params[:status]
+          rows, cursor = paged(dataset.eager(:event, :client, :attempts))
+          { data: rows.map { |d| delivery_json(d) }, next_cursor: cursor }
+        end
+
+        post "scenarios/:name" do
+          scenario = Scenarios.registry[params[:name]]
+          api_error!("not_found", "unknown scenario #{params[:name]}", 404) unless scenario
+          options = params.slice(:operator_id, :share, :count, :window_s).to_h.transform_keys(&:to_sym).compact
+          with_idempotency { [200, json_safe(scenario.run!(**options))] }
         end
       end
     end

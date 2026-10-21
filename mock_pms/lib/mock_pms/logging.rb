@@ -15,7 +15,9 @@ module MockPms
     class << self
       attr_writer :io, :service_name
 
-      def io = @io ||= $stdout
+      # Unbuffered: containers capture stdout as a pipe, which Ruby would otherwise
+      # block-buffer, delaying lines to docker logs and the Collector.
+      def io = @io ||= $stdout.tap { |out| out.sync = true }
       def service_name = @service_name || ENV.fetch("SERVICE_NAME", "mock_pms-web")
 
       def min_level = LEVELS.fetch(ENV.fetch("LOG_LEVEL", "INFO").upcase, 1)

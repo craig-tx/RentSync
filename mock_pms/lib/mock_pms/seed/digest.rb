@@ -27,8 +27,15 @@ module MockPms
         }.merge(extra_sections)
       end
 
-      # Hook for later tables that belong in the digest (seeded events, T068).
-      def extra_sections = {}
+      # Seeded events are part of the reproducible seed state (T068).
+      def extra_sections
+        return {} unless MockPms.db.table_exists?(:events)
+
+        events = Event.order(:id).eager(:operator).all.map do |e|
+          Events::Serializer.envelope(e).merge(source: e.source, correlation_id: e.correlation_id)
+        end
+        { events: events }
+      end
 
       def deep_sort(value)
         case value

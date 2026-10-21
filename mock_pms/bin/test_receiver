@@ -1,0 +1,93 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# A webhook receiver for demos and chaos checks (quickstart §5, §7).
+#   bin/test_receiver --port 9999
+# ENV: RECEIVER_SECRET (signing secret to verify against), RECEIVER_FAIL_FIRST (answer
+# the first N requests with 500), RECEIVER_LOG (JSONL path, default /receiver_logs/receiver.jsonl).
+require "digest"
+require "fileutils"
+require "json"
+require "optparse"
+require "puma"
+require "puma/configuration"
+require "puma/launcher"
+
+ENV["SERVICE_NAME"] ||= "mock_pms-tool"
+require_relative "../lib/mock_pms"
+MockPms.boot!
+
+port = 9999
+OptionParser.new { |o| o.on("--port N", Integer) { |v| port = v } }.parse!
+
+class TestReceiver
+  include MockPms::Logging::Loggable
+
+  def initialize(secret:, fail_first:, log_path:)
+    @secret = secret
+    @fail_first = fail_first
+    @log_path = log_path
+    @mutex = Mutex.new
+    FileUtils.mkdir_p(File.dirname(log_path))
+  end
+
+  def call(env)
+    body = env["rack.input"].read
+    header = ->(name) { env["HTTP_#{name.upcase.tr('-', '_')}"] }
+    status = next_status
+    entry = record(body, header)
+    log.info("webhook received", **entry.slice(:event_id, :event_type, :delivery_id, :attempt, :signature_valid,
+                                               :parsed, :lag_ms), status: status)
+    [status, { "content-type" => "text/plain" }, [status == 200 ? "ok" : "fail"]]
+  end
+
+  private
+
+  def next_status
+    @mutex.synchronize do
+      return 200 unless @fail_first.positive?
+
+      @fail_first -= 1
+      500
+    end
+  end
+
+  def record(body, header)
+    parsed = begin
+      JSON.parse(body)
+    rescue JSON::ParserError
+      nil
+    end
+    occurred = parsed.is_a?(Hash) && parsed["occurred_at"].is_a?(String) ? Time.iso8601(parsed["occurred_at"]) : nil
+    entry = {
+      received_at: Time.now.utc.iso8601(3), event_id: header.call("PMS-Event-Id"),
+      event_type: header.call("PMS-Event-Type"), delivery_id: header.call("PMS-Delivery-Id"),
+      attempt: header.call("PMS-Delivery-Attempt").to_i, replay: header.call("PMS-Replay") == "true",
+      correlation_id: header.call("X-Correlation-Id"),
+      signature_valid: MockPms::Delivery::Signer.verify(header: header.call("PMS-Signature"), secret: @secret,
+                                                        body: body),
+      parsed: parsed.is_a?(Hash), valid_envelope: valid_envelope?(parsed),
+      body_sha256: Digest::SHA256.hexdigest(body),
+      lag_ms: occurred ? ((Time.now.utc - occurred) * 1000).round : nil
+    }
+    @mutex.synchronize { File.open(@log_path, "a") { |f| f.puts(JSON.generate(entry)) } }
+    entry
+  end
+
+  def valid_envelope?(parsed)
+    parsed.is_a?(Hash) && %w[id type occurred_at operator_id data].all? { |k| parsed.key?(k) } &&
+      parsed["occurred_at"].is_a?(String)
+  end
+end
+
+app = TestReceiver.new(secret: ENV.fetch("RECEIVER_SECRET", ""),
+                       fail_first: Integer(ENV.fetch("RECEIVER_FAIL_FIRST", 0)),
+                       log_path: ENV.fetch("RECEIVER_LOG", "/receiver_logs/receiver.jsonl"))
+config = Puma::Configuration.new do |c|
+  c.bind "tcp://0.0.0.0:#{port}"
+  c.app app
+  c.threads 1, 8
+  c.workers 0
+  c.quiet
+end
+Puma::Launcher.new(config).run

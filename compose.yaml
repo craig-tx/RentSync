@@ -89,6 +89,9 @@ services:
     command: ["bundle", "exec", "bin/test_receiver", "--port", "9999"]
     environment:
       SERVICE_NAME: mock_pms-tool
+      # Shell values win over the empty defaults in .env (quickstart §5).
+      RECEIVER_SECRET: ${RECEIVER_SECRET:-}
+      RECEIVER_FAIL_FIRST: ${RECEIVER_FAIL_FIRST:-0}
     volumes:
       - receiver_logs:/receiver_logs
 

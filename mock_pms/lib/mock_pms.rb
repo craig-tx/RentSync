@@ -15,6 +15,7 @@ module MockPms
     models/base
     models/business
     models/oauth
+    models/events
     presenters
     pagination
     oauth/service
@@ -25,6 +26,15 @@ module MockPms
     metrics/buffer
     metrics/flusher
     metrics/exposition
+    metrics/delivery_collector
+    delivery/signer
+    delivery/retry_schedule
+    delivery/transport
+    events/recorder
+    delivery/worker
+    scenarios/base
+    scenarios/tenant_move_out
+    scenarios/nsf_wave
     admin/idempotency
     middleware/correlation_id
     middleware/request_metrics

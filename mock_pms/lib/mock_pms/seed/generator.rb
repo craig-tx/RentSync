@@ -23,6 +23,7 @@ module MockPms
       def self.run(seed:, anchor_date:) = new(seed, anchor_date).run
 
       def initialize(seed, anchor_date)
+        @seed = seed
         @rng = Random.new(seed)
         @anchor = anchor_date
         @anchor_month = Date.new(anchor_date.year, anchor_date.month, 1)
@@ -46,6 +47,7 @@ module MockPms
               create_lease(property, start: @window_start << @rng.rand(0..11), extend_past_anchor: true)
             end
           end
+          create_seed_events
         end
         log.info("seed generated", seed_anchor: @anchor.iso8601)
       end
@@ -224,6 +226,33 @@ module MockPms
           insert(:payment_applications, payment_seq: row[:seq], charge_seq: charge[:seq], amount_cents: cents)
         end
         row
+      end
+
+      # The events this history would have produced (research R5), with historical
+      # occurred_at and no deliveries; they can be replayed later (FR-029).
+      def create_seed_events
+        Presenters.eager(:payment, Payment.order(:seq)).all.each do |payment|
+          created = Presenters.payment(payment).merge(status: "settled", reversal: nil,
+                                                      updated_at: Presenters.time(payment.created_at))
+          seed_event("payment.created", payment.operator_seq, created, payment.received_at)
+          next unless payment.reversal
+
+          seed_event("payment.reversed", payment.operator_seq, Presenters.payment(payment),
+                     payment.reversal.reversed_at)
+        end
+        Presenters.eager(:lease, Lease.where(status: "ended_early").order(:seq)).all.each do |lease|
+          at = Time.utc(lease.actual_end_date.year, lease.actual_end_date.month, lease.actual_end_date.day, 17)
+          seed_event("lease.updated", lease.operator_seq, Presenters.lease(lease), at)
+          seed_event("tenant.moved_out", lease.operator_seq,
+                     { tenant: Presenters.tenant(lease.tenant), lease: Presenters.lease(lease),
+                       move_out_date: lease.actual_end_date.iso8601 }, at)
+        end
+      end
+
+      def seed_event(type, operator_seq, payload, occurred_at)
+        insert(:events, id: id("evt"), operator_seq: operator_seq, type: type, occurred_at: occurred_at,
+                        payload: Sequel.pg_jsonb_wrap(JSON.parse(JSON.generate(payload))),
+                        correlation_id: "seed:#{@seed}", source: "seed", created_at: occurred_at)
       end
 
       def reverse(payment, on_date)

@@ -453,23 +453,23 @@ attempts (quickstart §5).
 
 ### Tests for User Story 2 (write first; they must fail) ⚠️
 
-- [ ] T052 [P] [US2] Create the fixture `mock_pms/spec/fixtures/signature_vector.json`, computed **independently of the implementation**. Run `printf '%s' '1792540800.{"id":"evt_TEST","type":"payment.created"}' | openssl dgst -sha256 -hmac 'whsec_test_0123456789abcdef'` and store `{secret, t, body, v1}`, with `v1` the resulting hex digest. The vector is in contracts/webhooks.md. Feature 002 reuses this file.
-- [ ] T053 [P] [US2] Write `mock_pms/spec/unit/delivery/signer_spec.rb`.
+- [X] T052 [P] [US2] Create the fixture `mock_pms/spec/fixtures/signature_vector.json`, computed **independently of the implementation**. Run `printf '%s' '1792540800.{"id":"evt_TEST","type":"payment.created"}' | openssl dgst -sha256 -hmac 'whsec_test_0123456789abcdef'` and store `{secret, t, body, v1}`, with `v1` the resulting hex digest. The vector is in contracts/webhooks.md. Feature 002 reuses this file.
+- [X] T053 [P] [US2] Write `mock_pms/spec/unit/delivery/signer_spec.rb`.
   - `Signer.header(secret:, t:, body:)` returns exactly `"t=1792540800,v1=<fixture v1>"`.
   - `Signer.verify(header:, secret:, body:)` returns true for the fixture and false when one byte of the body is changed.
   - The header is computed over raw bytes, including bodies that are not valid UTF-8.
-- [ ] T054 [P] [US2] Write `mock_pms/spec/unit/delivery/retry_schedule_spec.rb`.
+- [X] T054 [P] [US2] Write `mock_pms/spec/unit/delivery/retry_schedule_spec.rb`.
   - With `base: 2` and jitter fixed at 0, the delay after attempt *n* is `2 * 2**(n-1)`, so attempts 1–7 give `[2,4,8,16,32,64,128]`.
   - With jitter turned on, every delay is within ±10%.
   - After `MAX_ATTEMPTS` (8), `next_delay` returns nil, which marks the delivery `exhausted`.
-- [ ] T055 [P] [US2] Write `mock_pms/spec/unit/events/recorder_spec.rb`.
+- [X] T055 [P] [US2] Write `mock_pms/spec/unit/events/recorder_spec.rb`.
   - `Recorder.record!(type:, operator:, payload:, occurred_at:, source:)` inserts one immutable `events` row (with an `evt_` id) in the caller's transaction.
   - It inserts one `deliveries` row per client that has an active grant for that operator and a non-null `subscriber_url`. The delivery `scheduled_at` is now, `status` is `pending`, and `chaos` is `{}`.
   - Clients with no subscriber, a revoked grant, or a grant for another operator get no row.
   - If the business change rolls back, no event or delivery remains.
   - `correlation_id` is taken from `Thread.current`.
   - Updating an event raises an error, enforced by a database trigger.
-- [ ] T056 [P] [US2] Write `mock_pms/spec/unit/delivery/worker_spec.rb`, with an injected fake transport and a frozen clock.
+- [X] T056 [P] [US2] Write `mock_pms/spec/unit/delivery/worker_spec.rb`, with an injected fake transport and a frozen clock.
   - The worker claims due deliveries with `FOR UPDATE SKIP LOCKED`. Two workers running concurrently, in two threads with separate DB connections, never claim the same row. Tag this example `:committed`.
   - A 2xx response inserts a `delivery_attempts` row with outcome `success` and sets the status to `succeeded`.
   - A 500 response, a timeout (more than 10 s), or a connection error inserts the matching outcome (`http_error` with `http_status`, `timeout`, or `connection_error`). The delivery is rescheduled with the retry schedule and gets `attempt_count += 1`.
@@ -477,16 +477,16 @@ attempts (quickstart §5).
   - A delivery left `in_flight` for more than 60 s goes back to `pending`.
   - Headers sent: `Content-Type: application/json; charset=utf-8`, `PMS-Event-Id`, `PMS-Event-Type`, `PMS-Delivery-Id`, `PMS-Delivery-Attempt`, `PMS-Signature` (with a fresh `t` on every attempt), `X-Correlation-Id`, and `PMS-Replay` only when the delivery is a replay.
   - The body is the envelope from contracts/webhooks.md: `id`, `type`, `occurred_at`, `operator_id`, `api_version: "2026-10-01"`, and `data.object`.
-- [ ] T057 [P] [US2] Write `mock_pms/spec/unit/scenarios/{tenant_move_out,nsf_wave}_spec.rb`.
+- [X] T057 [P] [US2] Write `mock_pms/spec/unit/scenarios/{tenant_move_out,nsf_wave}_spec.rb`.
   - `TenantMoveOut.run!(operator: nil)` picks one `active` lease and sets it to `ended_early` with `actual_end_date`. The tenant becomes `former`.
   - It emits `lease.updated` and then `tenant.moved_out`, with the same `occurred_at` and `correlation_id`. The `tenant.moved_out` `data.object` is `{tenant, lease, move_out_date}`.
   - `NsfWave.run!(count: 5)` reverses `count` recent `settled` payments, writing one `reversals` row each with `reason: nsf`. It emits `payment.reversed` with `status: reversed` and a `reversal` object filled in.
   - Each scenario returns `ScenarioResult` (`scenario`, `run_id`, `events_created`, `counts`), and `run_id` equals the `correlation_id` of every event it creates.
-- [ ] T058 [P] [US2] Write `mock_pms/spec/requests/admin_events_spec.rb`.
+- [X] T058 [P] [US2] Write `mock_pms/spec/requests/admin_events_spec.rb`.
   - `GET /admin/events` (with `type`, `operator_id`, `since`, and pagination) and `GET /admin/deliveries` (with `client_id`, `event_id`, `status`, and pagination) return the contract `Delivery` shape, including `attempts`.
   - `POST /admin/scenarios/{tenant_move_out|nsf_wave}` returns 200 with a `ScenarioResult`. An unknown name returns 404.
   - Repeating a scenario POST with the same `Idempotency-Key` returns the same `run_id` and creates no new events.
-- [ ] T059 [US2] Write `mock_pms/spec/integration/delivery_end_to_end_spec.rb`. Tag the whole file `:committed`, because the worker and receiver threads use their own connections.
+- [X] T059 [US2] Write `mock_pms/spec/integration/delivery_end_to_end_spec.rb`. Tag the whole file `:committed`, because the worker and receiver threads use their own connections.
   - Start a throwaway receiver: a Rack app on Puma, on a random port, in a thread, that records requests.
   - Register a client with that `subscriber_url`, then grant it.
   - Run `TenantMoveOut`, then run `Delivery::Worker#run_once` until no deliveries are due.
@@ -497,7 +497,7 @@ attempts (quickstart §5).
 
 ### Implementation for User Story 2
 
-- [ ] T060 [US2] Create migration `mock_pms/db/migrations/005_events_deliveries.rb`.
+- [X] T060 [US2] Create migration `mock_pms/db/migrations/005_events_deliveries.rb`.
   - **`events`**:
     - `seq`, `id` (`evt_` prefix)
     - `operator_seq` FK
@@ -528,38 +528,38 @@ attempts (quickstart §5).
     - `chaos_applied jsonb`
     - `correlation_id text`
     - A trigger that blocks `UPDATE` and `DELETE`, so the table is immutable.
-- [ ] T061 [P] [US2] Create Sequel models `mock_pms/lib/mock_pms/models/{event,delivery,delivery_attempt}.rb`. Add `Delivery.due(now)`, which returns `status = 'pending' AND scheduled_at <= now`, ordered by `scheduled_at, seq`.
-- [ ] T062 [P] [US2] Implement `mock_pms/lib/mock_pms/delivery/signer.rb`, `MockPms::Delivery::Signer`, using `OpenSSL::HMAC.hexdigest("SHA256", secret, "#{t}.#{body}")` and a constant-time `verify`. This makes T053 pass.
-- [ ] T063 [P] [US2] Implement `mock_pms/lib/mock_pms/delivery/retry_schedule.rb`, making T054 pass. It reads `RETRY_BASE_SECONDS` and `MAX_ATTEMPTS`, and takes an injectable jitter source.
-- [ ] T064 [US2] Implement `mock_pms/lib/mock_pms/events/serializer.rb`, which builds the envelope from contracts/webhooks.md using the T048 presenters, with `api_version` fixed at `"2026-10-01"`. Also implement `mock_pms/lib/mock_pms/events/recorder.rb`, which records the event and fans it out to deliveries in the caller's transaction (FR-017). Leave a single `chaos_for(event, client)` hook that returns `{}` for now; US4 replaces it. This task makes T055 pass.
-- [ ] T065 [P] [US2] Implement `mock_pms/lib/mock_pms/delivery/transport.rb`, a `Net::HTTP` POST wrapper with `open_timeout` and `read_timeout` of 10 s. It returns `{outcome:, http_status:}`. Tests inject a replacement.
-- [ ] T066 [US2] Implement `mock_pms/lib/mock_pms/delivery/worker.rb`, making T056 pass.
+- [X] T061 [P] [US2] Create Sequel models `mock_pms/lib/mock_pms/models/{event,delivery,delivery_attempt}.rb`. Add `Delivery.due(now)`, which returns `status = 'pending' AND scheduled_at <= now`, ordered by `scheduled_at, seq`.
+- [X] T062 [P] [US2] Implement `mock_pms/lib/mock_pms/delivery/signer.rb`, `MockPms::Delivery::Signer`, using `OpenSSL::HMAC.hexdigest("SHA256", secret, "#{t}.#{body}")` and a constant-time `verify`. This makes T053 pass.
+- [X] T063 [P] [US2] Implement `mock_pms/lib/mock_pms/delivery/retry_schedule.rb`, making T054 pass. It reads `RETRY_BASE_SECONDS` and `MAX_ATTEMPTS`, and takes an injectable jitter source.
+- [X] T064 [US2] Implement `mock_pms/lib/mock_pms/events/serializer.rb`, which builds the envelope from contracts/webhooks.md using the T048 presenters, with `api_version` fixed at `"2026-10-01"`. Also implement `mock_pms/lib/mock_pms/events/recorder.rb`, which records the event and fans it out to deliveries in the caller's transaction (FR-017). Leave a single `chaos_for(event, client)` hook that returns `{}` for now; US4 replaces it. This task makes T055 pass.
+- [X] T065 [P] [US2] Implement `mock_pms/lib/mock_pms/delivery/transport.rb`, a `Net::HTTP` POST wrapper with `open_timeout` and `read_timeout` of 10 s. It returns `{outcome:, http_status:}`. Tests inject a replacement.
+- [X] T066 [US2] Implement `mock_pms/lib/mock_pms/delivery/worker.rb`, making T056 pass.
   - **`run_once`**: in a transaction, claim up to 20 due deliveries with `FOR UPDATE SKIP LOCKED` and set them to `in_flight`. Then send each one, insert a `delivery_attempts` row, and either set `succeeded`, or reschedule with `RetrySchedule`, or set `exhausted`.
   - **Reaper**: `in_flight` rows with `updated_at < now - 60 s` go back to `pending`.
   - **Heartbeat**: upsert `worker_heartbeats` every 5 s.
   - **Telemetry**: record `mock_pms_delivery_send_duration_seconds{outcome}` in the metrics buffer, and log each attempt (`code.function.name` = `MockPms::Delivery::Worker#deliver`).
   - Set `Logging.service_name = "mock_pms-worker"`.
-- [ ] T067 [US2] Create `mock_pms/bin/delivery_worker`. It loops `run_once` with a 1 s poll, starts its own `Metrics::Flusher`, and handles `TERM` and `INT` by finishing the current batch and calling `final_flush!`.
-- [ ] T068 [US2] Extend `Seed::Generator` (T044) so it also writes the historical `events` that the seeded history would have produced, with `source: "seed"`, IDs from the seed RNG, `occurred_at` set to historical times, and **no deliveries**. Extend `Seed::Digest` (T045) to include the seeded events, ordered by `id`. Then run T033 again; it must stay green.
-- [ ] T069 [US2] Implement `mock_pms/lib/mock_pms/scenarios/base.rb`. It runs a scenario inside a transaction, sets `Thread.current[:correlation_id] = run_id` (a UUID), and returns a `ScenarioResult`. Then implement `mock_pms/lib/mock_pms/scenarios/tenant_move_out.rb` and `mock_pms/lib/mock_pms/scenarios/nsf_wave.rb`. Business changes go through the models, and events through `Events::Recorder`. This task makes T057 pass.
-- [ ] T070 [US2] Add to `mock_pms/lib/mock_pms/api/admin.rb`:
+- [X] T067 [US2] Create `mock_pms/bin/delivery_worker`. It loops `run_once` with a 1 s poll, starts its own `Metrics::Flusher`, and handles `TERM` and `INT` by finishing the current batch and calling `final_flush!`.
+- [X] T068 [US2] Extend `Seed::Generator` (T044) so it also writes the historical `events` that the seeded history would have produced, with `source: "seed"`, IDs from the seed RNG, `occurred_at` set to historical times, and **no deliveries**. Extend `Seed::Digest` (T045) to include the seeded events, ordered by `id`. Then run T033 again; it must stay green.
+- [X] T069 [US2] Implement `mock_pms/lib/mock_pms/scenarios/base.rb`. It runs a scenario inside a transaction, sets `Thread.current[:correlation_id] = run_id` (a UUID), and returns a `ScenarioResult`. Then implement `mock_pms/lib/mock_pms/scenarios/tenant_move_out.rb` and `mock_pms/lib/mock_pms/scenarios/nsf_wave.rb`. Business changes go through the models, and events through `Events::Recorder`. This task makes T057 pass.
+- [X] T070 [US2] Add to `mock_pms/lib/mock_pms/api/admin.rb`:
   - `GET /admin/events`;
   - `GET /admin/deliveries`, including each delivery's `attempts`;
   - `POST /admin/scenarios/{name}`, which dispatches through a registry of `month_end_burst`, `nsf_wave`, and `tenant_move_out`. `month_end_burst` returns 404 until T094. The endpoint is wrapped in `with_idempotency`.
 
   This task makes T058 pass.
-- [ ] T071 [US2] Make the end-to-end spec T059 pass. Fix any integration gaps it finds in the recorder, worker, or transport, and leave the spec itself unchanged.
-- [ ] T072 [P] [US2] Create `mock_pms/bin/test_receiver`. It is a small Rack app on Puma that listens on `0.0.0.0:<--port>` and accepts `POST /webhooks`.
+- [X] T071 [US2] Make the end-to-end spec T059 pass. Fix any integration gaps it finds in the recorder, worker, or transport, and leave the spec itself unchanged.
+- [X] T072 [P] [US2] Create `mock_pms/bin/test_receiver`. It is a small Rack app on Puma that listens on `0.0.0.0:<--port>` and accepts `POST /webhooks`.
   - It verifies `PMS-Signature` with `RECEIVER_SECRET` using `Delivery::Signer.verify`.
   - It returns 500 for the first `RECEIVER_FAIL_FIRST` requests, then 200.
   - It prints `event_id type sig=ok|bad lag_ms=<now - occurred_at>`.
   - It appends one JSON line per request to `/receiver_logs/receiver.jsonl`, with `received_at`, the headers, `body_sha256`, whether the body parsed, and whether the signature was valid.
-- [ ] T073 [P] [US2] Write `docs/adr/0001-transactional-outbox-delivery.md` (ADR-0001), from research R6.
+- [X] T073 [P] [US2] Write `docs/adr/0001-transactional-outbox-delivery.md` (ADR-0001), from research R6.
   - **Context**: deliveries must survive restarts and be easy to inspect, and replays and chaos timing must be possible.
   - **Decision**: a Postgres outbox drained by a worker using `SKIP LOCKED`, with at-least-once delivery.
   - **Alternatives**: Sidekiq with Redis; an in-process thread pool.
   - **Consequences**: subscribers MUST deduplicate on `PMS-Event-Id`; the reaper exists for crashed workers.
-- [ ] T074 [US2] Add a database-backed delivery metrics collector to `mock_pms/lib/mock_pms/metrics/exposition.rb` (T024). It reports `mock_pms_deliveries_total{status}`, `mock_pms_delivery_attempts_total{outcome}`, `mock_pms_delivery_queue_depth`, and `mock_pms_worker_heartbeat_age_seconds`, all from aggregate queries. Extend `ops_spec.rb` (T013) with a case that checks these metrics appear.
+- [X] T074 [US2] Add a database-backed delivery metrics collector to `mock_pms/lib/mock_pms/metrics/exposition.rb` (T024). It reports `mock_pms_deliveries_total{status}`, `mock_pms_delivery_attempts_total{outcome}`, `mock_pms_delivery_queue_depth`, and `mock_pms_worker_heartbeat_age_seconds`, all from aggregate queries. Extend `ops_spec.rb` (T013) with a case that checks these metrics appear.
 
 **Checkpoint**: quickstart §5 passes by hand. US1 and US2 together let feature 002 build its
 ingestion and idempotency.

@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Drains the webhook outbox: polls every second, finishes the current batch on
+# TERM/INT, then flushes metrics (research R6, R12).
+ENV["SERVICE_NAME"] ||= "mock_pms-worker"
+require_relative "../lib/mock_pms"
+
+MockPms.boot!(migrate: true)
+MockPms::Metrics::Flusher.start!
+
+stopping = false
+%w[TERM INT].each { |signal| trap(signal) { stopping = true } }
+
+worker = MockPms::Delivery::Worker.new
+until stopping
+  begin
+    sleep 1 if worker.run_once.zero?
+  rescue Sequel::Error, Redis::BaseError => e
+    MockPms::Logging.for_function("bin/delivery_worker").error("worker loop error", error: e.class.name,
+                                                                                    detail: e.message)
+    sleep 2
+  end
+end
+MockPms::Metrics::Flusher.final_flush!
