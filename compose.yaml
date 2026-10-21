@@ -1,0 +1,101 @@
+# Scoped to feature 001 (mock PMS); extended by later features.
+# Local development runs entirely through this file (specs/001-mock-pms/quickstart.md).
+
+x-mock-pms: &mock-pms
+  build:
+    context: ./mock_pms
+    args:
+      GIT_SHA: ${GIT_SHA:-dev}
+  image: rentsync/mock_pms:dev
+  env_file: .env
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mock_pms:
+    <<: *mock-pms
+    ports:
+      - "4001:4001"
+    environment:
+      SERVICE_NAME: mock_pms-web
+    volumes:
+      - receiver_logs:/receiver_logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:4001/healthz/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  mock_pms_worker:
+    <<: *mock-pms
+    command: ["bundle", "exec", "bin/delivery_worker"]
+    environment:
+      SERVICE_NAME: mock_pms-worker
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    command: ["--config=/etc/otelcol/collector.yaml"]
+    user: "0:0" # read access to Docker's container log files
+    env_file: .env
+    volumes:
+      - ./infra/otel/collector.yaml:/etc/otelcol/collector.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - openobserve
+
+  openobserve:
+    image: openobserve/openobserve:v1.0.4
+    environment:
+      ZO_ROOT_USER_EMAIL: ${OPENOBSERVE_USER}
+      ZO_ROOT_USER_PASSWORD: ${OPENOBSERVE_PASSWORD}
+      ZO_DATA_DIR: /data
+    ports:
+      - "5080:5080"
+    volumes:
+      - openobserve_data:/data
+
+  # --- tools profile -------------------------------------------------------
+  mock_pms_b: # second web instance, no host port (research R8, R12)
+    <<: *mock-pms
+    profiles: ["tools"]
+    environment:
+      SERVICE_NAME: mock_pms-web
+
+  receiver:
+    <<: *mock-pms
+    profiles: ["tools"]
+    command: ["bundle", "exec", "bin/test_receiver", "--port", "9999"]
+    environment:
+      SERVICE_NAME: mock_pms-tool
+      # Shell values win over the empty defaults in .env (quickstart §5).
+      RECEIVER_SECRET: ${RECEIVER_SECRET:-}
+      RECEIVER_FAIL_FIRST: ${RECEIVER_FAIL_FIRST:-0}
+    volumes:
+      - receiver_logs:/receiver_logs
+
+volumes:
+  postgres_data:
+  openobserve_data:
+  receiver_logs:

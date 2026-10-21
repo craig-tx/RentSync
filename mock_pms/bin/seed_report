@@ -1,0 +1,32 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Prints the seeded portfolio: counts per operator, the payment-behavior mix,
+# ended_early leases, and the operator logins for the OAuth approval page.
+ENV["SERVICE_NAME"] ||= "mock_pms-tool"
+require_relative "../lib/mock_pms"
+MockPms.boot!
+
+report = MockPms::Seed::Report
+puts "Operators (login / password for /oauth/authorize):"
+report.counts_by_operator.each do |o|
+  puts format("  %-24<name>s login=%-11<login>s password=%-16<password>s properties=%<properties>3d " \
+              "leases=%<leases>3d tenants=%<tenants>3d", o)
+end
+
+stats = report.behaviors(anchor: MockPms::Settings.seed_anchor_date)
+puts "\nRent-charge behavior mix:"
+puts "  on time:                 #{stats[:on_time]}"
+puts "  late:                    #{stats[:late_days].size} distinct delays (days: #{stats[:late_days].join(', ')})"
+puts "  partial, later complete: #{stats[:partial_completed]}"
+puts "  partial, never complete: #{stats[:partial_never_completed]}"
+puts "  NSF reversed:            #{stats[:nsf_reversed]}"
+puts "  unpaid:                  #{stats[:unpaid]}"
+
+puts "\nLeases ended early (move-outs):"
+MockPms::Lease.where(status: "ended_early").order(:actual_end_date).each do |lease|
+  puts "  #{lease.id} actual_end_date=#{lease.actual_end_date} scheduled_end_date=#{lease.scheduled_end_date}"
+end
+
+last = MockPms.db[:seed_runs].order(Sequel.desc(:seq)).first
+puts "\nLast seed run: seed=#{last[:seed]} anchor_date=#{last[:anchor_date]} digest=#{last[:data_digest]}" if last

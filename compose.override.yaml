@@ -1,0 +1,16 @@
+# Local development only: mounts the source tree so code changes need no rebuild.
+# Compose loads this file automatically; deployments must not ship it.
+services:
+  mock_pms:
+    volumes:
+      - ./mock_pms:/app
+      - receiver_logs:/receiver_logs
+    environment:
+      SERVICE_NAME: mock_pms-web
+      RACK_ENV: development
+  mock_pms_worker:
+    volumes:
+      - ./mock_pms:/app
+    environment:
+      SERVICE_NAME: mock_pms-worker
+      RACK_ENV: development

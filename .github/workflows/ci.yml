@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    # Service containers are reached on localhost inside an Actions job,
+    # so these override the Compose hostnames in .env.example.
+    env:
+      RACK_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_test
+      REDIS_URL: redis://localhost:6379/0
+      ADMIN_TOKEN: ci-admin-token
+    defaults:
+      run:
+        working-directory: mock_pms
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: mock_pms
+      - run: bundle exec bin/setup --test-db-only
+      - run: bundle exec rubocop
+      - run: bundle exec rspec
+
+  # Constitution VI: an OTLP backend runs in CI and receives every service's telemetry.
+  telemetry-smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - name: Start the stack
+        run: docker compose up -d --build --wait postgres redis mock_pms mock_pms_worker otel-collector openobserve
+      - run: docker compose exec -T mock_pms bundle exec bin/setup
+      - name: Generate a scenario
+        run: |
+          set -a; . ./.env; set +a
+          curl -fsS -X POST localhost:4001/admin/scenarios/tenant_move_out \
+            -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{}'
+      - name: Telemetry reaches OpenObserve
+        run: docker compose exec -T mock_pms bundle exec bin/telemetry_smoke
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs

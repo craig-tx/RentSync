@@ -1,0 +1,232 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Verifies chaos against its configuration through the admin API (quickstart §7, SC-005, FR-026).
+#
+#   bin/chaos_check --receiver-log /receiver_logs/receiver.jsonl [--client-id C] [--token T --api-requests N]
+#       Observed vs configured rate for each effect; exits 1 if any differs by more than
+#       --tolerance (default 0.03) with at least --min-samples (default 200) samples.
+#   bin/chaos_check --generate N [--scenario month_end_burst]
+#       Triggers scenario runs until at least N new events exist.
+#   bin/chaos_check --determinism
+#       Twice: reset, register and approve a client, set chaos with seed 1, run one
+#       scenario; then compares the ordered chaos decisions of both runs.
+#
+# ENV: MOCK_PMS_URL (default http://localhost:4001), ADMIN_TOKEN.
+require "json"
+require "net/http"
+require "optparse"
+require "time"
+require "uri"
+
+class ChaosCheck
+  # --generate alternates month-end bursts with NSF waves: bursts alone run out of
+  # open periods as leases reach the end of their terms.
+  GENERATORS = [["month_end_burst", { share: 1.0, window_s: 60 }], ["nsf_wave", { count: 50 }]].freeze
+  DETERMINISM_CHAOS = { seed: 1, duplicate_rate: 0.2, out_of_order_rate: 0.2, delay_rate: 0.2, delay_min_s: 1,
+                        delay_max_s: 3, malformed_rate: 0.2, server_error_rate: 0 }.freeze
+
+  def initialize(options)
+    @options = options
+    @base = options.fetch(:base)
+    @admin = { "Authorization" => "Bearer #{options.fetch(:admin_token)}" }
+  end
+
+  def run
+    return generate if @options[:generate]
+    return determinism if @options[:determinism]
+    return rates if @options[:receiver_log]
+
+    abort "choose --receiver-log, --generate or --determinism"
+  end
+
+  private
+
+  # --- HTTP -------------------------------------------------------------------
+
+  def request(method, path, body: nil, headers: {}, form: nil)
+    uri = URI.join(@base, path)
+    klass = { get: Net::HTTP::Get, post: Net::HTTP::Post, put: Net::HTTP::Put }.fetch(method)
+    req = klass.new(uri, headers)
+    if form
+      req.set_form_data(form)
+    elsif body
+      req["Content-Type"] = "application/json"
+      req.body = JSON.generate(body)
+    end
+    Net::HTTP.start(uri.host, uri.port, read_timeout: 120) { |http| http.request(req) }
+  end
+
+  def admin_json(method, path, body = nil)
+    res = request(method, path, body: body || (method == :get ? nil : {}), headers: @admin)
+    abort "#{method.upcase} #{path} failed: #{res.code} #{res.body}" unless res.code.start_with?("2")
+    JSON.parse(res.body)
+  end
+
+  def all_pages(path)
+    rows = []
+    cursor = nil
+    loop do
+      sep = path.include?("?") ? "&" : "?"
+      page = admin_json(:get, "#{path}#{sep}limit=200#{"&cursor=#{cursor}" if cursor}")
+      rows.concat(page["data"])
+      cursor = page["next_cursor"]
+      break unless cursor
+    end
+    rows
+  end
+
+  # --- --generate ----------------------------------------------------------------
+
+  def generate
+    target = Integer(@options[:generate])
+    created = 0
+    GENERATORS.cycle.with_index do |(scenario, body), i|
+      break if created >= target
+
+      result = admin_json(:post, "/admin/scenarios/#{scenario}", body)
+      abort "no scenario can create more events" if result["events_created"].zero? && i > 4
+      created += result["events_created"]
+      puts "#{scenario}: +#{result['events_created']} (#{created}/#{target})"
+    end
+  end
+
+  # --- --receiver-log ----------------------------------------------------------------
+
+  def rates
+    config = admin_json(:get, "/admin/chaos")
+    query = @options[:client_id] ? "?client_id=#{@options[:client_id]}" : ""
+    deliveries = all_pages("/admin/deliveries#{query}").reject { |d| d["replay"] }
+    log = File.readlines(@options[:receiver_log]).map { |l| JSON.parse(l) }.reject { |e| e["replay"] }
+    log = log.select { |e| deliveries.any? { |d| d["id"] == e["delivery_id"] } } if @options[:client_id]
+    firsts = deliveries.reject { |d| d["chaos"].key?("duplicate_of") }
+    rows = measurements(config, deliveries, firsts, log)
+    report(rows)
+  end
+
+  def measurements(config, deliveries, firsts, log)
+    rows = [duplicates(config, log), flagged(config, "out_of_order", "reorder_hold_s", firsts),
+            flagged(config, "delay", "delayed_s", firsts), malformed(config, log)]
+    rows << api_errors(config) if @options[:token]
+    puts "deliveries considered: #{deliveries.size} (#{firsts.size} first copies); receiver entries: #{log.size}"
+    puts "reordered deliveries overtaken by a later event: #{overtaken(firsts, log)}"
+    rows
+  end
+
+  # Events delivered successfully by more than one distinct delivery.
+  def duplicates(config, log)
+    by_event = log.select { |e| e["status"] == 200 }.group_by { |e| e["event_id"] }
+    hits = by_event.count { |_, entries| entries.map { |e| e["delivery_id"] }.uniq.size > 1 }
+    ["duplicate", config["duplicate_rate"], hits, by_event.size]
+  end
+
+  # Share of first copies whose stored decision carries the given chaos key.
+  def flagged(config, effect, key, firsts)
+    [effect, config["#{effect}_rate"], firsts.count { |d| d["chaos"].key?(key) }, firsts.size]
+  end
+
+  # First receipt of each delivery whose body fails to parse or fails the envelope check.
+  def malformed(config, log)
+    receipts = log.uniq { |e| e["delivery_id"] }
+    ["malformed", config["malformed_rate"], receipts.count { |e| !e["valid_envelope"] }, receipts.size]
+  end
+
+  def api_errors(config)
+    n = Integer(@options.fetch(:api_requests, 1000))
+    errors = n.times.count do
+      res = request(:get, "/v1/properties?limit=1", headers: { "Authorization" => "Bearer #{@options[:token]}" })
+      res.code == "500" && res.body.include?("chaos_injected")
+    end
+    ["server_error", config["server_error_rate"], errors, n]
+  end
+
+  # For flagged (reordered) deliveries: how many were overtaken, i.e. a delivery created
+  # later (listings are in creation order) reached the receiver first.
+  def overtaken(firsts, log)
+    arrival = log.group_by { |e| e["delivery_id"] }.transform_values { |es| es.map { |e| e["received_at"] }.min }
+    flagged = firsts.each_index.select { |i| firsts[i]["chaos"].key?("reorder_hold_s") && arrival[firsts[i]["id"]] }
+    count = flagged.count do |i|
+      mine = arrival[firsts[i]["id"]]
+      firsts[(i + 1)..].any? { |o| arrival[o["id"]] && arrival[o["id"]] < mine }
+    end
+    "#{count}/#{flagged.size}"
+  end
+
+  def report(rows)
+    tolerance = Float(@options.fetch(:tolerance, 0.03))
+    min_samples = Integer(@options.fetch(:min_samples, 200))
+    failed = false
+    puts "effect        configured   observed   samples  result"
+    rows.each do |effect, configured, hits, samples|
+      observed = samples.zero? ? 0.0 : hits.to_f / samples
+      verdict = if samples < min_samples then "SKIP (< #{min_samples} samples)"
+                elsif (observed - configured.to_f).abs <= tolerance then "OK"
+                else
+                  failed = true
+                  "FAIL (> ±#{(tolerance * 100).round} pts)"
+                end
+      puts format("%-13<e>s %10.3<c>f %10.3<o>f %9<n>d  %<r>s", e: effect, c: configured.to_f, o: observed, n: samples,
+                                                                r: verdict)
+    end
+    exit(failed ? 1 : 0)
+  end
+
+  # --- --determinism ---------------------------------------------------------------
+
+  def determinism
+    runs = Array.new(2) { |i| determinism_run(i + 1) }
+    if runs[0] == runs[1]
+      puts "determinism OK: #{runs[0].size} deliveries, identical chaos decision sequences"
+      exit 0
+    end
+    first_diff = runs[0].zip(runs[1]).index { |a, b| a != b }
+    puts "determinism FAILED at delivery #{first_diff}: " \
+         "#{runs[0][first_diff].inspect} vs #{runs[1][first_diff].inspect}"
+    exit 1
+  end
+
+  def determinism_run(n)
+    admin_json(:post, "/admin/reset", { seed: 42, anchor_date: "2026-10-20" })
+    client = admin_json(:post, "/admin/clients", { name: "determinism-#{n}", redirect_uris: ["http://localhost:9999/cb"],
+                                                   subscriber_url: "http://receiver:9999/webhooks" })
+    approve(client)
+    admin_json(:put, "/admin/chaos", DETERMINISM_CHAOS)
+    result = admin_json(:post, "/admin/scenarios/#{@options.fetch(:scenario, 'nsf_wave')}", { count: 25 })
+    puts "run #{n}: #{result['events_created']} events"
+    normalize(all_pages("/admin/deliveries?client_id=#{client['client_id']}"))
+  end
+
+  # Approves the client as a seeded operator by posting the authorization form (no browser).
+  def approve(client)
+    res = request(:post, "/oauth/authorize", form: {
+                    response_type: "code", client_id: client["client_id"], redirect_uri: "http://localhost:9999/cb",
+                    login: "lonestar", password: "lonestar-pass", decision: "approve"
+                  })
+    abort "approval failed: #{res.code}" unless res.code == "302"
+  end
+
+  # Delivery ids are random; compare decisions with duplicate_of rewritten to positions.
+  def normalize(deliveries)
+    position = deliveries.each_with_index.to_h { |d, i| [d["id"], i] }
+    deliveries.map do |d|
+      chaos = d["chaos"].dup
+      chaos["duplicate_of"] = position[chaos["duplicate_of"]] if chaos.key?("duplicate_of")
+      chaos
+    end
+  end
+end
+
+options = { base: ENV.fetch("MOCK_PMS_URL", "http://localhost:4001"), admin_token: ENV.fetch("ADMIN_TOKEN", "") }
+OptionParser.new do |o|
+  o.on("--base URL") { |v| options[:base] = v }
+  o.on("--receiver-log PATH") { |v| options[:receiver_log] = v }
+  o.on("--client-id ID") { |v| options[:client_id] = v }
+  o.on("--token T") { |v| options[:token] = v }
+  o.on("--api-requests N") { |v| options[:api_requests] = v }
+  o.on("--tolerance X") { |v| options[:tolerance] = v }
+  o.on("--min-samples N") { |v| options[:min_samples] = v }
+  o.on("--generate N") { |v| options[:generate] = v }
+  o.on("--scenario NAME") { |v| options[:scenario] = v }
+  o.on("--determinism") { options[:determinism] = true }
+end.parse!
+ChaosCheck.new(options).run

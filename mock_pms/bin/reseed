@@ -1,0 +1,20 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Usage: bin/reseed [--seed N] [--anchor YYYY-MM-DD]
+# Truncates seed state and regenerates it; prints the data digest (SC-002).
+require "optparse"
+
+ENV["SERVICE_NAME"] ||= "mock_pms-tool"
+require_relative "../lib/mock_pms"
+
+options = {}
+OptionParser.new do |o|
+  o.on("--seed N", Integer) { |v| options[:seed] = v }
+  o.on("--anchor DATE") { |v| options[:anchor] = Date.iso8601(v) }
+end.parse!
+
+MockPms.boot!
+result = MockPms::Seed::Reset.run!(seed: options.fetch(:seed, MockPms::Settings.seed),
+                                   anchor_date: options.fetch(:anchor, MockPms::Settings.seed_anchor_date))
+puts "seed=#{result[:seed]} anchor_date=#{result[:anchor_date]} data_digest=#{result[:data_digest]}"

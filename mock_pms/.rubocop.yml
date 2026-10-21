@@ -1,0 +1,66 @@
+require:
+  - ./.rubocop/no_direct_logger.rb
+
+AllCops:
+  TargetRubyVersion: 3.3
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - "vendor/**/*"
+    - "tmp/**/*"
+
+MockPms/NoDirectLogger:
+  Enabled: true
+  Exclude:
+    - "lib/mock_pms/logging.rb"
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/MethodLength:
+  Max: 30
+
+Metrics/AbcSize:
+  Max: 40
+
+Metrics/ClassLength:
+  Max: 250
+
+Metrics/ModuleLength:
+  Max: 250
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*"
+    - "db/migrations/**/*"
+    - "lib/mock_pms/api/**/*"
+
+Metrics/CyclomaticComplexity:
+  Max: 12
+
+Metrics/PerceivedComplexity:
+  Max: 12
+
+Metrics/ParameterLists:
+  CountKeywordArgs: false
+
+Layout/LineLength:
+  Max: 120
+
+Naming/MethodParameterName:
+  AllowedNames: [at, by, c, db, id, io, k, l, le, n, o, p, r, s, t, to, tx, u, v]
+
+Naming/PredicateMethod:
+  Enabled: false
+
+# Sequel virtual-row blocks build SQL; `x > 0` is required there, not `x.positive?`.
+Style/NumericPredicate:
+  Exclude:
+    - "db/migrations/**/*"
+
+Naming/VariableNumber:
+  EnforcedStyle: snake_case
+  CheckSymbols: false

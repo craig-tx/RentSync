@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Rate-limit probe (quickstart §6).
+#   bin/hammer --token T --requests N --path /v1/properties [--targets http://a:4001,http://b:4001]
+# Alternates requests round-robin across targets and prints a count per status and
+# the first Retry-After seen.
+require "net/http"
+require "optparse"
+require "uri"
+
+options = { requests: 70, path: "/v1/properties", targets: ["http://localhost:4001"] }
+OptionParser.new do |o|
+  o.on("--token T") { |v| options[:token] = v }
+  o.on("--requests N", Integer) { |v| options[:requests] = v }
+  o.on("--path P") { |v| options[:path] = v }
+  o.on("--targets LIST") { |v| options[:targets] = v.split(",").map(&:strip) }
+end.parse!
+abort "--token is required" unless options[:token]
+
+counts = Hash.new(0)
+first_retry_after = nil
+options[:requests].times do |i|
+  uri = URI.join(options[:targets][i % options[:targets].size], options[:path])
+  request = Net::HTTP::Get.new(uri)
+  request["Authorization"] = "Bearer #{options[:token]}"
+  response = Net::HTTP.start(uri.host, uri.port) { |http| http.request(request) }
+  counts[response.code] += 1
+  first_retry_after ||= response["Retry-After"] if response.code == "429"
+end
+
+counts.sort.each { |code, n| puts "#{code}: #{n}" }
+puts "first Retry-After: #{first_retry_after || 'none'}"

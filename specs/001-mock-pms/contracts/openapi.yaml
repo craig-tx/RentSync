@@ -1,0 +1,750 @@
+openapi: 3.1.0
+info:
+  title: Mock PMS
+  version: 0.1.0
+  description: |
+    Simulated property management system for RentSync (feature 001). Test harness only.
+    Webhook deliveries are specified separately in webhooks.md.
+
+    Error envelope (all non-OAuth errors): {"error": {"code": "...", "message": "..."}}
+servers:
+  - url: http://localhost:4001
+
+tags:
+  - name: oauth
+  - name: data
+  - name: admin
+  - name: ops
+
+components:
+  securitySchemes:
+    pmsOAuth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: /oauth/authorize
+          tokenUrl: /oauth/token
+          refreshUrl: /oauth/token
+          scopes:
+            read: Read all data for the authorizing operator
+    adminToken:
+      type: http
+      scheme: bearer
+      description: ADMIN_TOKEN from environment.
+
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque; pass back next_cursor from the previous page.
+      schema: { type: string }
+    UpdatedSince:
+      name: updated_since
+      in: query
+      description: Filter only; does not change ordering.
+      schema: { type: string, format: date-time }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Repeat with same key + same body returns the stored response; different body → 422
+        (idempotency_key_mismatch); same key while the first request is still running → 409
+        (idempotency_in_progress). Keys survive /admin/reset. Not offered on endpoints whose
+        response contains a secret (POST /admin/clients).
+      schema: { type: string, maxLength: 200 }
+
+  headers:
+    RetryAfter:
+      description: Whole seconds until a request will be accepted.
+      schema: { type: integer, minimum: 1 }
+    WWWAuthenticate:
+      description: |
+        Bearer error="invalid_token", error_description="token expired" | "token invalid"
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing, invalid, revoked, or expired access token.
+      headers:
+        WWW-Authenticate: { $ref: '#/components/headers/WWWAuthenticate' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Per-client rate limit exceeded.
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServerError:
+      description: Includes chaos-injected failures (error.code = "chaos_injected").
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimiterUnavailable:
+      description: Rate-limit store (Redis) unreachable; the API fails closed (error.code = "rate_limiter_unavailable").
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    AdminUnauthorized:
+      description: Missing or wrong admin token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+
+    OAuthError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [invalid_request, invalid_client, invalid_grant, unauthorized_client, unsupported_grant_type, access_denied]
+        error_description: { type: string }
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in, refresh_token, scope]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_in: { type: integer, description: Seconds; default 300 }
+        refresh_token: { type: string, description: Single-use; rotated on every refresh }
+        scope: { type: string, const: read }
+
+    Money:
+      type: object
+      required: [amount_cents, currency]
+      properties:
+        amount_cents: { type: integer }
+        currency: { type: string, pattern: '^[A-Z]{3}$', example: USD }
+
+    Timestamps:
+      type: object
+      required: [created_at, updated_at]
+      properties:
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Property:
+      allOf:
+        - $ref: '#/components/schemas/Timestamps'
+        - type: object
+          required: [id, address, status]
+          properties:
+            id: { type: string, pattern: '^prop_' }
+            address:
+              type: object
+              properties:
+                line1: { type: string }
+                city: { type: string }
+                state: { type: string }
+                postal_code: { type: string }
+            bedrooms: { type: integer }
+            bathrooms: { type: number }
+            status: { type: string, enum: [occupied, vacant, make_ready] }
+
+    Tenant:
+      allOf:
+        - $ref: '#/components/schemas/Timestamps'
+        - type: object
+          required: [id, first_name, last_name, status]
+          properties:
+            id: { type: string, pattern: '^ten_' }
+            first_name: { type: string }
+            last_name: { type: string }
+            email: { type: string }
+            phone: { type: string }
+            status: { type: string, enum: [current, former] }
+
+    Lease:
+      allOf:
+        - $ref: '#/components/schemas/Timestamps'
+        - type: object
+          required: [id, property_id, tenant_id, start_date, scheduled_end_date, monthly_rent, due_day, status]
+          properties:
+            id: { type: string, pattern: '^lease_' }
+            property_id: { type: string }
+            tenant_id: { type: string }
+            start_date: { type: string, format: date }
+            scheduled_end_date: { type: string, format: date }
+            actual_end_date: { type: [string, 'null'], format: date }
+            monthly_rent: { $ref: '#/components/schemas/Money' }
+            due_day: { type: integer, minimum: 1, maximum: 28 }
+            grace_days: { type: integer }
+            late_fee: { $ref: '#/components/schemas/Money' }
+            status: { type: string, enum: [pending, active, ended, ended_early] }
+
+    Charge:
+      allOf:
+        - $ref: '#/components/schemas/Timestamps'
+        - $ref: '#/components/schemas/Money'
+        - type: object
+          required: [id, lease_id, kind, period, due_date]
+          properties:
+            id: { type: string, pattern: '^chg_' }
+            lease_id: { type: string }
+            kind: { type: string, enum: [rent, late_fee] }
+            period: { type: string, format: date, description: First day of covered month }
+            due_date: { type: string, format: date }
+
+    Payment:
+      allOf:
+        - $ref: '#/components/schemas/Timestamps'
+        - $ref: '#/components/schemas/Money'
+        - type: object
+          required: [id, lease_id, received_at, method, status, applied_to]
+          properties:
+            id: { type: string, pattern: '^pay_' }
+            lease_id: { type: string }
+            received_at: { type: string, format: date-time }
+            method: { type: string, enum: [ach, card, check, money_order] }
+            status: { type: string, enum: [settled, reversed] }
+            applied_to:
+              description: PMS-reported application; not authoritative for RentSync matching.
+              type: array
+              items:
+                type: object
+                required: [charge_id, amount_cents]
+                properties:
+                  charge_id: { type: string }
+                  amount_cents: { type: integer }
+            reversal:
+              type: [object, 'null']
+              properties:
+                id: { type: string, pattern: '^rev_' }
+                reason: { type: string, enum: [nsf, account_closed, stop_payment] }
+                reversed_at: { type: string, format: date-time }
+                amount_cents: { type: integer }
+
+    Page:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        next_cursor: { type: [string, 'null'], description: null on last page }
+
+    ChaosSettings:
+      type: object
+      properties:
+        duplicate_rate: { type: number, minimum: 0, maximum: 1 }
+        out_of_order_rate: { type: number, minimum: 0, maximum: 1 }
+        delay_rate: { type: number, minimum: 0, maximum: 1 }
+        delay_min_s: { type: integer, minimum: 0 }
+        delay_max_s: { type: integer, maximum: 3600 }
+        server_error_rate: { type: number, minimum: 0, maximum: 1 }
+        malformed_rate: { type: number, minimum: 0, maximum: 1 }
+        seed: { type: integer }
+
+    Client:
+      type: object
+      properties:
+        client_id: { type: string, pattern: '^client_' }
+        name: { type: string }
+        redirect_uris: { type: array, items: { type: string, format: uri } }
+        subscriber_url: { type: [string, 'null'], format: uri }
+        rate_limit_per_minute: { type: [integer, 'null'] }
+
+    ClientCreated:
+      allOf:
+        - $ref: '#/components/schemas/Client'
+        - type: object
+          required: [client_secret, signing_secret]
+          properties:
+            client_secret: { type: string, description: Shown once only }
+            signing_secret: { type: string }
+
+    Delivery:
+      type: object
+      properties:
+        id: { type: string, pattern: '^dlv_' }
+        event_id: { type: string }
+        client_id: { type: string }
+        status: { type: string, enum: [pending, in_flight, succeeded, exhausted] }
+        attempt_count: { type: integer }
+        replay: { type: boolean }
+        chaos: { type: object }
+        attempts:
+          type: array
+          items:
+            type: object
+            properties:
+              attempt_number: { type: integer }
+              started_at: { type: string, format: date-time }
+              outcome: { type: string, enum: [success, http_error, timeout, connection_error] }
+              http_status: { type: [integer, 'null'] }
+
+    ScenarioResult:
+      type: object
+      properties:
+        scenario: { type: string }
+        run_id: { type: string, description: Also the correlation_id on produced events }
+        events_created: { type: integer }
+        counts: { type: object, additionalProperties: { type: integer } }
+
+paths:
+  # ---------------- OAuth ----------------
+  /oauth/authorize:
+    get:
+      tags: [oauth]
+      security: []
+      summary: Operator sign-in and approval page (HTML)
+      parameters:
+        - { name: response_type, in: query, required: true, schema: { const: code } }
+        - { name: client_id, in: query, required: true, schema: { type: string } }
+        - { name: redirect_uri, in: query, required: true, schema: { type: string, format: uri } }
+        - { name: scope, in: query, schema: { const: read } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: code_challenge, in: query, schema: { type: string } }
+        - { name: code_challenge_method, in: query, schema: { const: S256 } }
+      responses:
+        '200': { description: HTML sign-in/approve form, content: { text/html: {} } }
+        '400': { description: Unknown client or redirect_uri not registered (no redirect performed) }
+    post:
+      tags: [oauth]
+      security: []
+      summary: Submit operator credentials and decision
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [login, password, decision, client_id, redirect_uri]
+              properties:
+                login: { type: string }
+                password: { type: string }
+                decision: { type: string, enum: [approve, deny] }
+                client_id: { type: string }
+                redirect_uri: { type: string }
+                state: { type: string }
+                code_challenge: { type: string }
+                code_challenge_method: { type: string }
+      responses:
+        '302':
+          description: |
+            approve → {redirect_uri}?code=...&state=... (code single-use, 60 s)
+            deny    → {redirect_uri}?error=access_denied&state=...
+        '200': { description: Re-rendered form with "invalid credentials" }
+
+  /oauth/token:
+    post:
+      tags: [oauth]
+      security: []
+      summary: Exchange code or refresh token
+      description: Client auth via HTTP Basic (client_id:client_secret) or form fields. Exempt from rate limit and chaos.
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              oneOf:
+                - type: object
+                  required: [grant_type, code, redirect_uri]
+                  properties:
+                    grant_type: { const: authorization_code }
+                    code: { type: string }
+                    redirect_uri: { type: string }
+                    code_verifier: { type: string }
+                    client_id: { type: string }
+                    client_secret: { type: string }
+                - type: object
+                  required: [grant_type, refresh_token]
+                  properties:
+                    grant_type: { const: refresh_token }
+                    refresh_token: { type: string }
+                    client_id: { type: string }
+                    client_secret: { type: string }
+      responses:
+        '200':
+          description: New token pair. Used code / refresh token is invalidated.
+          content: { application/json: { schema: { $ref: '#/components/schemas/TokenResponse' } } }
+        '400':
+          description: invalid_grant (reused/expired/unknown code or refresh token, redirect mismatch, PKCE fail), invalid_request, unsupported_grant_type
+          content: { application/json: { schema: { $ref: '#/components/schemas/OAuthError' } } }
+        '401':
+          description: invalid_client
+          content: { application/json: { schema: { $ref: '#/components/schemas/OAuthError' } } }
+
+  # ---------------- Data (scoped to the token's operator) ----------------
+  /v1/properties:
+    get:
+      tags: [data]
+      summary: List properties
+      security: [{ pmsOAuth: [read] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Page of properties ordered by creation sequence
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/Property' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '422': { description: 'Invalid query parameter (limit outside 1..200, malformed cursor or date); error.code = invalid_parameter' }
+        '503': { $ref: '#/components/responses/RateLimiterUnavailable' }
+
+  /v1/tenants:
+    get:
+      tags: [data]
+      summary: List tenants
+      security: [{ pmsOAuth: [read] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Page of tenants
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/Tenant' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '422': { description: 'Invalid query parameter (limit outside 1..200, malformed cursor or date); error.code = invalid_parameter' }
+        '503': { $ref: '#/components/responses/RateLimiterUnavailable' }
+
+  /v1/leases:
+    get:
+      tags: [data]
+      summary: List leases
+      security: [{ pmsOAuth: [read] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/UpdatedSince'
+        - { name: property_id, in: query, schema: { type: string } }
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, active, ended, ended_early] } }
+      responses:
+        '200':
+          description: Page of leases
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/Lease' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '422': { description: 'Invalid query parameter (limit outside 1..200, malformed cursor or date); error.code = invalid_parameter' }
+        '503': { $ref: '#/components/responses/RateLimiterUnavailable' }
+
+  /v1/charges:
+    get:
+      tags: [data]
+      summary: List charges
+      security: [{ pmsOAuth: [read] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/UpdatedSince'
+        - { name: lease_id, in: query, schema: { type: string } }
+        - { name: from, in: query, description: due_date >= from, schema: { type: string, format: date } }
+        - { name: to, in: query, description: due_date <= to, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Page of charges
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/Charge' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '422': { description: 'Invalid query parameter (limit outside 1..200, malformed cursor or date); error.code = invalid_parameter' }
+        '503': { $ref: '#/components/responses/RateLimiterUnavailable' }
+
+  /v1/payments:
+    get:
+      tags: [data]
+      summary: List payments
+      security: [{ pmsOAuth: [read] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/UpdatedSince'
+        - { name: lease_id, in: query, schema: { type: string } }
+        - { name: from, in: query, description: received_at >= from, schema: { type: string, format: date-time } }
+        - { name: to, in: query, description: received_at < to, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: Page of payments (reversed payments included, with reversal object)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/Payment' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '422': { description: 'Invalid query parameter (limit outside 1..200, malformed cursor or date); error.code = invalid_parameter' }
+        '503': { $ref: '#/components/responses/RateLimiterUnavailable' }
+
+  /v1/{resource}/{id}:
+    get:
+      tags: [data]
+      summary: Fetch one record by public id
+      security: [{ pmsOAuth: [read] }]
+      parameters:
+        - { name: resource, in: path, required: true, schema: { type: string, enum: [properties, tenants, leases, charges, payments] } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The record (schema per resource) }
+        '404': { description: Not found or belongs to another operator (indistinguishable by design) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '422': { description: 'Invalid query parameter (limit outside 1..200, malformed cursor or date); error.code = invalid_parameter' }
+        '503': { $ref: '#/components/responses/RateLimiterUnavailable' }
+
+  # ---------------- Admin (ADMIN_TOKEN; exempt from rate limit and chaos) ----------------
+  /admin/status:
+    get:
+      tags: [admin]
+      summary: Admin liveness and service version
+      security: [{ adminToken: [] }]
+      responses:
+        '200': { description: '{"status":"ok","service_version":"<git sha>"}' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+  /admin/clients:
+    post:
+      tags: [admin]
+      summary: Register an integration client
+      description: |
+        Not idempotent by design: the response contains the one-time client_secret, which is
+        never stored, so a retry registers a second client. Idempotency-Key is ignored here.
+      security: [{ adminToken: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, redirect_uris]
+              properties:
+                name: { type: string }
+                redirect_uris: { type: array, minItems: 1, items: { type: string, format: uri } }
+                subscriber_url: { type: [string, 'null'], format: uri }
+                rate_limit_per_minute: { type: [integer, 'null'] }
+      responses:
+        '201': { description: Registered, content: { application/json: { schema: { $ref: '#/components/schemas/ClientCreated' } } } }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '422': { description: Validation error }
+    get:
+      tags: [admin]
+      summary: List clients
+      security: [{ adminToken: [] }]
+      responses:
+        '200': { description: All clients (no client_secret), content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Client' } } } } }
+
+  /admin/clients/{client_id}:
+    patch:
+      tags: [admin]
+      summary: Update subscriber_url, redirect_uris, or rate limit
+      security: [{ adminToken: [] }]
+      parameters: [{ name: client_id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/Client' } } }
+      responses:
+        '200': { description: Updated client }
+
+  /admin/grants/{grant_id}/revoke:
+    post:
+      tags: [admin]
+      summary: Revoke a grant
+      security: [{ adminToken: [] }]
+      parameters:
+        - { name: grant_id, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { description: Revoked (idempotent; revoking an already-revoked grant returns 200 with original revoked_at) }
+
+  /admin/grants:
+    get:
+      tags: [admin]
+      summary: List grants
+      security: [{ adminToken: [] }]
+      responses:
+        '200': { description: 'Grants with client, operator, created_at, revoked_at' }
+
+  /admin/chaos:
+    get:
+      tags: [admin]
+      summary: Get chaos settings
+      security: [{ adminToken: [] }]
+      responses:
+        '200': { content: { application/json: { schema: { $ref: '#/components/schemas/ChaosSettings' } } }, description: Current settings }
+    put:
+      tags: [admin]
+      summary: Replace chaos settings (takes effect immediately; RNG streams reseeded)
+      security: [{ adminToken: [] }]
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChaosSettings' } } }
+      responses:
+        '200': { content: { application/json: { schema: { $ref: '#/components/schemas/ChaosSettings' } } }, description: Updated }
+        '422': { description: Out-of-range value }
+
+  /admin/events:
+    get:
+      tags: [admin]
+      summary: List events
+      security: [{ adminToken: [] }]
+      parameters:
+        - { name: type, in: query, schema: { type: string } }
+        - { name: operator_id, in: query, schema: { type: string } }
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { description: Page of events (envelope as in webhooks.md) }
+
+  /admin/events/{event_id}/replay:
+    post:
+      tags: [admin]
+      summary: Replay one event to a client
+      security: [{ adminToken: [] }]
+      parameters:
+        - { name: event_id, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id]
+              properties:
+                client_id: { type: string }
+      responses:
+        '202': { description: Replay delivery queued, content: { application/json: { schema: { $ref: '#/components/schemas/Delivery' } } } }
+        '409': { description: "Client has no active grant for the event's operator, or no subscriber_url" }
+
+  /admin/replays:
+    post:
+      tags: [admin]
+      summary: Replay all events in a time range for a client
+      security: [{ adminToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id, from, to]
+              properties:
+                client_id: { type: string }
+                from: { type: string, format: date-time, description: occurred_at >= from }
+                to: { type: string, format: date-time, description: occurred_at < to }
+                types: { type: array, items: { type: string } }
+      responses:
+        '202':
+          description: Replay deliveries queued in occurred_at order (chaos still applies)
+          content: { application/json: { schema: { type: object, properties: { queued: { type: integer } } } } }
+        '409': { description: Client has no active grant or no subscriber_url }
+
+  /admin/deliveries:
+    get:
+      tags: [admin]
+      summary: Delivery log
+      security: [{ adminToken: [] }]
+      parameters:
+        - { name: client_id, in: query, schema: { type: string } }
+        - { name: event_id, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { description: Page of deliveries with attempts, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/Page' }, { properties: { data: { type: array, items: { $ref: '#/components/schemas/Delivery' } } } }] } } } }
+
+  /admin/scenarios/{name}:
+    post:
+      tags: [admin]
+      summary: Trigger a named scenario
+      security: [{ adminToken: [] }]
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string, enum: [month_end_burst, nsf_wave, tenant_move_out] } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operator_id: { type: string, description: Default all operators }
+                share: { type: number, minimum: 0, maximum: 1, description: "month_end_burst: share of active leases paying (default 0.8)" }
+                count: { type: integer, description: "nsf_wave: payments to reverse (default 5)" }
+                window_s: { type: integer, description: "Spread of occurred_at across the burst (default 120)" }
+      responses:
+        '200': { description: Scenario applied, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioResult' } } } }
+        '404': { description: Unknown scenario }
+
+  /admin/reset:
+    post:
+      tags: [admin]
+      summary: Truncate and reseed (deliveries, grants, clients are cleared too)
+      security: [{ adminToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                seed: { type: integer, default: 42 }
+                anchor_date: { type: string, format: date }
+      responses:
+        '200':
+          description: Reseeded
+          content: { application/json: { schema: { type: object, properties: { seed: { type: integer }, anchor_date: { type: string }, data_digest: { type: string } } } } }
+
+  # ---------------- Ops ----------------
+  /healthz:
+    get:
+      tags: [ops]
+      summary: Health check
+      security: []
+      responses:
+        '200': { description: 'DB and Redis reachable, worker heartbeat < 30 s. {"status":"ok","db":"ok","redis":"ok","worker_heartbeat_age_s":3}' }
+        '503': { description: 'Degraded; same body shape, failing component marked' }
+  /healthz/live:
+    get:
+      tags: [ops]
+      summary: Liveness (process is up; used by container healthchecks)
+      security: []
+      responses:
+        '200': { description: '{"status":"ok"}' }
+  /metrics:
+    get:
+      tags: [ops]
+      summary: Prometheus metrics
+      security: []
+      responses:
+        '200': { description: 'Prometheus text exposition (cluster-wide totals). Always includes target_info{service_name="mock_pms-web",service_version,deployment_environment} 1.', content: { text/plain: {} } }

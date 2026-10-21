@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Creates the mock_pms and mock_pms_test databases if missing, runs migrations,
+# and seeds (unless --test-db-only).
+require "sequel"
+require_relative "../config/settings"
+require_relative "../lib/mock_pms/db"
+
+test_only = ARGV.include?("--test-db-only")
+ENV["SERVICE_NAME"] ||= "mock_pms-tool"
+
+def migrate!(url)
+  Sequel.extension :migration
+  Sequel.connect(url) do |db|
+    Sequel::Migrator.run(db, File.expand_path("../db/migrations", __dir__))
+  end
+end
+
+urls = [ENV.fetch("TEST_DATABASE_URL")]
+urls.unshift(ENV.fetch("DATABASE_URL")) unless test_only
+urls.each do |url|
+  MockPms.ensure_database!(url)
+  migrate!(url)
+end
+
+unless test_only
+  require_relative "../lib/mock_pms"
+  MockPms.boot!
+  if defined?(MockPms::Seed::Reset)
+    result = MockPms::Seed::Reset.run!(seed: MockPms::Settings.seed, anchor_date: MockPms::Settings.seed_anchor_date)
+    puts "seeded: seed=#{result[:seed]} anchor_date=#{result[:anchor_date]} data_digest=#{result[:data_digest]}"
+  end
+end
+puts "setup complete (#{test_only ? 'test database only' : 'all databases'})"
