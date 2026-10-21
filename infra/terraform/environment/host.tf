@@ -44,8 +44,13 @@ module "host" {
   # with this tag (contracts/bootstrap-iam.md).
   extra_tags = { "rentsync:deployable" = "true" }
 
-  # The mock PMS stack is added in US2 (tasks T056-T059).
-  files = {}
+  # The mock PMS stack (research R7). One copy of each file, read from infra/.
+  files = {
+    "/opt/rentsync/compose.yaml"     = { content = file("${path.module}/../../host/compose.env.yaml"), permissions = "0644" }
+    "/opt/rentsync/Caddyfile"        = { content = file("${path.module}/../../host/Caddyfile.env"), permissions = "0644" }
+    "/opt/rentsync/collector.yaml"   = { content = file("${path.module}/../../otel/collector.yaml"), permissions = "0644" }
+    "/usr/local/bin/rentsync-deploy" = { content = file("${path.module}/../../host/bin/rentsync-deploy"), permissions = "0755" }
+  }
   host_env = {
     HOST_ROLE                 = "environment"
     DEPLOYMENT_ID             = var.deployment_id
@@ -56,5 +61,7 @@ module "host" {
     SSM_READ_PATHS            = join(" ", [local.ssm_prefix, local.shared.ingest_ssm_path])
     ECR_REPOSITORY_URL        = local.shared.ecr_repository_url
     OPENOBSERVE_OTLP_ENDPOINT = local.shared.otlp_endpoint
+    ACME_EMAIL                = var.acme_email
+    ACME_CA                   = var.acme_ca
   }
 }

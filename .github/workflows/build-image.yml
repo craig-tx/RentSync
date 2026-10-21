@@ -1,0 +1,54 @@
+# Builds the mock PMS image for one commit and pushes it to ECR (feature 002 research R9).
+# Reusable: called by release.yml and deploy.yml. Tags are immutable, so an existing tag is
+# skipped and a re-run never produces a second image for one commit.
+name: Build image
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Full 40-character commit SHA to build; also the image tag
+        required: true
+        type: string
+
+permissions:
+  id-token: write # GitHub OIDC to AWS; no stored keys
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm # native arm64 for the Graviton hosts (research R4)
+    env:
+      SHA: ${{ inputs.sha }}
+      ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
+    steps:
+      - name: Check the SHA
+        run: '[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be a full 40-character commit SHA"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Skip if this commit is already built
+        id: exists
+        run: |
+          if aws ecr describe-images --repository-name "${ECR_REPOSITORY_URL#*/}" \
+               --image-ids "imageTag=$SHA" > /dev/null 2>&1; then
+            echo "image $SHA already in ECR; skipping the build"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/setup-buildx-action@v3
+        if: steps.exists.outputs.found != 'true'
+      - uses: docker/build-push-action@v6
+        if: steps.exists.outputs.found != 'true'
+        with:
+          context: mock_pms
+          platforms: linux/arm64
+          build-args: GIT_SHA=${{ inputs.sha }}
+          tags: ${{ vars.ECR_REPOSITORY_URL }}:${{ inputs.sha }}
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -31,3 +31,7 @@ output "ssm_parameter_names" {
     aws_ssm_parameter.previous_image_tag.name,
   ]
 }
+
+output "user_data_gzip_bytes" {
+  value = module.host.user_data_gzip_bytes
+}

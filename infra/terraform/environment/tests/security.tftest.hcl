@@ -80,3 +80,20 @@ run "short_admin_token_rejected" {
 
   expect_failures = [var.admin_token]
 }
+
+run "user_data_fits_ec2_limit" {
+  command = apply # mocked provider: nothing real is created
+
+  # The volume ID is part of the user data, so it must be known: apply against the mocks.
+  override_resource {
+    target = module.host.aws_ebs_volume.data
+    values = { id = "vol-0123456789abcdef0" }
+  }
+
+  # EC2 rejects user data over 16 KB (gzipped bytes). Host files are base64-encoded inside
+  # cloud-init, so growing them eats this budget (research R6).
+  assert {
+    condition     = output.user_data_gzip_bytes < 16384
+    error_message = "Gzipped user data is ${output.user_data_gzip_bytes} bytes; EC2's limit is 16384."
+  }
+}

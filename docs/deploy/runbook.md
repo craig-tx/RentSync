@@ -215,7 +215,40 @@ the Elastic IPs survive host replacement.
 
 ## First deploy
 
-TBD (task T063).
+This assumes Bootstrap and DNS are done, with all three workspaces applied once. Each host
+boots with Caddy only and prints `no image deployed yet`. The first image goes out with the
+**Deploy** workflow:
+
+1. In GitHub → **Actions** → **Deploy** → **Run workflow**, choose `deployment_id`
+   `dev-staging` and set `image_tag` to the full SHA of the current `main` commit
+   (`git rev-parse origin/main`).
+   - The `build` job builds the arm64 image and pushes it to ECR, unless that tag already exists.
+   - The `deploy` job runs `rentsync-deploy <sha>` on the host through SSM Run Command, then
+     checks `$SITE_URL/healthz` from the internet.
+   - On the first deploy, `bin/setup --deploy` creates and migrates `mock_pms_dev_staging` and
+     seeds it, because it has no operators yet. Later deploys only migrate (FR-030).
+2. Check it:
+
+   ```bash
+   curl -s https://pms-staging.rentsync.org/healthz | jq
+   ```
+
+   It should show `"status":"ok"`, `"version":"<sha>"` and `"deployment_id":"dev-staging"`.
+3. Run **Deploy** again with `prod-us` and the **same** SHA, then approve it in the run's
+   **Review deployments** prompt. Nothing is rebuilt (FR-027).
+
+If a run fails, the job log shows `rentsync-deploy`'s output. `rolled back to <sha>` means
+the host is still on its previous image. On a first deploy there is nothing to roll back to,
+so it prints `FAILED: environment unhealthy`. In that case, open a shell
+(`aws ssm start-session --target <instance_id>`) and look at the stack:
+
+```bash
+sudo docker compose -p rentsync-dev-staging --project-directory /opt/rentsync \
+  -f /opt/rentsync/compose.yaml --env-file /run/rentsync/env ps
+sudo journalctl -u rentsync.service --no-pager | tail -50
+```
+
+Avoid `docker compose config` on a host: it prints the rendered secrets.
 
 ## Release and promotion
 
@@ -239,7 +272,33 @@ TBD (task T080).
 
 ## Replaying failed webhooks on a deployed environment
 
-TBD (task T063).
+The admin API is the same as in feature 001 (`specs/001-mock-pms/contracts/openapi.yaml`). Read
+the admin token into your own shell from SSM. Never paste it into chat or a file:
+
+```bash
+BASE=https://pms-staging.rentsync.org            # or https://pms.rentsync.org
+DEPLOYMENT_ID=dev-staging                        # or prod-us
+ADMIN_TOKEN="$(aws ssm get-parameter --region us-east-1 --with-decryption \
+  --name "/rentsync/$DEPLOYMENT_ID/admin_token" --query Parameter.Value --output text)"
+
+# Find deliveries that ran out of attempts for one client (status: pending, in_flight, succeeded, exhausted)
+curl -s "$BASE/admin/deliveries?client_id=<client_id>&status=exhausted" -H "Authorization: Bearer $ADMIN_TOKEN" | jq
+
+# Replay one event to one client (same PMS-Event-Id, with PMS-Replay: true)
+curl -s -X POST "$BASE/admin/events/<event_id>/replay" -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" -d '{"client_id":"<client_id>"}'
+
+# Replay every event in a time range, in occurred_at order
+curl -s -X POST "$BASE/admin/replays" -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"client_id":"<client_id>","from":"2026-10-21T00:00:00Z","to":"2026-10-21T06:00:00Z"}'
+
+unset ADMIN_TOKEN
+```
+
+Replays are idempotent from the receiver's point of view, because the event ID is unchanged
+(feature 001 research R6). Your own IAM user or SSO role needs `ssm:GetParameter` and
+`kms:Decrypt` on that parameter. The console administrator role has both.
 
 ## Adding a side-by-side deployment
 

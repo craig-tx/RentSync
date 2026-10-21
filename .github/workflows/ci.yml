@@ -89,8 +89,7 @@ jobs:
         run: if [ -e infra/terraform/check_prevent_destroy.sh ]; then bash infra/terraform/check_prevent_destroy.sh; fi
       - name: Shellcheck
         run: |
-          files=$(ls infra/host/bin/* infra/host/test/*.sh 2>/dev/null || true)
-          if [ -n "$files" ]; then shellcheck $files; fi
+          find infra/host/bin infra/host/test infra/terraform -maxdepth 1 -type f \( -path "infra/host/bin/*" -o -name "*.sh" \) -print0 | xargs -0 -r shellcheck
       - name: Boot volume test (loop device)
         run: |
           if [ -e infra/host/test/boot_volume_test.sh ]; then
@@ -101,4 +100,9 @@ jobs:
         run: |
           if [ -e infra/host/test/render_env_test.sh ]; then
             bash infra/host/test/render_env_test.sh
+          fi
+      - name: Deploy-script test (stub docker and aws)
+        run: |
+          if [ -e infra/host/test/deploy_test.sh ]; then
+            bash infra/host/test/deploy_test.sh
           fi

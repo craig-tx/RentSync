@@ -587,7 +587,7 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
 
 ### Implementation for User Story 2
 
-- [ ] T056 [P] [US2] Create `infra/host/compose.env.yaml` per research R7:
+- [X] T056 [P] [US2] Create `infra/host/compose.env.yaml` per research R7:
   - services `caddy`, `mock_pms`, `mock_pms_worker`, `postgres`, `redis`, `otel-collector`, and
     `receiver` (profile `tools`);
   - the image is `${MOCK_PMS_IMAGE}`; there is no `build:`;
@@ -601,12 +601,12 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
 
   The service names must equal the local `compose.yaml` names, so the Collector scrape target
   `mock_pms:4001` and the 001 tools keep working.
-- [ ] T057 [P] [US2] Create `infra/host/Caddyfile.env`:
+- [X] T057 [P] [US2] Create `infra/host/Caddyfile.env`:
   - a global block with `email {$ACME_EMAIL}` and `acme_ca {$ACME_CA}`;
   - a site `{$SITE_HOSTNAME}` with `respond /metrics 404` and `reverse_proxy mock_pms:4001`.
 
   Caddy redirects HTTP to HTTPS automatically (FR-014).
-- [ ] T058 [US2] Write `infra/host/bin/rentsync-deploy` to the exact behavior and exit codes in
+- [X] T058 [US2] Write `infra/host/bin/rentsync-deploy` to the exact behavior and exit codes in
   contracts/host-interface.md §rentsync-deploy:
   - `flock` with a 10-minute wait, exiting 75;
   - `rentsync-render-env`;
@@ -622,7 +622,7 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
     `no image deployed yet`.
 
   It must pass `shellcheck`.
-- [ ] T059 [US2] Wire the US2 files into `infra/terraform/environment/main.tf`'s cloud-init
+- [X] T059 [US2] Wire the US2 files into `infra/terraform/environment/main.tf`'s cloud-init
   `files`, read with `file("${path.module}/../../host/...")`:
   - `compose.env.yaml` → `/opt/rentsync/compose.yaml`;
   - `Caddyfile.env` → `/opt/rentsync/Caddyfile`;
@@ -633,7 +633,7 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
   - `daemon.json`.
 
   Add `ACME_EMAIL` and `ACME_CA` to `host_env`. Re-run the terraform tests.
-- [ ] T060 [P] [US2] Create `.github/workflows/build-image.yml`, a reusable workflow (`on:
+- [X] T060 [P] [US2] Create `.github/workflows/build-image.yml`, a reusable workflow (`on:
   workflow_call`) that takes the input `sha` and runs on `ubuntu-24.04-arm` with
   `permissions: id-token: write, contents: read`. Its steps:
   1. `aws-actions/configure-aws-credentials@v4` with `vars.AWS_ROLE_ARN`;
@@ -642,7 +642,7 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
   4. `docker/setup-buildx-action@v3`, then `docker/build-push-action@v6` with
      `context: mock_pms`, `platforms: linux/arm64`, `build-args: GIT_SHA=<sha>`,
      `tags: ${{ vars.ECR_REPOSITORY_URL }}:<sha>`, and the GitHub Actions cache.
-- [ ] T061 [P] [US2] Create `.github/workflows/deploy-to.yml`, a reusable workflow that takes
+- [X] T061 [P] [US2] Create `.github/workflows/deploy-to.yml`, a reusable workflow that takes
   the inputs `deployment_id`, `image_tag`, and `rollback` (bool). The URL comes from the
   Environment variable `vars.SITE_URL`, never from an input. Its job:
   - uses `environment: ${{ inputs.deployment_id }}` and `concurrency: deploy-${{ inputs.deployment_id }}`;
@@ -653,14 +653,14 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
     `get-command-invocation`, and fails if the status is not `Success`;
   - then runs `curl -fsS ${{ vars.SITE_URL }}/healthz | jq`, asserting `status=="ok"` and
     `deployment_id==<id>`, and also `version==<tag>` when not rolling back.
-- [ ] T062 [US2] Create `.github/workflows/deploy.yml` (`on: workflow_dispatch`). Its inputs are
+- [X] T062 [US2] Create `.github/workflows/deploy.yml` (`on: workflow_dispatch`). Its inputs are
   `deployment_id` (choice: `dev-staging` or `prod-us`), `image_tag` (string, optional), and
   `rollback` (boolean). It:
   - calls `build-image.yml` when an `image_tag` is given and missing;
   - calls `deploy-to.yml`.
 
   This is the documented single action for manual deploys and rollback (FR-029).
-- [ ] T063 [US2] Fill in runbook §First deploy:
+- [X] T063 [US2] Fill in runbook §First deploy:
   1. apply the US2 Terraform change (hosts are replaced; data volumes are still empty);
   2. run `deploy.yml` with `deployment_id=dev-staging` and the `main` SHA;
   3. check `/healthz`;
