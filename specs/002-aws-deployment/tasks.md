@@ -695,7 +695,7 @@ Ingest stays inside the VPC.
 
 ### Implementation for User Story 3
 
-- [ ] T066 [P] [US3] Create `infra/host/compose.telemetry.yaml` per research R7:
+- [X] T066 [P] [US3] Create `infra/host/compose.telemetry.yaml` per research R7:
   - `caddy` (ports 80 and 443, data in `/srv/data/caddy`);
   - `openobserve` (`openobserve/openobserve:v1.0.4`), with `ZO_ROOT_USER_EMAIL` and
     `ZO_ROOT_USER_PASSWORD` from the env file, `ZO_DATA_DIR=/data` mounted from
@@ -708,14 +708,14 @@ Ingest stays inside the VPC.
 
   First confirm that the v1.0.4 image has an arm64 variant (research R4). If it doesn't, set
   `telemetry_instance_type = "t3.small"` and log the change.
-- [ ] T067 [P] [US3] Create `infra/host/Caddyfile.telemetry`: the same global block as T057, and
+- [X] T067 [P] [US3] Create `infra/host/Caddyfile.telemetry`: the same global block as T057, and
   a site `{$SITE_HOSTNAME}` with `reverse_proxy openobserve:5080`.
-- [ ] T068 [US3] Extend `infra/host/bin/rentsync-render-env` for `HOST_ROLE=telemetry`. It maps
+- [X] T068 [US3] Extend `infra/host/bin/rentsync-render-env` for `HOST_ROLE=telemetry`. It maps
   `openobserve/root_email`, `root_password`, and `db_password` to `ZO_ROOT_USER_EMAIL`,
   `ZO_ROOT_USER_PASSWORD`, and `OPENOBSERVE_DB_PASSWORD`. For `HOST_ROLE=environment`, it maps
   `ingest/user` and `ingest/password` to `OPENOBSERVE_USER` and `OPENOBSERVE_PASSWORD`.
   It must pass `shellcheck`.
-- [ ] T069 [US3] Wire the telemetry files into `infra/terraform/shared/telemetry.tf`'s
+- [X] T069 [US3] Wire the telemetry files into `infra/terraform/shared/telemetry.tf`'s
   cloud-init:
   - `compose.telemetry.yaml` → `/opt/rentsync/compose.yaml`;
   - `Caddyfile.telemetry` → `/opt/rentsync/Caddyfile`;

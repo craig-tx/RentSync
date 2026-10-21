@@ -62,11 +62,19 @@ module "telemetry_host" {
   security_group_ids = [aws_security_group.telemetry.id]
   ssm_read_paths     = [local.ssm_prefix]
 
-  # The OpenObserve stack is added in US3 (tasks T066-T069).
-  files = {}
+  # The OpenObserve stack (research R7). One copy of each file, read from infra/host/.
+  files = {
+    "/opt/rentsync/compose.yaml" = { content = file("${path.module}/../../host/compose.telemetry.yaml"), permissions = "0644" }
+    "/opt/rentsync/Caddyfile"    = { content = file("${path.module}/../../host/Caddyfile.telemetry"), permissions = "0644" }
+  }
   host_env = {
     HOST_ROLE      = "telemetry"
     DEPLOYMENT_ID  = var.deployment_id
+    SITE_HOSTNAME  = var.telemetry_hostname
+    PRIVATE_IP     = var.telemetry_private_ip
+    DB_NAME        = "openobserve_${replace(var.deployment_id, "-", "_")}"
+    ACME_EMAIL     = var.acme_email
+    ACME_CA        = var.acme_ca
     AWS_REGION     = var.region
     SSM_READ_PATHS = local.ssm_prefix
   }

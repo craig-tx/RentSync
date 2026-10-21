@@ -1,0 +1,51 @@
+# Shared telemetry host stack (feature 002 research R7, R8). Installed as
+# /opt/rentsync/compose.yaml. Run by rentsync-start with --env-file /run/rentsync/env, which
+# rentsync-render-env renders from SSM. Each container receives only the variables it needs.
+
+services:
+  caddy:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_HOSTNAME: ${SITE_HOSTNAME}
+      ACME_EMAIL: ${ACME_EMAIL}
+      ACME_CA: ${ACME_CA}
+    volumes:
+      - /opt/rentsync/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/data/caddy:/data # certificates survive host replacement (research R6)
+
+  openobserve:
+    image: openobserve/openobserve:v1.0.4
+    restart: unless-stopped
+    depends_on:
+      openobserve-db: { condition: service_healthy }
+    environment:
+      ZO_ROOT_USER_EMAIL: ${ZO_ROOT_USER_EMAIL}
+      ZO_ROOT_USER_PASSWORD: ${ZO_ROOT_USER_PASSWORD}
+      ZO_DATA_DIR: /data
+      ZO_META_STORE: postgres
+      ZO_META_POSTGRES_DSN: postgres://openobserve:${OPENOBSERVE_DB_PASSWORD}@openobserve-db:5432/${DB_NAME}
+    ports:
+      # OTLP ingest on the private IP only. The security group admits 5080 only from the
+      # otlp-client group, so it is never reachable from the internet (FR-011).
+      - "${PRIVATE_IP}:5080:5080"
+    volumes:
+      - /srv/data/openobserve:/data # FR-020: telemetry data survives host replacement
+
+  openobserve-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openobserve
+      POSTGRES_PASSWORD: ${OPENOBSERVE_DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - /srv/data/openobserve-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openobserve"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

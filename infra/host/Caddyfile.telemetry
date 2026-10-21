@@ -1,0 +1,10 @@
+# Telemetry host TLS proxy (feature 002 research R7, R13). Installed as /opt/rentsync/Caddyfile.
+# OpenObserve shows its own sign-in page; nothing is visible before sign-in (US3 AC3).
+{
+	email {$ACME_EMAIL}
+	acme_ca {$ACME_CA}
+}
+
+{$SITE_HOSTNAME} {
+	reverse_proxy openobserve:5080
+}

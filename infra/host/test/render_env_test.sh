@@ -58,4 +58,26 @@ rm -f "$env_file"
 if OMIT=admin_token render > /dev/null 2>&1; then fail "render succeeded without admin_token"; fi
 [ ! -e "$env_file" ] || fail "an env file was written despite a missing parameter"
 
+# 3. Telemetry role: OpenObserve settings from the shared deployment's own path.
+cat > "$work/etc/host.env" <<'ENV'
+HOST_ROLE="telemetry"
+DEPLOYMENT_ID="shared-us"
+DB_NAME="openobserve_shared_us"
+PRIVATE_IP="10.40.1.10"
+AWS_REGION="us-east-1"
+SSM_READ_PATHS="/rentsync/shared-us"
+ENV
+cat > "$work/bin/aws" <<'STUB'
+#!/usr/bin/env bash
+p=/rentsync/shared-us/openobserve
+printf '%s/root_email\tops@example.test\n%s/root_password\troot-pw\n%s/db_password\tdb-pw\n' "$p" "$p" "$p"
+printf '%s/ingest/user\tops@example.test\n%s/ingest/password\troot-pw\n' "$p" "$p"
+STUB
+rm -f "$env_file"
+render > /dev/null || fail "telemetry render failed"
+for line in ZO_ROOT_USER_EMAIL=ops@example.test ZO_ROOT_USER_PASSWORD=root-pw OPENOBSERVE_DB_PASSWORD=db-pw \
+            DB_NAME=openobserve_shared_us PRIVATE_IP=10.40.1.10 COMPOSE_PROJECT_NAME=rentsync-shared-us; do
+  grep -qxF "$line" "$env_file" || fail "telemetry env file lacks $line"
+done
+
 echo "ok: render_env_test"
