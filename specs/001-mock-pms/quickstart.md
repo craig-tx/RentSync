@@ -8,6 +8,11 @@ criteria. The interfaces are defined in [contracts/openapi.yaml](contracts/opena
 
 - Docker Desktop with Compose v2.
 - A bash shell. On Windows, use Git Bash; the examples use `cp`, `$ADMIN_TOKEN`, and `grep`.
+- **Git Bash only:** prefix commands that pass a container path, such as
+  `/receiver_logs/receiver.jsonl`, with `MSYS_NO_PATHCONV=1`. Otherwise Git Bash rewrites the
+  path into a Windows path before Docker sees it.
+- Tools inside the container run with `bundle exec`, for example
+  `docker compose exec mock_pms bundle exec bin/seed_report`.
 - `curl`.
 - Optional: `jq`.
 - Load the admin token into your shell: `export $(grep ADMIN_TOKEN .env)`.
@@ -17,12 +22,17 @@ criteria. The interfaces are defined in [contracts/openapi.yaml](contracts/opena
 ```bash
 cp .env.example .env                      # ADMIN_TOKEN, SEED=42, ACCESS_TOKEN_TTL=300, etc.
 docker compose up -d postgres redis mock_pms mock_pms_worker otel-collector openobserve
-docker compose exec mock_pms bin/setup    # create the database, run migrations, seed with SEED and SEED_ANCHOR_DATE
+docker compose exec mock_pms bundle exec bin/setup  # create databases, migrate, seed (SEED, SEED_ANCHOR_DATE)
 curl -s localhost:4001/healthz
 ```
 
 **Expected**: `{"status":"ok","db":"ok","redis":"ok","worker_heartbeat_age_s":<30}`. Seeding takes under
-1 minute (SC-002).
+1 minute (SC-002). The web and worker processes also run any pending migrations when they start,
+under a Postgres advisory lock.
+
+`.env.example` ships an OpenObserve password that meets its policy (8–128 characters, with
+upper case, lower case, a digit and a special character). OpenObserve refuses to start with a
+weaker password.
 
 ## 2. Run the test suite
 
@@ -38,12 +48,12 @@ units in research R13 and the end-to-end delivery spec. The same two commands ru
 ## 3. Seed determinism (FR-013, SC-002)
 
 ```bash
-docker compose exec mock_pms bin/reseed --seed 42 --anchor 2026-10-20   # prints data_digest
-docker compose exec mock_pms bin/reseed --seed 42 --anchor 2026-10-20   # same digest
-docker compose exec mock_pms bin/reseed --seed 7  --anchor 2026-10-20   # different digest
+docker compose exec mock_pms bundle exec bin/reseed --seed 42 --anchor 2026-10-20   # prints data_digest
+docker compose exec mock_pms bundle exec bin/reseed --seed 42 --anchor 2026-10-20   # same digest
+docker compose exec mock_pms bundle exec bin/reseed --seed 7  --anchor 2026-10-20   # different digest
 ```
 
-`bin/seed_report` prints counts by operator and the payment-behavior mix. **Expected**:
+`bundle exec bin/seed_report` prints counts by operator and the payment-behavior mix. **Expected**:
 
 - 3 operators, about 50 properties, and about 60 leases;
 - on-time, late, partial, NSF-reversal, and unpaid months all present;
@@ -88,7 +98,8 @@ docker compose exec mock_pms bin/reseed --seed 7  --anchor 2026-10-20   # differ
 ## 5. Signed webhooks (User Story 2, SC-003, SC-004)
 
 The receiver runs as the `receiver` Compose service, on the Compose network at
-`http://receiver:9999` (research R14).
+`http://receiver:9999` (research R14). Start it with `docker compose up`, not `docker compose run`:
+`run` does not register the `receiver` DNS alias, so deliveries fail with connection errors.
 
 ```bash
 RECEIVER_SECRET=<signing_secret> docker compose --profile tools up receiver
@@ -109,7 +120,7 @@ the shared `receiver_logs` volume, which step 7 reads. **Expected**:
 ## 6. Rate limits (User Story 3, SC-006)
 
 ```bash
-docker compose exec mock_pms bin/hammer --token <access_token> --requests 70 --path /v1/properties
+docker compose exec mock_pms bundle exec bin/hammer --token <access_token> --requests 70 --path /v1/properties
 ```
 
 **Expected**: about 60 requests get `200`, then `429` responses follow, each with
@@ -138,8 +149,13 @@ curl -s -X PUT localhost:4001/admin/chaos -H "Authorization: Bearer $ADMIN_TOKEN
   -d '{"duplicate_rate":0.10,"out_of_order_rate":0.10,"delay_rate":0.05,"delay_min_s":2,"delay_max_s":8,"malformed_rate":0.05,"server_error_rate":0.10,"seed":1}'
 curl -s -X POST localhost:4001/admin/scenarios/month_end_burst -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" -d '{"share":1.0,"window_s":60}'
-# Repeat the burst (or use bin/chaos_check --generate 1000) until there are at least 1,000 events
-docker compose exec mock_pms bin/chaos_check --receiver-log /receiver_logs/receiver.jsonl
+# Generate at least 1,000 events (alternates month-end bursts with NSF waves)
+C="-e ADMIN_TOKEN=$ADMIN_TOKEN -e MOCK_PMS_URL=http://mock_pms:4001"
+docker compose exec $C mock_pms bundle exec bin/chaos_check --generate 1200
+# Wait for the queue to drain, then measure. --client-id limits it to the receiver client;
+# --token measures injected 500s (use a client whose rate_limit_per_minute is high enough).
+MSYS_NO_PATHCONV=1 docker compose exec $C mock_pms bundle exec bin/chaos_check \
+  --receiver-log /receiver_logs/receiver.jsonl --client-id <client_id> --token <access_token> --api-requests 1000
 ```
 
 `bin/chaos_check` compares the receiver log with `/admin/deliveries` and `/admin/events`, and
@@ -159,6 +175,8 @@ Finally, run `bin/chaos_check --determinism`. It checks FR-026 like this:
 5. It checks that both runs produced identical `deliveries.chaos` decision sequences.
 
 Any demo script that runs after a reset has to register its client and approve it the same way.
+`--determinism` leaves its own chaos settings and its client in place, so set the chaos rates
+back to 0 afterwards.
 
 ## 8. Replay and scenarios (User Story 5, SC-008)
 

@@ -45,3 +45,24 @@ jobs:
       - run: bin/setup --test-db-only
       - run: bundle exec rubocop
       - run: bundle exec rspec
+
+  # Constitution VI: an OTLP backend runs in CI and receives every service's telemetry.
+  telemetry-smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - name: Start the stack
+        run: docker compose up -d --build --wait postgres redis mock_pms mock_pms_worker otel-collector openobserve
+      - run: docker compose exec -T mock_pms bundle exec bin/setup
+      - name: Generate a scenario
+        run: |
+          set -a; . ./.env; set +a
+          curl -fsS -X POST localhost:4001/admin/scenarios/tenant_move_out \
+            -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{}'
+      - name: Telemetry reaches OpenObserve
+        run: docker compose exec -T mock_pms bundle exec bin/telemetry_smoke
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs

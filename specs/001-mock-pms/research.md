@@ -566,9 +566,12 @@ PMS is a separate small Ruby service in `/mock_pms` with its own database. Entri
     `docker compose exec otel-collector wget -qO- localhost:8888/metrics`.
   - **Field names in OpenObserve**: OpenObserve stores dotted attribute keys with the dots
     flattened to underscores (`service.name` becomes `service_name`, `code.function.name`
-    becomes `code_function_name`). That is assumed, not yet verified against the pinned
-    version. T101 confirms it, and `bin/telemetry_smoke` keeps the field names in one constant,
-    so a correction is a one-line change.
+    becomes `code_function_name`). **Verified on 2026-10-21 against openobserve v1.0.4 (T101)**.
+    Scraped metrics carry `service_name=mock_pms-web`, `service_version` and
+    `deployment_environment`, and no instance id. `bin/telemetry_smoke` keeps the field names in
+    one constant in case a later version changes them.
+  - **Component names**: the Collector (0.162.0) warns that `filelog` and `otlphttp` are
+    deprecated aliases, so the config uses `file_log` and `otlp_http`.
 - **Rationale**:
   - The OpenTelemetry Ruby metrics and logs SDKs are still pre-1.0 (0.x). Their APIs can change
     between minor releases, and the metrics SDK does not yet implement the whole spec.

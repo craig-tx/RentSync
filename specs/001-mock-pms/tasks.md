@@ -745,12 +745,12 @@ same `Idempotency-Key` returns the same `run_id`. Admin calls without the token 
 **Purpose**: end-to-end telemetry checks, CI completeness, documentation, and a final
 check of the constitution.
 
-- [ ] T097 [P] Write `mock_pms/spec/integration/observability_spec.rb`.
+- [X] T097 [P] Write `mock_pms/spec/integration/observability_spec.rb`.
   - Run a scenario and one request of each kind.
   - Capture the stdout log lines and check that every one is JSON with `service.name` and `code.function.name`, and that none contains a raw token, client secret, signing secret, password, or tenant contact value (FR-031).
   - Check that `/metrics` contains the request, delivery, rate-limit, and dropped-metrics families, plus `target_info`.
   - **Burst timing** (`:committed, :slow`): run `MonthEndBurst` with the default share, plus the worker loop polling every 1 s, against a throwaway receiver. Every `payment.created` is delivered within 120 s (SC-008).
-- [ ] T098 Add a `telemetry-smoke` job to `.github/workflows/ci.yml`, running after `test` (`needs: test`).
+- [X] T098 Add a `telemetry-smoke` job to `.github/workflows/ci.yml`, running after `test` (`needs: test`).
   1. Copy `.env.example` to `.env`.
   2. Run `docker compose up -d --wait postgres redis mock_pms mock_pms_worker otel-collector openobserve`.
   3. Run `docker compose exec -T mock_pms bin/setup`.
@@ -759,15 +759,15 @@ check of the constitution.
   6. Fail the job if either is missing. On failure, print `docker compose logs`.
 
   Put the polling in `mock_pms/bin/telemetry_smoke`, which reads the OpenObserve URL and credentials from the environment. Keep the OpenObserve field names (`service_name`, `service_version`, `code_function_name`) in one `FIELD_NAMES` constant at the top of the file, because they are unverified until T101 (R16).
-- [ ] T099 [P] Write `mock_pms/README.md`. It covers what the mock is (a test harness, not a product); how to run it (link to `specs/001-mock-pms/quickstart.md`); the settings table, taken from `.env.example`; the operator logins (`bin/seed_report`); the contracts (links to `openapi.yaml` and `webhooks.md`); and ADRs 0001–0004.
-- [ ] T100 [P] Add a "Mock PMS" section to the root `README.md`: a two-line description, the `docker compose up` quick start, and a link to `mock_pms/README.md`.
-- [ ] T101 Run every quickstart.md section (§1–§9) by hand against Docker Compose on the Windows development machine, using Git Bash.
+- [X] T099 [P] Write `mock_pms/README.md`. It covers what the mock is (a test harness, not a product); how to run it (link to `specs/001-mock-pms/quickstart.md`); the settings table, taken from `.env.example`; the operator logins (`bin/seed_report`); the contracts (links to `openapi.yaml` and `webhooks.md`); and ADRs 0001–0004.
+- [X] T100 [P] Add a "Mock PMS" section to the root `README.md`: a two-line description, the `docker compose up` quick start, and a link to `mock_pms/README.md`.
+- [X] T101 Run every quickstart.md section (§1–§9) by hand against Docker Compose on the Windows development machine, using Git Bash.
   - Record the results and any deviations in `docs/ai-build-log.md`.
   - Fix defects in the code. Change `quickstart.md` only where it is genuinely wrong.
   - In particular, confirm that the Collector reads logs from `/var/lib/docker/containers` under Docker Desktop (research R16). If it can't, record the failure and switch to the documented alternative in an ADR-0004 amendment.
   - Confirm the OpenObserve field names that `bin/telemetry_smoke` assumes: `service_name`, `service_version`, and `code_function_name` (dots flattened to underscores, R16). Check them with one search in the UI against the pinned OpenObserve version. If they differ, update the field-name constant in `bin/telemetry_smoke` and record the actual names in R16 and `docs/ai-build-log.md`.
   - Confirm that `otelcol_exporter_send_failed_*` appears under job `otel-collector` in OpenObserve. Stop OpenObserve for 30 s, start it again, and check that the counter is non-zero, so drops are counted (Constitution VI).
-- [ ] T102 Do a constitution compliance pass over the finished code and record the result in `docs/ai-build-log.md`.
+- [X] T102 Do a constitution compliance pass over the finished code and record the result in `docs/ai-build-log.md`.
   - **I**: no updates or deletes on `events`, `delivery_attempts`, or `reversals`.
   - **II**: every row of the plan's idempotency-key table is enforced.
   - **III**: every R13 unit had its test written first.
@@ -775,7 +775,7 @@ check of the constitution.
   - **VIII**: the Gemfile matches the plan's Dependencies table exactly.
   - **X**: no process-local shared state (search for class-level mutable `@@`/constants holding state, and `Mutex`-guarded globals other than the metrics buffer); no distributed locks.
   - Fix any violation, or justify it in plan.md Complexity Tracking.
-- [ ] T103 Append the session summary to `docs/ai-build-log.md`: what was done, what was blocked, decisions made, and the next step (feature 002: `/speckit-specify` for connection and webhook ingestion).
+- [X] T103 Append the session summary to `docs/ai-build-log.md`: what was done, what was blocked, decisions made, and the next step (feature 002: `/speckit-specify` for connection and webhook ingestion).
 
 ---
 

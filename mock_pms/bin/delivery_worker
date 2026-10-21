@@ -13,6 +13,7 @@ stopping = false
 %w[TERM INT].each { |signal| trap(signal) { stopping = true } }
 
 worker = MockPms::Delivery::Worker.new
+MockPms::Logging.for_function("bin/delivery_worker").info("delivery worker started", pid: Process.pid)
 until stopping
   begin
     sleep 1 if worker.run_once.zero?

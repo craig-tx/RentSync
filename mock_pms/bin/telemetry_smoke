@@ -1,0 +1,61 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# CI telemetry smoke test (Constitution VI): polls OpenObserve for up to 60 s until
+#   - a log from mock_pms-worker carrying a non-empty code.function.name, and
+#   - the mock_pms_http_requests_total metric from mock_pms-web with a service.version
+# have arrived through the Collector. Exits 1 if either is missing.
+# ENV: OPENOBSERVE_URL (default http://openobserve:5080), OPENOBSERVE_USER, OPENOBSERVE_PASSWORD.
+require "json"
+require "net/http"
+require "uri"
+
+# OpenObserve flattens dotted attribute keys to underscores (verified against
+# openobserve v1.0.4 in T101; research R16). Kept in one place in case that changes.
+FIELD_NAMES = {
+  service_name: "service_name",
+  service_version: "service_version",
+  code_function_name: "code_function_name"
+}.freeze
+
+BASE = ENV.fetch("OPENOBSERVE_URL", "http://openobserve:5080")
+USER = ENV.fetch("OPENOBSERVE_USER")
+PASSWORD = ENV.fetch("OPENOBSERVE_PASSWORD")
+DEADLINE = Time.now + Integer(ENV.fetch("TELEMETRY_SMOKE_TIMEOUT_S", 60))
+
+def search(sql, type: nil)
+  now = (Time.now.to_f * 1_000_000).to_i
+  uri = URI("#{BASE}/api/default/_search#{"?type=#{type}" if type}")
+  req = Net::HTTP::Post.new(uri, "Content-Type" => "application/json")
+  req.basic_auth(USER, PASSWORD)
+  req.body = JSON.generate(query: { sql: sql, start_time: now - 3_600_000_000, end_time: now, from: 0, size: 1 })
+  res = Net::HTTP.start(uri.host, uri.port) { |http| http.request(req) }
+  res.code == "200" ? JSON.parse(res.body).fetch("hits", []) : []
+rescue SystemCallError, Net::OpenTimeout, Net::ReadTimeout, JSON::ParserError
+  []
+end
+
+f = FIELD_NAMES
+checks = {
+  "worker log with code.function.name" => lambda {
+    search(%(SELECT * FROM "default" WHERE #{f[:service_name]} = 'mock_pms-worker' ) +
+           %(AND #{f[:code_function_name]} IS NOT NULL AND #{f[:code_function_name]} <> ''))
+  },
+  "mock_pms_http_requests_total from mock_pms-web with service.version" => lambda {
+    search(%(SELECT * FROM "mock_pms_http_requests_total" WHERE #{f[:service_name]} = 'mock_pms-web' ) +
+           %(AND #{f[:service_version]} IS NOT NULL AND #{f[:service_version]} <> ''), type: "metrics")
+  }
+}
+
+pending = checks.dup
+until pending.empty? || Time.now > DEADLINE
+  pending.reject! do |name, check|
+    found = check.call.any?
+    puts "ok: #{name}" if found
+    found
+  end
+  sleep 3 unless pending.empty?
+end
+
+pending.each_key { |name| puts "MISSING after timeout: #{name}" }
+exit(pending.empty? ? 0 : 1)

@@ -9,7 +9,7 @@ extensions:
       password: ${env:OPENOBSERVE_PASSWORD}
 
 receivers:
-  filelog/docker:
+  file_log/docker:
     include: [/var/lib/docker/containers/*/*-json.log]
     start_at: end
     operators:
@@ -94,7 +94,7 @@ exporters:
   # Loss bound (research R16): the sending queue is in memory and not persisted, so a
   # Collector restart loses whatever is queued — at most queue_size batches during an
   # OpenObserve outage. Service logs stay in Docker's files; metric totals stay in Redis.
-  otlphttp/openobserve:
+  otlp_http/openobserve:
     endpoint: http://openobserve:5080/api/default
     auth:
       authenticator: basicauth/openobserve
@@ -116,10 +116,10 @@ service:
                 port: 8888
   pipelines:
     logs:
-      receivers: [filelog/docker]
+      receivers: [file_log/docker]
       processors: [memory_limiter, attributes/redact, batch]
-      exporters: [otlphttp/openobserve]
+      exporters: [otlp_http/openobserve]
     metrics:
       receivers: [prometheus]
       processors: [memory_limiter, transform/metrics_resource, batch]
-      exporters: [otlphttp/openobserve]
+      exporters: [otlp_http/openobserve]

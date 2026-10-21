@@ -528,6 +528,14 @@ paths:
         '503': { $ref: '#/components/responses/RateLimiterUnavailable' }
 
   # ---------------- Admin (ADMIN_TOKEN; exempt from rate limit and chaos) ----------------
+  /admin/status:
+    get:
+      tags: [admin]
+      summary: Admin liveness and service version
+      security: [{ adminToken: [] }]
+      responses:
+        '200': { description: '{"status":"ok","service_version":"<git sha>"}' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
   /admin/clients:
     post:
       tags: [admin]
@@ -726,6 +734,13 @@ paths:
       responses:
         '200': { description: 'DB and Redis reachable, worker heartbeat < 30 s. {"status":"ok","db":"ok","redis":"ok","worker_heartbeat_age_s":3}' }
         '503': { description: 'Degraded; same body shape, failing component marked' }
+  /healthz/live:
+    get:
+      tags: [ops]
+      summary: Liveness (process is up; used by container healthchecks)
+      security: []
+      responses:
+        '200': { description: '{"status":"ok"}' }
   /metrics:
     get:
       tags: [ops]
