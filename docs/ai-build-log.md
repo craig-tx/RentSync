@@ -219,3 +219,10 @@ The constitution's Development Workflow section requires an entry at the end of 
   2. **Builds separated.** The new `rentsync-github-build` role trusts only `ref:refs/heads/main` and is the only role that can push images. The deploy role lost ECR push.
   3. **Deploys pinned by digest.** `build-image.yml` outputs the digest, both deploys pass `<sha>@sha256:<digest>`, `rentsync-deploy` accepts and records that ref, and `/healthz` is checked against the SHA part. `deploy_test.sh` adds a digest-pinned deploy and a malformed digest.
 - **Bootstrap now has four roles.** A new GitHub variable `AWS_BUILD_ROLE_ARN` holds the build role. The Environments' "restrict to main" setting is now required. Adding a side-by-side deployment adds one exact subject to the release role's trust. That is a deliberate exception to "no shared change", documented in R17 and the runbook.
+- **Strengthened rehearsal rerun: PASSED** at `ea0e377`, run in the foreground with 12 GB free.
+  - OpenObserve's password `Re$hearsal #0nly-Pw1` survived end to end: OpenObserve started with it, and the Collector authenticated with it. Telemetry, including the Collector's self-metric, arrived with `deployment.id=pr-42`.
+  - `/metrics.json` answers 404 through Caddy.
+  - All earlier steps pass again: first boot, the first and second deploys, the no-op, the self-rollback, `--rollback`, host replacement (no reformat, data and certificates kept), and no secrets in logs.
+  - Not covered: the rehearsal deploys bare tags. Digest-pinned refs are covered by `deploy_test.sh`, and will be proven live on the first dev-staging deploy.
+
+**Next task:** the operator performs runbook §Bootstrap (T053), now with four IAM roles and `AWS_BUILD_ROLE_ARN`.
