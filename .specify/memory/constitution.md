@@ -1,3 +1,20 @@
+<!--
+Sync Impact Report (remove before merge)
+- Version change: 1.1.0 → 1.2.0 (MINOR: materially expanded guidance in Principle VI)
+- Modified principles: VI. Observable by Default (title unchanged)
+  - `deployment.id` added to the required telemetry resource attributes
+  - New "DeploymentId" rules: format and validation, telemetry attribute, resource-name
+    component, `DeploymentId` tag via provider default tags, shared resources, no hard-coded
+    deployment-owned names; enables side-by-side deployments in one account
+- Added sections: none (new subsection inside Principle VI)
+- Removed sections: none
+- Templates: .specify/templates/* read the constitution at runtime; no edits needed
+- Follow-up TODOs:
+  - Feature 001 (merged): the mock PMS does not yet emit `deployment.id`; the database name is
+    fixed (`mock_pms`). Bring it into compliance through feature 002.
+  - Feature 002 spec and plan: adopt DeploymentIds `prod-us` and `dev-staging`, plus one for
+    the shared telemetry deployment.
+-->
 # RentSync Constitution
 
 ## Core Principles
@@ -95,8 +112,9 @@ auditable safety boundary.
   - The backend and its endpoint MUST be configuration only, using the standard `OTEL_*`
     environment variables or the Collector's config. Application code MUST NOT call a
     vendor-specific telemetry API, so changing the backend never requires a code change.
-  - All telemetry MUST carry the resource attributes `service.name`, `service.version`, and
-    `deployment.environment`. Instance-level data MUST also carry `service.instance.id`.
+  - All telemetry MUST carry the resource attributes `service.name`, `service.version`,
+    `deployment.environment`, and `deployment.id` (the DeploymentId, below). Instance-level
+    data MUST also carry `service.instance.id`.
 - Exporting telemetry MUST NOT block a request or a job, and MUST NOT make one fail.
   - Export runs asynchronously from bounded buffers (Principle X).
   - If the backend is unreachable, telemetry is dropped, and the number dropped is itself
@@ -107,9 +125,41 @@ auditable safety boundary.
 - Local development and CI MUST run an OTLP backend (or Collector plus backend), so that every
   feature's telemetry can be seen and checked end to end.
 
+**DeploymentId.** Every standalone deployment of the set of services MUST have a
+DeploymentId.
+
+- **What it identifies**: one long-lived stack instance, for example `prod-us` (production),
+  `dev-staging` (staging), or `local-<name>` (a developer machine). It does not identify a
+  release. The build that is running stays `service.version`.
+- **Format**: 3 to 16 characters of lowercase letters, digits, and hyphens. It starts with a
+  letter and does not end with a hyphen (`^[a-z][a-z0-9-]{1,14}[a-z0-9]$`). Infrastructure code
+  MUST validate it.
+- **Telemetry**: all logs and metrics MUST carry it as the `deployment.id` resource attribute.
+- **Resource names**: it MUST be a component of the identifier of every resource the deployment
+  owns. This includes cloud resource names, IAM roles, parameter and secret paths, container
+  registry paths where they are per-deployment, and database names. Where a naming scheme
+  forbids hyphens, as unquoted Postgres identifiers do, hyphens become underscores
+  (`mock_pms_prod_us`).
+- **Tags**: every cloud resource MUST carry a `DeploymentId` tag with its value. Infrastructure
+  code MUST apply the tag by default, through provider-level default tags, rather than one
+  resource at a time.
+- **Shared resources**: a resource that several deployments use, such as a shared telemetry
+  backend, belongs to a deployment of its own and carries that deployment's DeploymentId.
+- **Never hard-coded**: no name, path, address, or identifier owned by a deployment may be
+  hard-coded. Each one MUST be derived from the DeploymentId or supplied as that deployment's
+  configuration.
+
+These rules let any number of deployments run **side by side in the same cloud account**, for
+example a short-lived `pr-42` next to `dev-staging` and `prod-us`. Their names, paths, and
+databases never collide. Each deployment's resources, cost, and telemetry can be found and
+attributed by one value. A deployment can be torn down completely by selecting everything that
+carries its tag.
+
 **Rationale**: Diagnosing a ledger discrepancy means being able to follow one event across
 every service it touched. Delivering logs and metrics to one place over an open protocol makes
-that possible, without tying the code to any one vendor.
+that possible, without tying the code to any one vendor. Tying every log line, metric, and
+resource to one DeploymentId makes "which stack did this come from, and what does it cost?" a
+single filter, and lets new deployments be added without editing the old ones.
 
 ### VII. Secure by Default
 
@@ -227,4 +277,4 @@ a second instance starts.
   every PR review MUST verify compliance with these principles. Any unjustified violation
   blocks the merge.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-20
+**Version**: 1.2.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-21
