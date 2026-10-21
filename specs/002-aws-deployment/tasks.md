@@ -77,7 +77,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
 
 **Purpose**: Create the directory layout, provider pins, CI job, and document skeletons.
 
-- [ ] T001 Create the directory skeleton from plan.md §Project Structure:
+- [X] T001 Create the directory skeleton from plan.md §Project Structure:
   - `infra/terraform/shared/tests/`
   - `infra/terraform/environment/tests/`
   - `infra/terraform/modules/host/`
@@ -86,7 +86,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
 
   Add `**/.terraform/`, `*.tfstate`, `*.tfstate.*`, `*.tfplan`, and `crash.log` to `.gitignore`.
   Do not ignore `.terraform.lock.hcl`, which is committed.
-- [ ] T002 [P] Create `infra/terraform/shared/versions.tf`:
+- [X] T002 [P] Create `infra/terraform/shared/versions.tf`:
   - `terraform { required_version = ">= 1.11" ... }`;
   - `required_providers` for `aws` ~> 6.x and `random` ~> 3.7;
   - a `cloud` block with `organization = "craig-personal"` and
@@ -95,9 +95,9 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   Run `terraform init -backend=false`, then
   `terraform providers lock -platform=linux_amd64 -platform=windows_amd64 -platform=darwin_arm64`.
   Commit `.terraform.lock.hcl`.
-- [ ] T003 [P] Create `infra/terraform/environment/versions.tf`. It is the same as T002, except
+- [X] T003 [P] Create `infra/terraform/environment/versions.tf`. It is the same as T002, except
   the workspace tag is `tags = ["rentsync-environment"]`. Lock the providers the same way.
-- [ ] T004 Add an `infra` job to `.github/workflows/ci.yml`, alongside `test`, on
+- [X] T004 Add an `infra` job to `.github/workflows/ci.yml`, alongside `test`, on
   `ubuntu-latest`. Its steps:
   1. `actions/checkout@v4`.
   2. `hashicorp/setup-terraform@v3` with `terraform_version: 1.16.x` and
@@ -111,12 +111,12 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
 
   Steps that point at files that don't exist yet must not fail the job: guard them with
   `if [ -e ... ]`, and remove the guards in T076.
-- [ ] T005 [P] Check that the Dependencies table in `specs/002-aws-deployment/plan.md` has a
+- [X] T005 [P] Check that the Dependencies table in `specs/002-aws-deployment/plan.md` has a
   justification line for every dependency introduced by this task list:
   `hashicorp/setup-terraform`, the Docker Compose v2 plugin, `jq` on the hosts, and each
   GitHub Action used in T060 and T061. Constitution VIII requires one for every dependency.
   Add any that are missing before using the dependency.
-- [ ] T006 [P] Create `docs/deploy/runbook.md`. Give it the headings listed below, in this order;
+- [X] T006 [P] Create `docs/deploy/runbook.md`. Give it the headings listed below, in this order;
   each heading body is "TBD (task Txxx)" until filled in.
   - Bootstrap
   - DNS
@@ -131,7 +131,7 @@ description: "Task list for feature 002: AWS Deployment of the Mock PMS"
   - Teardown
 
   These cover FR-037, plus FR-042 for side-by-side deployments.
-- [ ] T007 [P] Create `docs/deploy/production-differences.md` with a table skeleton. Its columns
+- [X] T007 [P] Create `docs/deploy/production-differences.md` with a table skeleton. Its columns
   are "Demo choice | Real production | Why the demo differs". There is one row per FR-036
   item, and the cells are filled in T084.
 

@@ -66,3 +66,33 @@ jobs:
       - name: Logs on failure
         if: failure()
         run: docker compose logs
+
+  # Feature 002: Terraform and host scripts (research R15). No cloud access needed.
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.6
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive infra/terraform
+      - name: Validate and test each root
+        run: |
+          for root in infra/terraform/shared infra/terraform/environment; do
+            terraform -chdir=$root init -backend=false -input=false
+            terraform -chdir=$root validate
+            if ls $root/tests/*.tftest.hcl >/dev/null 2>&1; then terraform -chdir=$root test; fi
+          done
+      - name: Static checks
+        run: if [ -e infra/terraform/check_prevent_destroy.sh ]; then bash infra/terraform/check_prevent_destroy.sh; fi
+      - name: Shellcheck
+        run: |
+          files=$(ls infra/host/bin/* infra/host/test/*.sh 2>/dev/null || true)
+          if [ -n "$files" ]; then shellcheck $files; fi
+      - name: Boot volume test (loop device)
+        run: |
+          if [ -e infra/host/test/boot_volume_test.sh ]; then
+            sudo apt-get install -y -qq xfsprogs
+            sudo bash infra/host/test/boot_volume_test.sh
+          fi
