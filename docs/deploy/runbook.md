@@ -581,7 +581,7 @@ release role's trust policy, step 2:
    - a free `private_ip` in `10.40.1.0/24`, such as `10.40.1.42`;
    - `acme_email` and `acme_ca`;
    - a fresh `admin_token`.
-2. **AWS IAM:** add `"repo:craig-tx/RentSync:environment:pr-42"` to the `sub` list in the
+2. **AWS IAM:** add `"repo:craig-tx@16706018/RentSync@1427164274:environment:pr-42"` to the `sub` list in the
    `rentsync-github-actions` trust policy
    ([`iam/github-actions-trust.json`](iam/github-actions-trust.json)). Trust uses exact names,
    so a job in an unlisted Environment can't assume the role (security review 2026-10-21).

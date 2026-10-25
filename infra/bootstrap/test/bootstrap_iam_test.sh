@@ -2,6 +2,7 @@
 # Test for bootstrap-iam.sh (runbook §Bootstrap). A stub `aws` on PATH simulates IAM, STS and
 # Access Analyzer and logs every call, so no cloud access is needed. Proves:
 #   1. --render-only fills every <account> placeholder and makes no AWS call;
+#      every GitHub trust uses the repository's immutable subject format;
 #   2. a bad account ID, or a placeholder left in a source file, fails the render;
 #   3. the default (plan) mode makes no mutating call;
 #   4. --apply on an empty account creates both providers and all four policies and roles;
@@ -59,6 +60,12 @@ if grep -l '<account>' "$work/out"/*.json; then fail "a placeholder survived the
 grep -q 'arn:aws:iam::123456789012:oidc-provider/app.terraform.io' "$work/out/hcp-terraform-trust.json" \
   || fail "trust policy lacks the account ID"
 [ ! -s "$AWS_LOG" ] || fail "--render-only called aws"
+# The repository's tokens carry immutable subjects (contracts/bootstrap-iam.md); a trust in the
+# older repo:craig-tx/RentSync: form would never match.
+for f in "$work/out"/github-*-trust.json; do
+  grep -q '"repo:craig-tx@16706018/RentSync@1427164274:' "$f" || fail "$(basename "$f") lacks the immutable subject"
+  if grep -q 'repo:craig-tx/RentSync:' "$f"; then fail "$(basename "$f") uses the old subject format"; fi
+done
 
 # 2. Bad input.
 if run --render-only 12345 > /dev/null 2>&1; then fail "accepted a short account ID"; fi

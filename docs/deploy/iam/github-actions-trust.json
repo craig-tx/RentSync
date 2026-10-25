@@ -10,7 +10,7 @@
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
           "token.actions.githubusercontent.com:sub": [
-            "repo:craig-tx/RentSync:environment:dev-staging"
+            "repo:craig-tx@16706018/RentSync@1427164274:environment:dev-staging"
           ]
         }
       }

@@ -267,3 +267,23 @@ The constitution's Development Workflow section requires an entry at the end of 
 
 **Next task:** the operator runs `bootstrap-iam.sh` in CloudShell (plan, then `--apply`), and
 continues runbook §Bootstrap from step 3 (T053).
+
+**CloudShell plan run (same session):**
+- **Plan:** the operator had already created both providers and all four policies and roles in
+  the console. The plan was only the four trust refreshes and four idempotent attachments.
+- **Bug found before apply: immutable OIDC subjects.**
+  - The repository was created 2026-10-20, after GitHub's 2026-07-15 cutoff, so its tokens carry
+    `sub = repo:craig-tx@16706018/RentSync@1427164274:…`. Confirmed with
+    `gh api repos/craig-tx/RentSync/actions/oidc/customization/sub`.
+  - The three GitHub trusts expected `repo:craig-tx/RentSync:…`, so every Actions job would have
+    been refused by STS.
+  - Fixed in the trust files, contracts/bootstrap-iam.md (with a note on the format) and the
+    runbook's side-by-side example. `bootstrap_iam_test.sh` now fails on the old form
+    (mutation-checked).
+- **Access Analyzer findings, accepted:**
+  - `CONFIRM_AUDIENCE_CLAIM_TYPE` (SUGGESTION) on every trust is informational. `aud` already
+    uses a plain single-valued `StringEquals`.
+  - `SPECIFIC_GITHUB_REPO_AND_BRANCH_RECOMMENDED` (WARNING) on the two Environment trusts: the
+    subjects have no wildcard, but an Environment subject carries no branch. The branch rule is
+    the Environments' "restrict to main" setting, which the runbook requires. GitHub's AWS OIDC
+    guide documents only the `aud` and `sub` keys, so no untested `:ref` condition was added.

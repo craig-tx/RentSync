@@ -47,9 +47,15 @@ under an upcoming commit's tag and get it to production past the reviewer. Each 
 therefore trusts **exact** subjects with `StringEquals`, and only one role can push images.
 Every trust uses `token.actions.githubusercontent.com:aud = sts.amazonaws.com`.
 
+Subjects use GitHub's **immutable** format, `repo:<owner>@<owner-id>/<repo>@<repo-id>:…`. The
+repository was created after 2026-07-15, so its tokens never carry the older
+`repo:craig-tx/RentSync:…` form, and a trust written that way would never match. Check the
+prefix with `gh api repos/craig-tx/RentSync/actions/oidc/customization/sub`
+(`sub_claim_prefix`).
+
 ### Role `rentsync-github-build` (image builds)
 
-**Trust**: `sub` **exactly** `repo:craig-tx/RentSync:ref:refs/heads/main`. Only jobs running on
+**Trust**: `sub` **exactly** `repo:craig-tx@16706018/RentSync@1427164274:ref:refs/heads/main`. Only jobs running on
 `main` can build: `release.yml` and `deploy.yml` dispatched from `main`. See
 `docs/deploy/iam/github-build-trust.json`.
 
@@ -65,7 +71,7 @@ deploy pins `<sha>@sha256:<digest>` (research R9).
 
 ### Role `rentsync-github-actions` (non-production deploys)
 
-**Trust**: `sub` **exactly** `repo:craig-tx/RentSync:environment:dev-staging`. The `dev-staging`
+**Trust**: `sub` **exactly** `repo:craig-tx@16706018/RentSync@1427164274:environment:dev-staging`. The `dev-staging`
 Environment is limited to `main` (runbook ?Bootstrap step 7). Adding a side-by-side deployment
 adds its Environment's exact subject to this list. That is a one-line change and the only IAM
 edit a new deployment needs. See `docs/deploy/iam/github-actions-trust.json`.
@@ -87,7 +93,7 @@ could run commands on production, and the `prod-us` approval would be enforced o
 workflow, not by IAM.
 
 **Trust**: the GitHub OIDC provider, with `aud = sts.amazonaws.com` and `sub` **exactly**
-`repo:craig-tx/RentSync:environment:prod-us` (StringEquals). GitHub issues that token only to
+`repo:craig-tx@16706018/RentSync@1427164274:environment:prod-us` (StringEquals). GitHub issues that token only to
 a job in the `prod-us` Environment, which is limited to `main` and gated by the required
 reviewer. See `docs/deploy/iam/github-actions-prod-trust.json`.
 
