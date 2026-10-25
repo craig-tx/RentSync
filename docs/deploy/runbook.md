@@ -118,7 +118,45 @@ aws ssm get-parameter --region us-east-1 \
 Record the `ami-…` ID. It is pinned on purpose: changing it later replaces every host
 (research R4).
 
-### 4. HCP Terraform: project and variable set
+### 4–6. HCP Terraform, from your machine (recommended)
+
+[`infra/bootstrap/bootstrap-hcp.rb`](../../infra/bootstrap/bootstrap-hcp.rb) does steps 4 to 6
+through the HCP Terraform API: the project, the variable set, the three workspaces, remote
+state sharing, and every variable in the tables below. It needs only Ruby, with no gems.
+- **Secrets:** each `admin_token` is generated inside the script and sent straight to HCP as a
+  sensitive variable. The OpenObserve root password is asked for twice, without echo, and checked
+  against Terraform's rule before anything changes.
+- **Safe to rerun:** it restores workspace settings that drifted, but it never changes a variable
+  that exists. It only reports one whose value differs, because you change those later on
+  purpose (`acme_ca`, `ami_id`, rotations).
+
+Run it in PowerShell or Windows Terminal. Git Bash's terminal can't hide the password prompt.
+
+1. Sign in once. `terraform login` opens the browser and saves a token in your user profile,
+   where the script reads it. The token is never printed:
+
+   ```powershell
+   terraform login
+   ```
+
+2. GitHub must already be connected to the organization. If the script says it found no GitHub
+   connection, do this once: in HCP choose **New** → **Workspace** → **Version control workflow**
+   → **GitHub**, authorize and install the app for `craig-tx`, then cancel before creating the
+   workspace.
+3. Print the plan. It changes nothing:
+
+   ```powershell
+   ruby infra/bootstrap/bootstrap-hcp.rb --account <account ID> --ami <AMI from step 3> `
+     --acme-email <contact> --openobserve-email <sign-in email> --budget-email <alert recipient>
+   ```
+
+4. Add `--apply` to make the changes. Options:
+   - `--branch` sets the branch the workspaces track (default `main`);
+   - `--health-assessments` turns on drift detection, if your plan includes it.
+
+The console steps below do the same by hand. Skip to step 7 if the script succeeded.
+
+### 4. HCP Terraform: project and variable set (console)
 
 1. In organization `craig-personal`, go to **Projects** → **New project** and name it
    `RentSync`.
@@ -131,7 +169,7 @@ Record the `ami-…` ID. It is pinned on purpose: changing it later replaces eve
    | `TFC_AWS_PROVIDER_AUTH` | `true` |
    | `TFC_AWS_RUN_ROLE_ARN` | the `rentsync-hcp-terraform` role ARN |
 
-### 5. HCP Terraform: workspaces
+### 5. HCP Terraform: workspaces (console)
 
 Create each workspace in project `RentSync`:
 
@@ -158,7 +196,7 @@ Then finish the workspace settings:
 - In each workspace, open **Settings** → **Health** and turn on drift detection if your plan
   includes it. Without it, any plan still shows drift (FR-005).
 
-### 6. HCP Terraform: workspace variables
+### 6. HCP Terraform: workspace variables (console)
 
 All of these are **Terraform** variables. Mark the sensitive ones **Sensitive**. Generate each
 `admin_token` on your own machine with `openssl rand -hex 32`, separately for each

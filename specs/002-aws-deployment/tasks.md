@@ -558,6 +558,12 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   `.bootstrap/iam/`, validates them with Access Analyzer, prints a plan, and applies only with
   `--apply`. It is idempotent, and `--render-only ACCOUNT` serves the console path. Test with a
   stub `aws`: `infra/bootstrap/test/bootstrap_iam_test.sh`, run in CI.
+- [X] T052b [US1] Script runbook §Bootstrap steps 4–6 in `infra/bootstrap/bootstrap-hcp.rb`
+  (Ruby standard library only), through the HCP Terraform API: the project, the variable set,
+  the workspaces, remote state sharing and the variables. It generates each `admin_token`,
+  prompts for the OpenObserve password without echo, prints a plan unless `--apply` is given,
+  restores drifted workspace settings, and never changes a variable that exists. Test against a
+  fake API: `infra/bootstrap/test/bootstrap_hcp_test.rb`, run in CI.
 - [ ] T053 [US1] **🧑 OPERATOR**: perform runbook §Bootstrap. Record the elapsed time in
   `docs/ai-build-log.md`, against FR-006's one-hour limit.
 - [ ] T054 [US1] **🧑 OPERATOR**: apply `rentsync-shared-us` (confirm), then

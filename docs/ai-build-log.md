@@ -287,3 +287,39 @@ continues runbook §Bootstrap from step 3 (T053).
     subjects have no wildcard, but an Environment subject carries no branch. The branch rule is
     the Environments' "restrict to main" setting, which the runbook requires. GitHub's AWS OIDC
     guide documents only the `aud` and `sub` keys, so no untested `:ref` condition was added.
+
+**IAM bootstrap applied, GitHub configured, HCP bootstrap scripted (same session):**
+- **IAM:** the operator deleted the console-made policies and roles, and ran `bootstrap-iam.sh --apply` in
+  CloudShell: 12 changes (4 policies, 4 roles, 4 attachments), with the existing OIDC providers
+  reused. This is the first live run of the script.
+- **GitHub (runbook step 7), with `gh` at the operator's request:**
+  - repository variables `AWS_BUILD_ROLE_ARN`, `AWS_ROLE_ARN` and `AWS_REGION`;
+  - Environments `dev-staging` and `prod-us`, with custom deployment branches limited to `main`;
+  - `SITE_URL` for each, and the prod-us `AWS_ROLE_ARN` override. All verified.
+  - Left for the operator: secret scanning and push protection, both found **disabled** (step
+    7.3, SC-004).
+  - Left for later: `ECR_REPOSITORY_URL` (after the shared apply) and the prod-us reviewer (T074).
+- **`infra/bootstrap/bootstrap-hcp.rb` (T052b):** runbook steps 4–6 through the HCP Terraform
+  API, in Ruby with the standard library only (no `jq` on Windows, and no new dependency).
+  - **Secrets:** each `admin_token` is generated in the script, a different one per environment,
+    and never printed. The OpenObserve password is asked for twice without echo, and checked
+    against Terraform's rule before any change.
+  - **Reruns:** drifted workspace settings are restored; variables are create-only, and a
+    difference is reported but never changed.
+  - **Options:** `--branch` (default `main`) and `--health-assessments` (opt-in, Standard tier).
+  - **GitHub connection:** never guessed. It must be exactly one OAuth token or one GitHub App
+    installation for `craig-tx`, or a flag; otherwise the script fails with the HCP steps.
+  - **Test:** `bootstrap_hcp_test.rb`, against a fake API, 8 tests. Mutation-checked: plan-mode
+    writes, unreported differences, a late password prompt and prod auto-apply are each caught.
+    Passes on Ruby 3.3, CI's version. CI's `infra` job installs Ruby for it.
+- **Open question for the operator: which branch the workspaces track.**
+  - `main` has no Terraform yet (only `infra/otel`), so a VCS workspace on `main` has nothing to
+    plan until 002 merges.
+  - `rentsync-github-build` trusts only `refs/heads/main`, so the first image build also needs
+    002 on `main`.
+  - That conflicts with T090–T091 coming after the live checks. Nothing in the spec covered a
+    pre-merge apply.
+
+**Next task:** the operator decides the branch question. Then they run `terraform login` and
+`bootstrap-hcp.rb` (plan, then `--apply`) from PowerShell, and continue to runbook step 8 and
+T054.

@@ -100,3 +100,8 @@ jobs:
         run: bash infra/host/test/deploy_test.sh
       - name: Bootstrap-IAM test (stub aws)
         run: bash infra/bootstrap/test/bootstrap_iam_test.sh
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Bootstrap-HCP test (fake API)
+        run: ruby infra/bootstrap/test/bootstrap_hcp_test.rb
