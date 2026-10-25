@@ -553,6 +553,11 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   - TTL of 5 minutes during bring-up;
   - verification with `dig +short`;
   - switching `acme_ca` from Let's Encrypt staging to production after DNS resolves.
+- [X] T052a [US1] Script runbook §Bootstrap steps 1–2 in `infra/bootstrap/bootstrap-iam.sh`, for
+  AWS CloudShell (no access keys). It renders the `iam/` files into the gitignored
+  `.bootstrap/iam/`, validates them with Access Analyzer, prints a plan, and applies only with
+  `--apply`. It is idempotent, and `--render-only ACCOUNT` serves the console path. Test with a
+  stub `aws`: `infra/bootstrap/test/bootstrap_iam_test.sh`, run in CI.
 - [ ] T053 [US1] **🧑 OPERATOR**: perform runbook §Bootstrap. Record the elapsed time in
   `docs/ai-build-log.md`, against FR-006's one-hour limit.
 - [ ] T054 [US1] **🧑 OPERATOR**: apply `rentsync-shared-us` (confirm), then

@@ -22,7 +22,41 @@ You need an AWS account (region `us-east-1`), owner access to the HCP Terraform 
 `craig-personal`, admin access to `craig-tx/RentSync` on GitHub, and the NameCheap account for
 `rentsync.org`.
 
-### 1. AWS: OIDC identity providers
+### 1–2. AWS: OIDC providers and bootstrap roles, from CloudShell (recommended)
+
+[`infra/bootstrap/bootstrap-iam.sh`](../../infra/bootstrap/bootstrap-iam.sh) does steps 1 and 2
+with the AWS CLI. Run it in **AWS CloudShell**, which acts as your console session, so no access
+key is created. It reads the account ID from that session, writes filled-in copies of the
+[`iam/`](iam/) files to the gitignored `.bootstrap/iam/`, and validates each one with IAM Access
+Analyzer. It is safe to rerun: it skips what exists, and refreshes the trust policy of a role
+that exists.
+
+1. Sign in as an administrator, switch to `us-east-1`, and open **CloudShell** from the top bar.
+2. Clone the repository. Before feature 002 merges, add `--branch 002-aws-deployment`:
+
+   ```bash
+   git clone https://github.com/craig-tx/RentSync.git && cd RentSync
+   ```
+
+3. Print the plan. It changes nothing; review the `+ aws …` lines it lists:
+
+   ```bash
+   bash infra/bootstrap/bootstrap-iam.sh
+   ```
+
+4. Make the changes, then copy the four role ARNs it prints into the table at the end of this
+   section:
+
+   ```bash
+   bash infra/bootstrap/bootstrap-iam.sh --apply
+   ```
+
+   An existing policy is never changed automatically. If the script reports one, compare it
+   with the rendered file and run the `create-policy-version` command it prints.
+
+The console steps below do the same by hand. Skip to step 3 if the script succeeded.
+
+### 1. AWS: OIDC identity providers (console)
 
 Open IAM → **Identity providers** → **Add provider**, choose **OpenID Connect**, and add these
 two providers:
@@ -32,10 +66,16 @@ two providers:
 | `https://app.terraform.io` | `aws.workload.identity` |
 | `https://token.actions.githubusercontent.com` | `sts.amazonaws.com` |
 
-### 2. AWS: the bootstrap roles
+### 2. AWS: the bootstrap roles (console)
 
-Each policy file in [`iam/`](iam/) uses `<account>` as a placeholder. Replace it with your
-12-digit account ID before pasting.
+Each policy file in [`iam/`](iam/) uses `<account>` as a placeholder. Don't edit them in place.
+Write paste-ready copies to the gitignored `.bootstrap/iam/` and paste from there:
+
+```bash
+bash infra/bootstrap/bootstrap-iam.sh --render-only <your 12-digit account ID>
+```
+
+A placeholder left in a pasted document makes IAM fail with "The policy failed legacy parsing".
 
 1. Open IAM → **Policies** → **Create policy** → **JSON**. Paste
    [`iam/hcp-terraform-policy.json`](iam/hcp-terraform-policy.json) and name it
@@ -183,7 +223,7 @@ Every value below is non-secret. Fill them in as you go.
 
 | Value | Where it comes from | Where it is entered |
 |---|---|---|
-| AWS account ID | AWS console, top right | the `iam/*.json` placeholders |
+| AWS account ID | AWS console, top right | read by `bootstrap-iam.sh`; `--render-only` for the console path |
 | Region | `us-east-1` | variable defaults; GitHub `AWS_REGION` |
 | HCP organization | `craig-personal` | `versions.tf` (`cloud` block) |
 | `rentsync-hcp-terraform` role ARN | step 2 | variable set `TFC_AWS_RUN_ROLE_ARN` |

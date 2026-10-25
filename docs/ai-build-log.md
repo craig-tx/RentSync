@@ -226,3 +226,44 @@ The constitution's Development Workflow section requires an entry at the end of 
   - Not covered: the rehearsal deploys bare tags. Digest-pinned refs are covered by `deploy_test.sh`, and will be proven live on the first dev-staging deploy.
 
 **Next task:** the operator performs runbook §Bootstrap (T053), now with four IAM roles and `AWS_BUILD_ROLE_ARN`.
+
+### 2026-10-25 — interactive: scripted IAM bootstrap
+
+**Done:**
+- **Operator hit "The policy failed legacy parsing"** while pasting `hcp-terraform-policy.json`.
+  The JSON was valid, so the cause was a leftover `<account>` placeholder (that file has five).
+  The operator had also filled the real account ID into the tracked `iam/*.json` files and the
+  runbook's ARN table. **Decision:** keep placeholders in the public repo. The ARNs live in the
+  GitHub and HCP variables. The working-tree edits were verified byte-identical to the script's
+  render, then reverted. Nothing with the account ID was committed.
+- **`infra/bootstrap/bootstrap-iam.sh` (T052a):** runbook steps 1–2 as AWS CLI commands, for
+  CloudShell (console session, no access keys). It:
+  - reads the account from STS;
+  - renders into the gitignored `.bootstrap/iam/` and fails on any leftover `<…>` placeholder;
+  - validates every document with Access Analyzer (identity policies, and trust policies as
+    `AWS::IAM::AssumeRolePolicyDocument`), and stops on an ERROR or SECURITY_WARNING;
+  - prints the plan by default and changes things only with `--apply`;
+  - is idempotent: it skips existing providers and policies, refreshes an existing role's
+    trust policy, and prints, but never runs, `create-policy-version` for an existing policy
+    (the five-version limit);
+  - ends by printing the four role ARNs and where each goes.
+
+  `--render-only ACCOUNT` writes paste-ready files for the console path.
+- **Test:** `bootstrap_iam_test.sh` uses a stub `aws` and covers the render, a bad account,
+  a leftover placeholder, a plan with no mutations, apply on an empty account, apply on a
+  half-done account, and an Access Analyzer error that blocks every change. Mutation-checked:
+  it fails when plan mode makes a change. Added to CI's shellcheck and as its own step.
+- **Runbook §1–2:** CloudShell is now the recommended path; the console steps are the fallback.
+- **Suite:** rspec 172/0, rubocop clean, terraform fmt/validate/test pass,
+  check_prevent_destroy ok, shellcheck clean.
+  - `render_env_test`, `deploy_test` and `bootstrap_iam_test` pass on Linux.
+  - `deploy_test` needs `jq`, which CI's runner has.
+  - The host tests can't run under Windows Git Bash (file modes).
+
+**Not verified:** the live CloudShell run. It will confirm two things the stub can't:
+- `create-open-id-connect-provider` without `--thumbprint-list` (optional in current CLIs; the
+  local 2.9.17 still requires it);
+- the Access Analyzer flags.
+
+**Next task:** the operator runs `bootstrap-iam.sh` in CloudShell (plan, then `--apply`), and
+continues runbook §Bootstrap from step 3 (T053).
