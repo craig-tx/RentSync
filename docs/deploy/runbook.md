@@ -44,15 +44,17 @@ that exists.
    bash infra/bootstrap/bootstrap-iam.sh
    ```
 
-4. Make the changes, then copy the four role ARNs it prints into the table at the end of this
-   section:
+4. Make the changes. The script ends by printing the four role ARNs, each with the variable
+   it goes into (steps 4 and 7):
 
    ```bash
    bash infra/bootstrap/bootstrap-iam.sh --apply
    ```
 
    An existing policy is never changed automatically. If the script reports one, compare it
-   with the rendered file and run the `create-policy-version` command it prints.
+   with the rendered file and run the `create-policy-version` command it prints. If
+   `create-role` fails with "Invalid principal" right after the providers were created, IAM
+   hasn't caught up yet. Wait a few seconds and rerun.
 
 The console steps below do the same by hand. Skip to step 3 if the script succeeded.
 
@@ -98,7 +100,8 @@ A placeholder left in a pasted document makes IAM fail with "The policy failed l
    [`iam/github-actions-prod-trust.json`](iam/github-actions-prod-trust.json). Its trust accepts
    only the `prod-us` GitHub Environment, and it is the only role that can run commands on
    production hosts. IAM, not just the workflow, enforces the approval gate.
-6. Copy the four role ARNs into the table at the end of this section.
+6. Note the four role ARNs for steps 4 and 7. The table at the end of this section says where
+   each one goes.
 7. As you paste each policy, open the policy editor's **Policy validation** panel (IAM Access
    Analyzer) and resolve any error or security warning before saving.
 
@@ -219,7 +222,9 @@ deployment (constitution VI).
 
 ### Values to record
 
-Every value below is non-secret. Fill them in as you go.
+Every value below is non-secret, but don't write them into this file: the repository is
+public and stays account-neutral. Enter each value where the last column says. Those places
+are the record.
 
 | Value | Where it comes from | Where it is entered |
 |---|---|---|
