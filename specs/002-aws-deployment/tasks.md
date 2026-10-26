@@ -582,6 +582,15 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   runbook, contracts and quickstart use `<domain>` and `$RENTSYNC_…`. Proven against the
   reference deployment: the IAM render is byte-identical, and the HCP plan only adds the new
   variables. Test: `infra/bootstrap/test/bootstrap_init_test.sh`, run in CI.
+- [X] T052f [US1] Give every bootstrap script a `--teardown` mode (constitution v1.4.0, Reversible
+  bootstrap). Each lists what it will delete, warns, and deletes only after a correct answer to a
+  sum typed at an interactive terminal. IAM: the four roles and policies by exact name, the
+  providers the bootstrap created (now tagged `rentsync:bootstrap=true`), and the cost allocation
+  tag. It refuses while tagged instances or volumes exist. HCP Terraform: the workspaces (safe
+  delete; refuses while one manages resources), the variable set, and the project unless it
+  holds other workspaces. GitHub: the variables and Environments. Secret scanning, adopted
+  providers, the HCP Terraform GitHub connection and the settings file are kept and reported.
+  Runbook §Bootstrap teardown. Tests drive the shell confirmations through script(1).
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the

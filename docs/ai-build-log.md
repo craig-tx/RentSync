@@ -450,3 +450,57 @@ then T054.
 `bootstrap-hcp.rb --apply`, which adds the 8 variables. The PR's HCP Terraform speculative plans
 must then pass with no changes, which also proves that a `cloud` block without `organization`
 works. Then merge, and continue T053/T054.
+
+### 2026-10-25 (closing): reversible bootstrap (constitution v1.4.0, T052f)
+
+- **Constitution v1.4.0 (MINOR):** new "Reversible bootstrap" rule in Development Workflow &
+  Quality Gates, at the operator's request so they can rerun the bootstrap from a blank slate.
+  - Everything the bootstrap provisions must be removable by a teardown, and every step ships
+    with its own.
+  - The teardown lists what it will delete, warns that the deletion is permanent, and deletes
+    only after a correct answer to a sum typed at an interactive terminal.
+  - It refuses while infrastructure depends on its targets. It removes only what the bootstrap
+    created, and leaves security protections on.
+
+  The Sync Impact Report is in the file for review and must be removed before merge.
+- **`--teardown` on all three scripts:**
+  - **Shared confirmation:** `confirm_teardown` (bash, in `settings.sh`) and
+    `HcpBootstrap.confirm_teardown` (Ruby). `RENTSYNC_TEARDOWN_NUMBERS` fixes the sum for tests;
+    the terminal check still applies.
+  - **IAM:**
+    - targets the four roles and policies by exact name. Terraform's own `rentsync-*` roles share
+      the prefix, so there is no glob;
+    - order: detach, delete inline policies, delete the role; then old policy versions, then the
+      policy;
+    - refuses if a policy is attached elsewhere, or if tagged instances or volumes exist (EC2 and
+      EBS, not the tagging API, which lags);
+    - deletes only providers tagged `rentsync:bootstrap=true`, which the bootstrap now adds on
+      create. The operator's current providers were adopted, so teardown keeps them and prints
+      the delete command;
+    - deactivates the cost allocation tag.
+  - **HCP Terraform:**
+    - refuses on any resource count or lock;
+    - deletes workspaces through safe-delete, then the variable set, then the project, unless the
+      project holds other workspaces.
+  - **GitHub:** deletes the variables and Environments, and keeps secret scanning.
+- **Tests:**
+  - the shell tests drive the confirmation through `script -qec`, so the terminal path really
+    runs;
+  - the no-terminal case pipes the *correct* answer, so only the terminal check can refuse it;
+  - mutation-checked: dropping the terminal check fails both shell tests, and skipping the
+    confirmation fails the HCP Terraform test. The first version of the GitHub test missed the
+    terminal mutation, which is why the no-terminal case was strengthened;
+  - HCP Terraform: 15 runs, 170 assertions.
+- **Live, read-only:** the GitHub and HCP Terraform teardowns, run without a terminal, listed
+  exactly the live variables, Environments, workspaces, variable set and project, then refused.
+- **Also:** the CloudShell settings block now works on an existing clone; it had failed on the
+  operator's CloudShell. HCP Terraform ran no speculative plans for PR #5 (no runs on any
+  workspace), so its green check proved nothing. The `cloud` block without `organization` will be
+  proven by a CLI-driven speculative plan after the re-bootstrap.
+
+**Next task:** the operator reviews PR #5. Before merge: remove the v1.4.0 Sync Impact Report.
+Then, for the blank slate:
+1. Teardown in order: GitHub, HCP Terraform, then IAM in CloudShell.
+2. Optionally delete the two adopted OIDC providers.
+3. Rerun §Bootstrap from step 0.
+4. Run the CLI speculative plan check, then continue with T054.
