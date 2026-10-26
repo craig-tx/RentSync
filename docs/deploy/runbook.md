@@ -7,12 +7,13 @@ Operator procedures for deploying the mock PMS to AWS (feature 002). Design and 
 Nothing here is specific to one operator. Your own values (AWS account and region, HCP Terraform
 organization, GitHub repository, domain, contact emails) live in `.bootstrap/settings.env`.
 Bootstrap step 0 writes that file, and it is never committed. In this runbook, `<domain>` means
-your domain. Commands use the `$RENTSYNC_…` variables from that file, so load it into your shell
-first:
+your domain.
 
-```bash
-source .bootstrap/settings.env
-```
+- **The bootstrap scripts read the file themselves.** You never need to load it to run them.
+- **Commands you type by hand** (`dig`, `curl`, and the `aws` and `terraform` one-offs in later
+  sections) use its values as `$RENTSYNC_…` variables. Each of those code blocks starts with
+  `source .bootstrap/settings.env`, which loads them into your shell; run it from the repository
+  root. Running it again is harmless.
 
 Deployments (constitution Principle VI, DeploymentId):
 
@@ -266,7 +267,7 @@ gitignored, and the places in the last column are the record.
 | ECR repository URL (not a setting) | step 3, `--ecr-repository-url` | GitHub `ECR_REPOSITORY_URL` |
 
 **Local Terraform commands** (teardown, backup restore) need the organization too, because the
-`cloud` blocks don't name it. Run `export TF_CLOUD_ORGANIZATION="$RENTSYNC_HCP_ORG"` after loading
+`cloud` blocks don't name it. The code blocks that run them set `TF_CLOUD_ORGANIZATION` from
 the settings.
 
 ## DNS
@@ -286,6 +287,7 @@ change, because the Elastic IPs survive host replacement.
 Check that each record resolves:
 
 ```bash
+source .bootstrap/settings.env
 for h in telemetry pms-staging pms; do echo "$h -> $(dig +short "$h.$RENTSYNC_DOMAIN")"; done
 ```
 
@@ -297,7 +299,8 @@ certificates are not publicly trusted. Once every record resolves to its IP:
 2. Apply `rentsync-shared-us` (confirm), then `rentsync-dev-staging`, then `rentsync-prod-us`
    (confirm). Changing the host configuration replaces each host. Its address and data are
    kept (research R6).
-3. Check with `curl -sv "https://pms-staging.$RENTSYNC_DOMAIN/healthz" 2>&1 | grep issuer`, which
+3. Check with `source .bootstrap/settings.env` and then
+   `curl -sv "https://pms-staging.$RENTSYNC_DOMAIN/healthz" 2>&1 | grep issuer`, which
    should name a Let's Encrypt production issuer.
 
 After bring-up, set the TTLs back to **Automatic**. The records never change again, because
@@ -327,6 +330,7 @@ with the **Deploy** workflow:
 2. Check it:
 
    ```bash
+   source .bootstrap/settings.env
    curl -s "https://pms-staging.$RENTSYNC_DOMAIN/healthz" | jq
    ```
 
@@ -395,6 +399,7 @@ rollback therefore returns to where you started. The data is untouched: no resee
 down-migration (SC-006, under 10 minutes). Afterwards, check:
 
 ```bash
+source .bootstrap/settings.env
 curl -s "https://pms.$RENTSYNC_DOMAIN/healthz" | jq -r .version   # the previous SHA
 ```
 
@@ -484,6 +489,7 @@ The shared deployment records, into one private, encrypted S3 bucket
   today:
 
   ```bash
+  source .bootstrap/settings.env
   aws s3 ls --recursive "s3://rentsync-shared-us-logs-$RENTSYNC_AWS_ACCOUNT_ID/vpc-flow-logs/rentsync-prod-us/" | tail
   ```
 
@@ -503,6 +509,7 @@ you ever need it on `prod-us` (task T083).
 1. **Pick a snapshot:**
 
    ```bash
+   source .bootstrap/settings.env
    aws ec2 describe-snapshots --region "$RENTSYNC_AWS_REGION" --owner-ids self \
      --filters Name=tag:DeploymentId,Values=dev-staging \
      --query 'reverse(sort_by(Snapshots,&StartTime))[].[SnapshotId,StartTime,VolumeSize]' --output table
@@ -512,6 +519,7 @@ you ever need it on `prod-us` (task T083).
    AWS, attached and untouched:
 
    ```bash
+   source .bootstrap/settings.env
    cd infra/terraform/environment
    export TF_CLOUD_ORGANIZATION="$RENTSYNC_HCP_ORG" TF_WORKSPACE=rentsync-dev-staging
    terraform init
@@ -537,6 +545,7 @@ you ever need it on `prod-us` (task T083).
    `available` state with the deployment's Name tag:
 
    ```bash
+   source .bootstrap/settings.env
    aws ec2 describe-volumes --region "$RENTSYNC_AWS_REGION" \
      --filters Name=tag:DeploymentId,Values=dev-staging Name=status,Values=available \
      --query 'Volumes[].[VolumeId,CreateTime]' --output table
@@ -609,6 +618,7 @@ The admin API is the same as in feature 001 (`specs/001-mock-pms/contracts/opena
 the admin token into your own shell from SSM. Never paste it into chat or a file:
 
 ```bash
+source .bootstrap/settings.env
 BASE="https://pms-staging.$RENTSYNC_DOMAIN"     # or https://pms.$RENTSYNC_DOMAIN
 DEPLOYMENT_ID=dev-staging                        # or prod-us
 ADMIN_TOKEN="$(aws ssm get-parameter --region "$RENTSYNC_AWS_REGION" --with-decryption \
@@ -683,6 +693,7 @@ then `shared-us`, because the environments depend on its network.
    side-by-side ones):
 
    ```bash
+   source .bootstrap/settings.env
    cd infra/terraform/environment
    export TF_CLOUD_ORGANIZATION="$RENTSYNC_HCP_ORG" TF_WORKSPACE=rentsync-prod-us
    terraform init
@@ -695,6 +706,7 @@ then `shared-us`, because the environments depend on its network.
    images (`force_delete = false`):
 
    ```bash
+   source .bootstrap/settings.env
    repo=shared-us/mock_pms
    aws ecr list-images --region "$RENTSYNC_AWS_REGION" --repository-name "$repo" --query 'imageIds[*]' --output json > /tmp/ids.json
    aws ecr batch-delete-image --region "$RENTSYNC_AWS_REGION" --repository-name "$repo" --image-ids file:///tmp/ids.json
@@ -707,6 +719,7 @@ then `shared-us`, because the environments depend on its network.
 5. Delete the released data volumes, and any snapshots you don't want:
 
    ```bash
+   source .bootstrap/settings.env
    aws ec2 describe-volumes --region "$RENTSYNC_AWS_REGION" --filters Name=tag:Project,Values=rentsync \
      --query 'Volumes[].[VolumeId,Tags[?Key==`DeploymentId`]|[0].Value,State]' --output table
    aws ec2 delete-volume --region "$RENTSYNC_AWS_REGION" --volume-id vol-…

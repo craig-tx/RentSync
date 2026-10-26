@@ -12,7 +12,8 @@ to run and what to expect, and points to the contracts for details.
 - An AWS account and an HCP Terraform organization, both owned by the operator, and a domain
   whose DNS the operator controls. Their values are the deployment settings
   (`.bootstrap/settings.env`, written by `bootstrap-init.sh`); `<domain>` below is that domain,
-  and commands assume `source .bootstrap/settings.env`.
+  and each code block that uses the `$RENTSYNC_…` values starts by loading them with
+  `source .bootstrap/settings.env` (from the repository root).
 - Locally: `terraform` ≥ 1.11 (the repository uses 1.16.x), the AWS CLI v2 with the Session
   Manager plugin, `curl`, `jq` and `nmap`. AWS CLI access uses the operator's own console
   sign-in (`aws login` or SSO). No access keys.
@@ -96,6 +97,7 @@ Push or merge a change to `main`. The `CI` workflow goes green, and then `releas
 and deploys to staging. On the first deploy, `bin/setup --deploy` seeds the database.
 
 ```bash
+source .bootstrap/settings.env
 curl -s "https://pms-staging.$RENTSYNC_DOMAIN/healthz" | jq
 curl -sI "http://pms-staging.$RENTSYNC_DOMAIN/" | head -1         # 308 to https
 curl -s -o /dev/null -w '%{http_code}\n' "https://pms-staging.$RENTSYNC_DOMAIN/metrics"   # 404
@@ -214,6 +216,7 @@ gitleaks detect --source . --no-banner         # or GitHub secret scanning: zero
 ## 9a. DeploymentId and side-by-side (FR-038 to FR-042, SC-011)
 
 ```bash
+source .bootstrap/settings.env
 # Every resource in the region, minus those tagged DeploymentId. Expect only AWS defaults
 # (the default VPC and its parts), and nothing named rentsync-*.
 aws resourcegroupstaggingapi get-resources --region "$RENTSYNC_AWS_REGION" \
