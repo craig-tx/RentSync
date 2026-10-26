@@ -684,3 +684,14 @@ No major-version port is outstanding beyond these. The next quarterly review cov
 - **Historical task text** (T052a, T052b) keeps the step numbers it was written with.
 
 **Next task:** the operator's blank-slate re-bootstrap with the new step 1, then T054.
+
+### 2026-10-26: first deploy failed on the SSM command comment
+
+- **Found (operator, first Deploy run):** `aws ssm send-command` rejected the comment
+  `rentsync-deploy <sha>@sha256:<digest>` (128 characters; SSM allows 100). The pinned-digest
+  argument (R9) made it too long; the command itself was fine. No test exercised the workflow
+  against the real API, so this first showed on a live run.
+- **Done:** the comment is now `rentsync-deploy <deployment_id> <sha>`, at most 73 characters.
+  The command still pins `<sha>@sha256:<digest>`.
+
+**Next task:** rerun Deploy for `dev-staging` once merged.
