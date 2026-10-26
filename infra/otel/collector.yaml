@@ -69,7 +69,7 @@ receivers:
 processors:
   memory_limiter:
     check_interval: 1s
-    limit_mib: 256
+    limit_mib: 256 # GOMEMLIMIT in infra/host/compose.env.yaml is ~80% of this; change both together
     spike_limit_mib: 64
   batch:
     timeout: 5s

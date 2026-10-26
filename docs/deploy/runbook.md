@@ -537,7 +537,7 @@ waits for it, and `rentsync.service` re-renders secrets and starts the stack.
 
 ## Changing a host's instance type
 
-Every host is `t4g.small` (2 GiB). The environment hosts measured about 750–800 MiB at peak
+Every host is `t4g.small` (2 GiB). The environment hosts measured about 700–750 MiB at peak
 (research R4), so `t4g.micro` (1 GiB) is worth trying to save about $6 per host per month.
 Every host has a 1 GiB swap file for short peaks. Don't go below `t4g.micro`, and keep the
 telemetry host on `t4g.small`: OpenObserve alone peaked near 950 MiB.

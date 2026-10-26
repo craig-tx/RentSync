@@ -749,3 +749,21 @@ No major-version port is outstanding beyond these. The next quarterly review cov
   operator reruns step 2 shows it; until then this is the documented format, not observed.
 
 **Next task:** operator reruns bootstrap step 2 with `--apply`; watch the next `infra/` merge.
+
+### 2026-10-26: Collector GOMEMLIMIT (also the first trigger-pattern test)
+
+- **Done:** the environment hosts' Collector gets `GOMEMLIMIT=204MiB`, ~80% of its
+  `memory_limiter` limit, as the Collector docs advise; `collector.yaml` notes the pairing.
+  Research R4 corrected: the test receiver runs only under the `tools` profile, so an
+  environment host peaks at ~700–750 MiB, not 750–800.
+- **Also the test of the anchored trigger pattern:** this is the first `infra/` merge after the
+  operator's step 2 rerun (workspaces updated 21:32:18 UTC; the last earlier merge's push landed
+  at the same moment). Expected: runs queue in all three workspaces; `rentsync-dev-staging`
+  applies on its own; `rentsync-shared-us` and `rentsync-prod-us` wait for confirmation. Each
+  replaces its host, which also applies PR #26's swap, never applied so far (its merge at
+  21:06 UTC came after the last manual runs).
+- **Tests:** Collector `validate` with the new environment; the host Compose file renders it;
+  Terraform tests (environment 15, shared 9, host module 5); infra shell tests 5/5.
+
+**Next task:** watch the runs after merge; check dev-staging's `/healthz` still reports the
+deployed SHA after its host is replaced.

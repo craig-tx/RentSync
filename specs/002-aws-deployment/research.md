@@ -105,9 +105,9 @@ implementation.
   is a deliberate variable change, applied staging first. It replaces the host and goes through
   the host-replacement path (US5).
 - **Instance type**: `t4g.small` (2 vCPU burstable, 2 GiB) for all three hosts.
-  - An environment host runs Puma, the worker, Postgres, Redis, the Collector, the test receiver
-    and Caddy. The original estimate was 1–1.3 GiB; the measurement below puts it at about
-    750–800 MiB.
+  - An environment host runs Puma, the worker, Postgres, Redis, the Collector and Caddy (the
+    test receiver only under the `tools` profile). The original estimate was 1–1.3 GiB; the
+    measurement below puts it at about 700–750 MiB.
   - OpenObserve plus its Postgres fits in 2 GiB at demo volumes.
   - **Measured 2026-10-26** on the local Compose stack, with the production `mock_pms` image,
     sampling `docker stats` every 2 s. Load: 1,248 events in 35 s, 599 webhook deliveries,
@@ -119,14 +119,16 @@ implementation.
     | worker | 44 | 48 |
     | Postgres (4 databases locally; a host has 1) | 147 | 168 |
     | Collector | 104 | 108 |
-    | test receiver | 49 | 55 |
     | Redis | 9 | 14 |
     | Caddy (not in the local stack; typical) | — | ~40 |
-    | **containers** | | **~500** |
+    | **containers** | | **~450** |
+    | test receiver (`tools` profile only; add when running it) | 49 | 55 |
     | OpenObserve (telemetry host) | 653 | 949 |
 
     Adding ~250–300 MiB for the OS, Docker and the SSM agent (estimated, not measured), an
-    environment host peaks at ~750–800 MiB. Caveats: Docker Desktop on x86_64, not Graviton.
+    environment host peaks at ~700–750 MiB. Caveats: Docker Desktop on x86_64, not Graviton.
+    The Collector runs with `GOMEMLIMIT` at ~80% of its `memory_limiter` limit (256 MiB), so it
+    collects garbage harder before the limiter refuses data.
   - **What the measurement means**:
     - `t4g.nano` (512 MiB) cannot hold the containers.
     - `t4g.micro` (1 GiB, ~900 MiB usable) fits an environment host with ~100–150 MiB to spare.
