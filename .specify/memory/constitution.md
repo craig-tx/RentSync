@@ -1,3 +1,14 @@
+<!--
+Sync Impact Report (remove before merge)
+- Version: 1.6.0 → 1.7.0 (MINOR: new Development Workflow rule)
+- Added: Development Workflow & Quality Gates → "Cross-platform development" (Windows and macOS
+  developer machines; portable bash, Ruby or Docker for scripts; side-by-side instructions;
+  line endings and modes fixed in the repo)
+- Modified principles: none. Removed sections: none.
+- Templates: none need changes (they read the constitution at runtime).
+- Follow-up: infra/bootstrap/test/bootstrap_iam_test.sh line 106 uses GNU `sed -i` with no
+  suffix, which fails on macOS sed. Fix in a separate change.
+-->
 # RentSync Constitution
 
 ## Core Principles
@@ -309,6 +320,29 @@ a second instance starts.
   - **Rationale**: dependencies age whether or not anyone looks at them. Unpatched components
     are a leading source of vulnerabilities, and a major-version jump deferred too long
     becomes a rewrite. A fixed schedule keeps updates small, reviewed and routine.
+- **Cross-platform development**: a developer MUST be able to build, test, run and operate the
+  project from either Windows or macOS. No contributor or operator is required to change
+  platforms.
+  - **Scope:** every developer-facing script, tool requirement and instruction. That includes
+    the runbook, quickstart, README, bootstrap scripts, test commands and local Docker stack.
+  - **Scripts** are written in portable bash (4.4 or later, which Git Bash and WSL provide on
+    Windows and Homebrew provides on macOS), in Ruby, or run inside Docker. A script MUST NOT
+    depend on a shell or tool that exists on only one of the two, for example PowerShell, zsh,
+    or GNU-only flags of `sed`, `date` or `grep`, unless it also works with the other
+    platform's version.
+  - **Instructions:** where a step differs between Windows and macOS, both versions are
+    documented side by side, at the same level of detail. A tool requirement names how to
+    install it on each platform.
+  - **Files:** line endings and executable bits are fixed in the repository, through
+    `.gitattributes` and git file modes, so a checkout on either platform runs the same
+    way. Paths in scripts and docs use forward slashes, and file names never differ only by
+    letter case.
+  - Linux is supported as a matter of course, because CI and the servers run it, but Windows
+    and macOS are the explicit commitment for developer machines.
+  - **Rationale**: no one should be forced onto a platform that does not suit them. WSL, Git
+    Bash, Homebrew and Docker make supporting both practical, so the cost is mostly care
+    when writing scripts and docs. A project that works only on its author's platform also
+    shuts out reviewers and future maintainers who use the other one.
 
 ## Governance
 
@@ -326,4 +360,4 @@ a second instance starts.
   every PR review MUST verify compliance with these principles. Any unjustified violation
   blocks the merge.
 
-**Version**: 1.6.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-25
+**Version**: 1.7.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-26
