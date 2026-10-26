@@ -1,5 +1,29 @@
 <!--
 Sync Impact Report (remove before merge)
+Covers both amendments made on branch 002-aws-deployment.
+
+v1.3.0 (2026-10-25)
+- Version change: 1.2.0 → 1.3.0 (MINOR: new rule added to a section)
+- Modified principles: none
+- Added: "Explicit system names" rule in Development Workflow & Quality Gates. Every account
+  reference (docs, flags, placeholders, comments, names, messages, specs) MUST name its system
+  (AWS, HCP Terraform, GitHub, NameCheap, OpenObserve). Only names the project does not
+  control are exempt. Prompted by the ambiguous `--account` flag in
+  infra/bootstrap/bootstrap-hcp.rb, renamed `--aws-account` in 8fd48c0.
+- Removed sections: none
+- Templates: .specify/templates/* read the constitution at runtime; no edits needed
+- Follow-up TODOs (feature 002 must comply before merge):
+  - docs/deploy/iam/*.json: placeholder `<account>` → `<aws-account-id>`, and the matching
+    substitution in infra/bootstrap/bootstrap-iam.sh plus its test
+  - infra/bootstrap/bootstrap-iam.sh: `--render-only ACCOUNT`, the `account` variable, and
+    messages ("for account …", "account ID must be …") → AWS-qualified
+  - docs/deploy/runbook.md (lines ~29, 73, 77, 264, 559, 609),
+    docs/adr/0005-demo-aws-topology.md:13, specs/002 spec.md:297 and tasks.md:548 →
+    AWS-qualified wording
+  - docs/ai-build-log.md: past entries are a historical record and left as written; new
+    entries comply
+
+v1.2.0 (2026-10-21)
 - Version change: 1.1.0 → 1.2.0 (MINOR: materially expanded guidance in Principle VI)
 - Modified principles: VI. Observable by Default (title unchanged)
   - `deployment.id` added to the required telemetry resource attributes
@@ -260,6 +284,20 @@ a second instance starts.
   `docs/ai-build-log.md`: what was done, what was blocked, decisions made, and the next task.
 - Unattended sessions run on a separate branch or in a container, with only the permissions
   the session needs. Their output is reviewed by a human before merge.
+- **Explicit system names**: every reference to an account or its identifier MUST name the
+  system it belongs to, for example "AWS account ID", "HCP Terraform organization", "GitHub
+  account", or "NameCheap account". A bare "account" is not allowed.
+  - This applies everywhere the project controls the wording: documentation, CLI flags and
+    switches, placeholders, comments, variable and parameter names, configuration keys, log and
+    error messages, and task and spec text. Examples: `--aws-account`, not `--account`;
+    `<aws-account-id>`, not `<account>`; `aws_account_id`, not `account`.
+  - The only exception is a name the project does not control, such as the `Account` field
+    returned by `aws sts get-caller-identity`. Where such a name is used, the surrounding text
+    or variable name MUST still say which system it belongs to.
+  - **Rationale**: the project spans several systems that each have accounts (AWS, HCP
+    Terraform, GitHub, NameCheap, OpenObserve). An operator who has to guess which one a value
+    belongs to can enter it in the wrong place, and in a bootstrap step that mistake can grant
+    access to the wrong system.
 
 ## Governance
 
@@ -277,4 +315,4 @@ a second instance starts.
   every PR review MUST verify compliance with these principles. Any unjustified violation
   blocks the merge.
 
-**Version**: 1.2.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-21
+**Version**: 1.3.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-25
