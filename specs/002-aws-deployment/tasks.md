@@ -521,7 +521,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 
   T023 and T039 must pass. Commit.
 - [X] T050 [P] [US1] Write the IAM policy documents from contracts/bootstrap-iam.md, as valid
-  JSON with an `<account>` placeholder:
+  JSON with an `<aws-account-id>` placeholder:
   - `docs/deploy/iam/hcp-terraform-trust.json` and `hcp-terraform-policy.json`;
   - `docs/deploy/iam/github-actions-trust.json` and `github-actions-policy.json`.
 
@@ -545,7 +545,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
      only place deployment URLs are recorded;
   8. activating the `DeploymentId` cost allocation tag.
 
-  End with a table of every non-secret value (account ID, region, organization, role ARNs) and
+  End with a table of every non-secret value (AWS account ID, AWS region, HCP Terraform organization, AWS IAM role ARNs) and
   where each is entered. **Never** ask for a credential in chat.
 - [X] T052 [US1] Fill in runbook §DNS:
   - the three NameCheap A records (`telemetry`, `pms-staging`, `pms`), with the output each one
@@ -556,7 +556,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 - [X] T052a [US1] Script runbook §Bootstrap steps 1–2 in `infra/bootstrap/bootstrap-iam.sh`, for
   AWS CloudShell (no access keys). It renders the `iam/` files into the gitignored
   `.bootstrap/iam/`, validates them with Access Analyzer, prints a plan, and applies only with
-  `--apply`. It is idempotent, and `--render-only ACCOUNT` serves the console path. Test with a
+  `--apply`. It is idempotent, and `--render-only AWS_ACCOUNT_ID` serves the console path. Test with a
   stub `aws`: `infra/bootstrap/test/bootstrap_iam_test.sh`, run in CI.
 - [X] T052b [US1] Script runbook §Bootstrap steps 4–6 in `infra/bootstrap/bootstrap-hcp.rb`
   (Ruby standard library only), through the HCP Terraform API: the project, the variable set,

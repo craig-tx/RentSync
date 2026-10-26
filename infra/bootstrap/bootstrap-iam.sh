@@ -3,12 +3,12 @@
 # roles, from the policy files in docs/deploy/iam/. Meant for AWS CloudShell, which runs as the
 # console session, so no access key is ever created.
 #
-#   bootstrap-iam.sh                        render, validate, and print the plan; changes nothing
-#   bootstrap-iam.sh --apply                the same, then create or update what the plan lists
-#   bootstrap-iam.sh --render-only ACCOUNT  only write the filled-in copies; no AWS calls
+#   bootstrap-iam.sh                               render, validate, and print the plan; changes nothing
+#   bootstrap-iam.sh --apply                       the same, then create or update what the plan lists
+#   bootstrap-iam.sh --render-only AWS_ACCOUNT_ID  only write the filled-in copies; no AWS calls
 #
 # Filled-in copies go to $RENTSYNC_IAM_OUT (default <repo>/.bootstrap/iam, gitignored), so the
-# account ID never lands in a tracked file. Safe to rerun: what exists is skipped or updated.
+# AWS account ID never lands in a tracked file. Safe to rerun: what exists is skipped or updated.
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -21,28 +21,28 @@ stems="hcp-terraform github-build github-actions github-actions-prod"
 die() { echo "error: $*" >&2; exit 1; }
 
 mode="plan"
-account=""
+aws_account_id=""
 case "${1:-}" in
   "") ;;
   --apply) mode="apply" ;;
-  --render-only) mode="render"; account="${2:-}" ;;
-  *) die "usage: $0 [--apply | --render-only ACCOUNT]" ;;
+  --render-only) mode="render"; aws_account_id="${2:-}" ;;
+  *) die "usage: $0 [--apply | --render-only AWS_ACCOUNT_ID]" ;;
 esac
 
 if [ "$mode" != "render" ]; then
-  account="$(aws sts get-caller-identity --query Account --output text)"
+  aws_account_id="$(aws sts get-caller-identity --query Account --output text)"
 fi
-[[ "$account" =~ ^[0-9]{12}$ ]] || die "account ID must be 12 digits, got '$account'"
+[[ "$aws_account_id" =~ ^[0-9]{12}$ ]] || die "AWS account ID must be 12 digits, got '$aws_account_id'"
 
 # --- Render ------------------------------------------------------------------------------
 mkdir -p "$out"
 for f in "$src"/*.json; do
-  sed "s/<account>/$account/g" "$f" > "$out/$(basename "$f")"
+  sed "s/<aws-account-id>/$aws_account_id/g" "$f" > "$out/$(basename "$f")"
 done
 if grep -l '<[A-Za-z_-]*>' "$out"/*.json >&2; then
   die "placeholders remain in the files above"
 fi
-echo "Rendered $(find "$out" -name '*.json' | wc -l | tr -d ' ') files for account $account into $out"
+echo "Rendered $(find "$out" -name '*.json' | wc -l | tr -d ' ') files for AWS account $aws_account_id into $out"
 [ "$mode" = "render" ] && exit 0
 
 # --- Validate (IAM Access Analyzer, the console editor's "Policy validation") -------------
@@ -85,7 +85,7 @@ echo "Plan ($mode):"
 providers="$(aws iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[].Arn' --output text)"
 for pair in app.terraform.io=aws.workload.identity token.actions.githubusercontent.com=sts.amazonaws.com; do
   host="${pair%%=*}" audience="${pair#*=}"
-  arn="arn:aws:iam::$account:oidc-provider/$host"
+  arn="arn:aws:iam::$aws_account_id:oidc-provider/$host"
   if ! echo "$providers" | tr '\t' '\n' | grep -qxF "$arn"; then
     step aws iam create-open-id-connect-provider --url "https://$host" --client-id-list "$audience"
   elif ! aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$arn" \
@@ -99,7 +99,7 @@ done
 
 for stem in $stems; do
   name="rentsync-$stem"
-  policy_arn="arn:aws:iam::$account:policy/$name"
+  policy_arn="arn:aws:iam::$aws_account_id:policy/$name"
   if exists iam get-policy --policy-arn "$policy_arn"; then
     # Not changed automatically: a policy keeps at most five versions.
     echo "  policy $name exists; not changed. If it differs from $out/$stem-policy.json, run:"
@@ -127,7 +127,7 @@ fi
 
 echo
 echo "Role ARNs (runbook §Bootstrap, values table):"
-echo "  rentsync-hcp-terraform        arn:aws:iam::$account:role/rentsync-hcp-terraform        -> HCP variable set TFC_AWS_RUN_ROLE_ARN"
-echo "  rentsync-github-build         arn:aws:iam::$account:role/rentsync-github-build         -> GitHub repository variable AWS_BUILD_ROLE_ARN"
-echo "  rentsync-github-actions       arn:aws:iam::$account:role/rentsync-github-actions       -> GitHub repository variable AWS_ROLE_ARN"
-echo "  rentsync-github-actions-prod  arn:aws:iam::$account:role/rentsync-github-actions-prod  -> GitHub prod-us Environment variable AWS_ROLE_ARN"
+echo "  rentsync-hcp-terraform        arn:aws:iam::$aws_account_id:role/rentsync-hcp-terraform        -> HCP variable set TFC_AWS_RUN_ROLE_ARN"
+echo "  rentsync-github-build         arn:aws:iam::$aws_account_id:role/rentsync-github-build         -> GitHub repository variable AWS_BUILD_ROLE_ARN"
+echo "  rentsync-github-actions       arn:aws:iam::$aws_account_id:role/rentsync-github-actions       -> GitHub repository variable AWS_ROLE_ARN"
+echo "  rentsync-github-actions-prod  arn:aws:iam::$aws_account_id:role/rentsync-github-actions-prod  -> GitHub prod-us Environment variable AWS_ROLE_ARN"

@@ -79,7 +79,7 @@ healthy --reboot / stop-start--> booting (systemd restarts everything, no manual
 | Path | Host | Contents |
 |---|---|---|
 | `postgres/` | environment | Postgres 16 data directory |
-| `caddy/` | all | Caddy `/data`: certificates, ACME account |
+| `caddy/` | all | Caddy `/data`: certificates, Let's Encrypt ACME account |
 | `receiver/` | environment | Receiver JSONL logs (quickstart only) |
 | `openobserve/` | telemetry | OpenObserve `ZO_DATA_DIR` |
 | `openobserve-db/` | telemetry | Metadata Postgres data directory |
@@ -116,7 +116,7 @@ Non-secret parameters (`String`):
 | Field | Notes |
 |---|---|
 | tag | Full 40-character git SHA. Immutable in ECR |
-| image | `<account>.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_pms:<sha>`, `linux/arm64` |
+| image | `<aws-account-id>.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_pms:<sha>`, `linux/arm64` |
 | version reported | `SERVICE_VERSION` = the same SHA, in `/healthz.version` and in `service.version` telemetry |
 | deployment record | The GitHub Actions run (who approved, when), plus the per-environment `image_tag` and `previous_image_tag` in SSM |
 

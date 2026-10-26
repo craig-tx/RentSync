@@ -4,7 +4,7 @@
     {
       "Sid": "HcpTerraformRentSyncWorkspaces",
       "Effect": "Allow",
-      "Principal": { "Federated": "arn:aws:iam::<account>:oidc-provider/app.terraform.io" },
+      "Principal": { "Federated": "arn:aws:iam::<aws-account-id>:oidc-provider/app.terraform.io" },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": { "app.terraform.io:aud": "aws.workload.identity" },

@@ -162,7 +162,7 @@ Boot sequence (`rentsync-boot`, run as `rentsync.service`'s `ExecStartPre`, so i
    R15).
 3. Mount it at `/srv/data`, through an `fstab` entry keyed by UUID with `nofail`.
 4. Create `/srv/data/{postgres,caddy,openobserve,...}`. **Caddy's `/data` directory (its
-   certificates and ACME account) is on the durable volume**, so a replaced host reuses its
+   certificates and Let's Encrypt ACME account) is on the durable volume**, so a replaced host reuses its
    certificates and does not hit Let's Encrypt rate limits.
 5. Write `/etc/docker/daemon.json` with `json-file` logs capped at `max-size: 10m` and
    `max-file: 3` (FR-012).
@@ -247,7 +247,7 @@ OpenObserve's data directory is `/srv/data/openobserve` (FR-020).
   001 R16).
 
 **Trade-off**: the Collectors use the OpenObserve root credentials, and OTLP crosses the VPC in
-plain HTTP. In production each environment would have its own ingest-only service account, with
+plain HTTP. In production each environment would have its own ingest-only OpenObserve service account, with
 TLS on the ingest path. Both go in the production-differences document.
 
 **Alternatives considered**:
@@ -269,7 +269,7 @@ successfully on `main`.
    - assumes `rentsync-github-build` through GitHub OIDC. Only jobs on `main` are trusted, and
      no other role can push images;
    - builds `mock_pms` with `GIT_SHA=<full sha>`;
-   - pushes `<account>.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_pms:<sha>`;
+   - pushes `<aws-account-id>.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_pms:<sha>`;
    - outputs the image **digest**.
 
    The ECR repository has **immutable tags**, so a tag is always one image. The build skips the

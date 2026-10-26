@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Test for bootstrap-iam.sh (runbook §Bootstrap). A stub `aws` on PATH simulates IAM, STS and
 # Access Analyzer and logs every call, so no cloud access is needed. Proves:
-#   1. --render-only fills every <account> placeholder and makes no AWS call;
+#   1. --render-only fills every <aws-account-id> placeholder and makes no AWS call;
 #      every GitHub trust uses the repository's immutable subject format;
-#   2. a bad account ID, or a placeholder left in a source file, fails the render;
+#   2. a bad AWS account ID, or a placeholder left in a source file, fails the render;
 #   3. the default (plan) mode makes no mutating call;
-#   4. --apply on an empty account creates both providers and all four policies and roles;
-#   5. --apply on a half-done account skips what exists and never re-creates it;
+#   4. --apply on an empty AWS account creates both providers and all four policies and roles;
+#   5. --apply on a half-done AWS account skips what exists and never re-creates it;
 #   6. an Access Analyzer ERROR stops the run before any change.
 set -euo pipefail
 
@@ -56,9 +56,9 @@ calls() { grep -c "^iam $1 " "$AWS_LOG" || true; }
 # 1. Render only.
 run --render-only 123456789012 > /dev/null || fail "--render-only failed"
 [ "$(find "$work/out" -name '*.json' | wc -l)" -eq 8 ] || fail "expected 8 rendered files"
-if grep -l '<account>' "$work/out"/*.json; then fail "a placeholder survived the render"; fi
+if grep -l '<aws-account-id>' "$work/out"/*.json; then fail "a placeholder survived the render"; fi
 grep -q 'arn:aws:iam::123456789012:oidc-provider/app.terraform.io' "$work/out/hcp-terraform-trust.json" \
-  || fail "trust policy lacks the account ID"
+  || fail "trust policy lacks the AWS account ID"
 [ ! -s "$AWS_LOG" ] || fail "--render-only called aws"
 # The repository's tokens carry immutable subjects (contracts/bootstrap-iam.md); a trust in the
 # older repo:craig-tx/RentSync: form would never match.
@@ -68,7 +68,7 @@ for f in "$work/out"/github-*-trust.json; do
 done
 
 # 2. Bad input.
-if run --render-only 12345 > /dev/null 2>&1; then fail "accepted a short account ID"; fi
+if run --render-only 12345 > /dev/null 2>&1; then fail "accepted a short AWS account ID"; fi
 mkdir -p "$work/src"
 cp "$here/../../../docs/deploy/iam"/*.json "$work/src/"
 sed -i 's/us-east-1/<region>/' "$work/src/hcp-terraform-policy.json"
@@ -76,7 +76,7 @@ if RENTSYNC_IAM_SRC="$work/src" run --render-only 123456789012 > /dev/null 2>&1;
   fail "a leftover <region> placeholder did not fail the render"
 fi
 
-# 3. Plan on an empty account: lists every change, makes none.
+# 3. Plan on an empty AWS account: lists every change, makes none.
 plan="$(EXISTING="" run)" || fail "plan failed"
 [ "$(mutations)" -eq 0 ] || fail "plan mode made a mutating call"
 [ "$(echo "$plan" | grep -c '^+ aws iam create-policy ')" -eq 4 ] || fail "plan does not list 4 create-policy"
@@ -85,7 +85,7 @@ echo "$plan" | grep -q '^+ aws iam create-open-id-connect-provider --url https:/
 echo "$plan" | grep -q 'arn:aws:iam::123456789012:role/rentsync-github-actions-prod' \
   || fail "plan does not print the role ARNs"
 
-# 4. Apply on an empty account.
+# 4. Apply on an empty AWS account.
 EXISTING="" run --apply > /dev/null || fail "apply failed"
 [ "$(calls create-open-id-connect-provider)" -eq 2 ] || fail "expected 2 providers created"
 [ "$(calls create-policy)" -eq 4 ] || fail "expected 4 policies created"
@@ -94,9 +94,9 @@ EXISTING="" run --apply > /dev/null || fail "apply failed"
 grep -q 'create-role --role-name rentsync-github-build --assume-role-policy-document file://.*/github-build-trust.json' \
   "$AWS_LOG" || fail "role created without its trust document"
 
-# 5. Apply on a half-done account: providers and the HCP pair exist.
+# 5. Apply on a half-done AWS account: providers and the HCP pair exist.
 half="oidc:app.terraform.io oidc:token.actions.githubusercontent.com policy:rentsync-hcp-terraform role:rentsync-hcp-terraform"
-out="$(EXISTING="$half" run --apply)" || fail "apply on a half-done account failed"
+out="$(EXISTING="$half" run --apply)" || fail "apply on a half-done AWS account failed"
 [ "$(calls create-open-id-connect-provider)" -eq 0 ] || fail "re-created a provider"
 if grep -q 'create-policy --policy-name rentsync-hcp-terraform' "$AWS_LOG"; then fail "re-created an existing policy"; fi
 if grep -q 'create-role --role-name rentsync-hcp-terraform' "$AWS_LOG"; then fail "re-created an existing role"; fi

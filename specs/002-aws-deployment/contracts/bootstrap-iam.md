@@ -1,7 +1,7 @@
 # Contract: bootstrap IAM (created by hand, once)
 
 The operator creates these in the AWS console during bootstrap (FR-006). The runbook has the
-click path. No access keys are created. `<account>` is the AWS account ID.
+click path. No access keys are created. `<aws-account-id>` is the AWS account ID.
 
 ## OIDC identity providers
 
@@ -17,7 +17,7 @@ click path. No access keys are created. `<account>` is the AWS account ID.
 ```json
 {
   "Effect": "Allow",
-  "Principal": { "Federated": "arn:aws:iam::<account>:oidc-provider/app.terraform.io" },
+  "Principal": { "Federated": "arn:aws:iam::<aws-account-id>:oidc-provider/app.terraform.io" },
   "Action": "sts:AssumeRoleWithWebIdentity",
   "Condition": {
     "StringEquals": { "app.terraform.io:aud": "aws.workload.identity" },
@@ -32,11 +32,11 @@ purpose for a demo, and are listed in the production-differences document:
 | Service | Actions | Resources |
 |---|---|---|
 | EC2 | `ec2:*` | `*`, with condition `aws:RequestedRegion = us-east-1` |
-| IAM | `iam:*Role*`, `iam:*InstanceProfile*`, `iam:*RolePolicy*`, `iam:PassRole`, `iam:GetPolicy*`, `iam:List*` | `arn:aws:iam::<account>:role/rentsync-*`, `arn:aws:iam::<account>:instance-profile/rentsync-*`, plus the AWS-managed policies it attaches |
-| SSM | `ssm:*Parameter*`, `ssm:AddTagsToResource`, `ssm:ListTagsForResource`, `ssm:DescribeParameters` | `arn:aws:ssm:us-east-1:<account>:parameter/rentsync/*` |
-| ECR | `ecr:*` | `arn:aws:ecr:us-east-1:<account>:repository/*` (repositories are named `<deployment_id>/...`, so no fixed prefix exists), plus `ecr:GetAuthorizationToken` on `*` |
+| IAM | `iam:*Role*`, `iam:*InstanceProfile*`, `iam:*RolePolicy*`, `iam:PassRole`, `iam:GetPolicy*`, `iam:List*` | `arn:aws:iam::<aws-account-id>:role/rentsync-*`, `arn:aws:iam::<aws-account-id>:instance-profile/rentsync-*`, plus the AWS-managed policies it attaches |
+| SSM | `ssm:*Parameter*`, `ssm:AddTagsToResource`, `ssm:ListTagsForResource`, `ssm:DescribeParameters` | `arn:aws:ssm:us-east-1:<aws-account-id>:parameter/rentsync/*` |
+| ECR | `ecr:*` | `arn:aws:ecr:us-east-1:<aws-account-id>:repository/*` (repositories are named `<deployment_id>/...`, so no fixed prefix exists), plus `ecr:GetAuthorizationToken` on `*` |
 | DLM | `dlm:*` | `*` |
-| Budgets | `budgets:*` | `arn:aws:budgets::<account>:budget/rentsync-*` |
+| Budgets | `budgets:*` | `arn:aws:budgets::<aws-account-id>:budget/rentsync-*` |
 | KMS | `kms:DescribeKey`, `kms:ListAliases` | `*` (AWS-managed keys only; no key is created) |
 
 ## GitHub release roles: one job, one role, exact trust
@@ -64,7 +64,7 @@ prefix with `gh api repos/craig-tx/RentSync/actions/oidc/customization/sub`
 | Actions | Resources |
 |---|---|
 | `ecr:GetAuthorizationToken` | `*` |
-| `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:DescribeImages` | `arn:aws:ecr:us-east-1:<account>:repository/*/mock_pms` |
+| `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:DescribeImages` | `arn:aws:ecr:us-east-1:<aws-account-id>:repository/*/mock_pms` |
 
 It is the **only** principal that can push images. Builds output the image digest, and every
 deploy pins `<sha>@sha256:<digest>` (research R9).
@@ -80,7 +80,7 @@ edit a new deployment needs. See `docs/deploy/iam/github-actions-trust.json`.
 
 | Actions | Resources |
 |---|---|
-| `ssm:SendCommand` | `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`, and `arn:aws:ec2:us-east-1:<account>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = true` |
+| `ssm:SendCommand` | `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`, and `arn:aws:ec2:us-east-1:<aws-account-id>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = true` |
 | `ssm:GetCommandInvocation`, `ssm:ListCommandInvocations` | `*` |
 
 It cannot push images, and it cannot touch production: production hosts are tagged
@@ -101,7 +101,7 @@ reviewer. See `docs/deploy/iam/github-actions-prod-trust.json`.
 
 | Actions | Resources |
 |---|---|
-| `ssm:SendCommand` | `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`, and `arn:aws:ec2:us-east-1:<account>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = protected` |
+| `ssm:SendCommand` | `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`, and `arn:aws:ec2:us-east-1:<aws-account-id>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = protected` |
 | `ssm:GetCommandInvocation`, `ssm:ListCommandInvocations` | `*` |
 
 It has no ECR access: production only runs images the release role already built.

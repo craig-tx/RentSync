@@ -18,7 +18,7 @@ The mock PMS must be fully deployed and working on both environments, verified e
 
 ## Overview
 
-This feature takes the mock PMS from feature 001, which today runs only on a developer's machine, and runs it on the public internet as two independent environments, **staging** and **production**. A single shared telemetry backend serves both. All infrastructure is declared as code and applied from a hosted infrastructure-as-code service (HCP Terraform). Secrets live only in that service and in the cloud account.
+This feature takes the mock PMS from feature 001, which today runs only on a developer's machine, and runs it on the public internet as two independent environments, **staging** and **production**. A single shared telemetry backend serves both. All infrastructure is declared as code and applied from a hosted infrastructure-as-code service (HCP Terraform). Secrets live only in that service and in the AWS account.
 
 This is a **cost-conscious demonstration deployment**. Every place where it deliberately differs from a real production design is documented next to what a production design would use. From this feature on, RentSync features (002+ in the kickoff roadmap, now 003+) have a real, reachable PMS to integrate with.
 
@@ -43,7 +43,7 @@ The operator starts from an empty AWS account and an HCP Terraform organization.
 
 **Why this priority**: Nothing else in this feature, and no later feature that integrates against a deployed PMS, can happen until the infrastructure exists.
 
-**Independent Test**: From an account with none of the project's resources, follow the deployment runbook to an applied state. Check that the three hosts exist, each with a stable public address. Scan each address from outside and find only ports 80 and 443 open. Confirm that no cloud access keys and no secret values appear in the repository or the plan output.
+**Independent Test**: From an AWS account with none of the project's resources, follow the deployment runbook to an applied state. Check that the three hosts exist, each with a stable public address. Scan each address from outside and find only ports 80 and 443 open. Confirm that no cloud access keys and no secret values appear in the repository or the plan output.
 
 **Acceptance Scenarios**:
 
@@ -140,7 +140,7 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 - **Clock and timezone:** hosts keep accurate time, because webhook signatures, tokens and backups depend on it.
 - **Cost runaway:** an unexpected bill shows up as a budget alert before it grows. Nothing scales without bound.
 - **Instance replaced while webhooks are pending:** pending deliveries resume after recovery. At-least-once delivery holds across the replacement.
-- **Side-by-side deployment:** a further deployment with a new DeploymentId, such as `pr-42`, can be planned in the same account. It does not collide in name, parameter path, address or database name with `prod-us`, `dev-staging` or `shared-us`, and it needs no change to their code or variables.
+- **Side-by-side deployment:** a further deployment with a new DeploymentId, such as `pr-42`, can be planned in the same AWS account. It does not collide in name, parameter path, address or database name with `prod-us`, `dev-staging` or `shared-us`, and it needs no change to their code or variables.
 - **Public admin API:** the mock PMS admin endpoints are reachable on the internet. They stay protected by the admin token, which is strong, generated per environment, and never the example value.
 
 ## Requirements *(mandatory)*
@@ -264,7 +264,7 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 
 ### Measurable Outcomes
 
-- **SC-001**: Starting from an empty account and a completed bootstrap, the operator reaches three healthy hosts serving HTTPS at their hostnames in under 60 minutes of elapsed time, following only the runbook. DNS propagation time is excluded.
+- **SC-001**: Starting from an empty AWS account and a completed bootstrap, the operator reaches three healthy hosts serving HTTPS at their hostnames in under 60 minutes of elapsed time, following only the runbook. DNS propagation time is excluded.
 - **SC-002**: 100% of the feature 001 quickstart checks (§3–§9) pass against both the staging and the production public URLs.
 - **SC-003**: An external port scan of each public address finds exactly two open ports, 80 and 443.
 - **SC-004**: A secret scan of the repository and of the HCP Terraform run logs finds zero secret values.
@@ -274,7 +274,7 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 - **SC-008**: Logs and metrics from a scenario run on either environment appear in the shared telemetry UI within 60 seconds, labelled with the correct environment.
 - **SC-009**: The steady-state cloud cost of all three hosts and their storage, addresses and backups stays under USD 60 per month. The budget alert fires before a month exceeds it.
 - **SC-010**: Both environments remain healthy, with certificates renewed and disks below 80% full, through 30 days of unattended running.
-- **SC-011**: A query for AWS resources in the account finds zero project resources without a `DeploymentId` tag. A plan for a hypothetical fourth deployment shows no name or address collision with the existing three.
+- **SC-011**: A query for AWS resources in the AWS account finds zero project resources without a `DeploymentId` tag. A plan for a hypothetical fourth deployment shows no name or address collision with the existing three.
 
 ## Assumptions
 
@@ -294,7 +294,7 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
   - the workspaces;
   - the sensitive variables.
 
-  No AWS access keys are created, and none pass through chat or the repository. After the bootstrap, every change is made through HCP Terraform runs. The runbook also lists every non-secret value (account ID, region, organization name, role ARNs) and where each one is entered.
+  No AWS access keys are created, and none pass through chat or the repository. After the bootstrap, every change is made through HCP Terraform runs. The runbook also lists every non-secret value (AWS account ID, AWS region, HCP Terraform organization name, AWS IAM role ARNs) and where each one is entered.
 - **Administrative access:** shell access uses the cloud provider's session-manager-style access, which needs no inbound port (FR-010).
 - **Certificates** come from a free, public, automated certificate authority (Let's Encrypt, through the reverse proxy). Staging may use the certificate authority's own staging endpoint during first bring-up, to avoid rate limits.
 - **CI:** the GitHub repository and its CI are already in place from feature 001. Releases extend that CI to build and push images. Plan and apply runs happen in HCP Terraform.

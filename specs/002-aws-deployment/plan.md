@@ -20,7 +20,7 @@ The main technical choices:
   - The first three are `shared-us`, `dev-staging` (staging) and `prod-us` (production).
   - Resource names, IAM roles, SSM paths and database names derive from the ID.
   - Every resource carries a `DeploymentId` tag, and all telemetry carries `deployment.id`.
-  - A further deployment, such as `pr-42`, can run side by side in the same account without
+  - A further deployment, such as `pr-42`, can run side by side in the same AWS account without
     touching the others.
 - **Three HCP workspaces over two Terraform roots**, named `rentsync-<deployment_id>`.
   - `shared` (`shared-us`) holds the VPC, ECR, the telemetry host, backups and the budget.

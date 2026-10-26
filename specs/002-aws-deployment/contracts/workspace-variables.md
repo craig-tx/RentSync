@@ -9,7 +9,7 @@ Terraform, so the value never reaches state or plan files.
 | Key | Category | Value | Sensitive |
 |---|---|---|---|
 | `TFC_AWS_PROVIDER_AUTH` | env | `true` | no |
-| `TFC_AWS_RUN_ROLE_ARN` | env | `arn:aws:iam::<account>:role/rentsync-hcp-terraform` | no |
+| `TFC_AWS_RUN_ROLE_ARN` | env | `arn:aws:iam::<aws-account-id>:role/rentsync-hcp-terraform` | no |
 
 ## `rentsync-shared-us` → `infra/terraform/shared`
 
@@ -69,12 +69,12 @@ deploy to it.
 
 | Item | Kind | Value |
 |---|---|---|
-| `AWS_BUILD_ROLE_ARN` | Actions variable | `arn:aws:iam::<account>:role/rentsync-github-build` (the only role that can push images; trusted for `main` only) |
-| `AWS_ROLE_ARN` | Actions variable | `arn:aws:iam::<account>:role/rentsync-github-actions` (non-production deploys; trusted for `environment:dev-staging` only) |
+| `AWS_BUILD_ROLE_ARN` | Actions variable | `arn:aws:iam::<aws-account-id>:role/rentsync-github-build` (the only role that can push images; trusted for `main` only) |
+| `AWS_ROLE_ARN` | Actions variable | `arn:aws:iam::<aws-account-id>:role/rentsync-github-actions` (non-production deploys; trusted for `environment:dev-staging` only) |
 | `ECR_REPOSITORY_URL` | Actions variable | shared output `ecr_repository_url` |
 | `AWS_REGION` | Actions variable | `us-east-1` |
 | `dev-staging` | Environment (named by DeploymentId) | no protection rules; branch `main` only; Environment variable `SITE_URL = https://pms-staging.rentsync.org` |
-| `prod-us` | Environment (named by DeploymentId) | required reviewer: the operator; branch `main` only; `SITE_URL = https://pms.rentsync.org`; `AWS_ROLE_ARN = arn:aws:iam::<account>:role/rentsync-github-actions-prod` (overrides the repository variable) |
+| `prod-us` | Environment (named by DeploymentId) | required reviewer: the operator; branch `main` only; `SITE_URL = https://pms.rentsync.org`; `AWS_ROLE_ARN = arn:aws:iam::<aws-account-id>:role/rentsync-github-actions-prod` (overrides the repository variable) |
 
 None of these values are secrets. GitHub Actions authenticates to AWS through OIDC, so there is
 no access key anywhere.

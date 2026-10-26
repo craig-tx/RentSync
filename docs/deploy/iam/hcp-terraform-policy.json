@@ -22,8 +22,8 @@
         "iam:PassRole"
       ],
       "Resource": [
-        "arn:aws:iam::<account>:role/rentsync-*",
-        "arn:aws:iam::<account>:instance-profile/rentsync-*"
+        "arn:aws:iam::<aws-account-id>:role/rentsync-*",
+        "arn:aws:iam::<aws-account-id>:instance-profile/rentsync-*"
       ]
     },
     {
@@ -39,7 +39,7 @@
         "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters", "ssm:DeleteParameter", "ssm:DeleteParameters",
         "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:ListTagsForResource"
       ],
-      "Resource": "arn:aws:ssm:us-east-1:<account>:parameter/rentsync/*"
+      "Resource": "arn:aws:ssm:us-east-1:<aws-account-id>:parameter/rentsync/*"
     },
     {
       "Sid": "DescribeParameters",
@@ -51,7 +51,7 @@
       "Sid": "Repositories",
       "Effect": "Allow",
       "Action": "ecr:*",
-      "Resource": "arn:aws:ecr:us-east-1:<account>:repository/*"
+      "Resource": "arn:aws:ecr:us-east-1:<aws-account-id>:repository/*"
     },
     {
       "Sid": "RegistryAuth",
@@ -69,7 +69,7 @@
       "Sid": "RentSyncBudgets",
       "Effect": "Allow",
       "Action": "budgets:*",
-      "Resource": "arn:aws:budgets::<account>:budget/rentsync-*"
+      "Resource": "arn:aws:budgets::<aws-account-id>:budget/rentsync-*"
     },
     {
       "Sid": "AwsManagedKeysOnly",

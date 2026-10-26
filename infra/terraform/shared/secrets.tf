@@ -21,7 +21,7 @@ resource "aws_ssm_parameter" "openobserve_root_password" {
 }
 
 # Collectors use the root credentials for ingest; production would use a per-environment
-# ingest-only account (research R8, docs/deploy/production-differences.md).
+# ingest-only OpenObserve account (research R8, docs/deploy/production-differences.md).
 resource "aws_ssm_parameter" "ingest_password" {
   name             = "${local.ssm_prefix}/openobserve/ingest/password"
   type             = "SecureString"

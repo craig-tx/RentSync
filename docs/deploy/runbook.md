@@ -26,7 +26,7 @@ You need an AWS account (region `us-east-1`), owner access to the HCP Terraform 
 
 [`infra/bootstrap/bootstrap-iam.sh`](../../infra/bootstrap/bootstrap-iam.sh) does steps 1 and 2
 with the AWS CLI. Run it in **AWS CloudShell**, which acts as your console session, so no access
-key is created. It reads the account ID from that session, writes filled-in copies of the
+key is created. It reads the AWS account ID from that session, writes filled-in copies of the
 [`iam/`](iam/) files to the gitignored `.bootstrap/iam/`, and validates each one with IAM Access
 Analyzer. It is safe to rerun: it skips what exists, and refreshes the trust policy of a role
 that exists.
@@ -70,11 +70,11 @@ two providers:
 
 ### 2. AWS: the bootstrap roles (console)
 
-Each policy file in [`iam/`](iam/) uses `<account>` as a placeholder. Don't edit them in place.
+Each policy file in [`iam/`](iam/) uses `<aws-account-id>` as a placeholder. Don't edit them in place.
 Write paste-ready copies to the gitignored `.bootstrap/iam/` and paste from there:
 
 ```bash
-bash infra/bootstrap/bootstrap-iam.sh --render-only <your 12-digit account ID>
+bash infra/bootstrap/bootstrap-iam.sh --render-only <your 12-digit AWS account ID>
 ```
 
 A placeholder left in a pasted document makes IAM fail with "The policy failed legacy parsing".
@@ -261,7 +261,7 @@ deployment (constitution VI).
 ### Values to record
 
 Every value below is non-secret, but don't write them into this file: the repository is
-public and stays account-neutral. Enter each value where the last column says. Those places
+public and never names an AWS account ID. Enter each value where the last column says. Those places
 are the record.
 
 | Value | Where it comes from | Where it is entered |
@@ -556,7 +556,7 @@ otherwise, so run these steps back to back:
    few seconds.
 
 **OpenObserve root password** (shared). OpenObserve reads `ZO_ROOT_USER_PASSWORD` only when it
-first initializes, so change the account itself first:
+first initializes, so change the password on the OpenObserve root user first:
 
 1. Sign in to `https://telemetry.rentsync.org` → **IAM** → **Users** → the root user →
    **Change password**, and set the new value.
@@ -606,7 +606,7 @@ Replays are idempotent from the receiver's point of view, because the event ID i
 ## Adding a side-by-side deployment
 
 Every name a deployment owns derives from its DeploymentId (constitution VI), so a new one,
-for example `pr-42`, runs next to the others in the same account. No existing deployment's
+for example `pr-42`, runs next to the others in the same AWS account. No existing deployment's
 code or variables change (FR-042). The only edit to shared configuration is one line in the
 release role's trust policy, step 2:
 

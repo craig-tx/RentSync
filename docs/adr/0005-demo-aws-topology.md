@@ -10,7 +10,7 @@ Feature 002 puts the mock PMS on the public internet as two environments, stagin
 production, sending telemetry to one shared OpenObserve. The brief is cost-conscious: under
 USD 60 a month (SC-009), with real applied infrastructure rather than a plan-only demo.
 Constitution v1.2.0 adds a DeploymentId that every deployment-owned name must derive from, so
-that deployments can run side by side in one account.
+that deployments can run side by side in one AWS account.
 
 A conventional production design would cost far more than the ceiling. It would have ECS
 Fargate across availability zones, an ALB, RDS, ElastiCache, NAT gateways, and separate
