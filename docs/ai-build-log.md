@@ -619,3 +619,21 @@ land on the first apply. Then the CLI speculative plan check, then T054.
 
 **Next task:** merge PR #7, retarget and merge this PR, then the operator's re-bootstrap from
 step 1 (the IAM policy changed) and T054.
+
+### 2026-10-25: first dependency review (constitution v1.5.0, "Dependency maintenance")
+
+Dependabot's first run opened seven PRs. Each was reviewed against its release notes and
+against the inputs this repository actually passes.
+
+| PR | Update | Decision | Why |
+|---|---|---|---|
+| #9 | parser 3.3.13.0, rack-test 2.3.0, rubocop 1.92.1 (dev/test gems) | merge | Patch and minor updates; CI green. Merging is left to the operator, because the agent's merge of a bot PR was blocked. |
+| #11 | AWS provider 6.69.1 → 6.70.0 (shared, environment) | merge | Minor version; all Terraform tests pass. |
+| #12 | `codeql-action/init` 3 → 4 | superseded | `init` and `analyze` must match. Only `init` moved, so `analyze` failed. Replaced by a PR that bumps both to v4.39.1, and Dependabot now groups them. |
+| #13 | `setup-buildx-action` 3 → 4 | merge | v4 moves to Node 24 (GitHub-hosted runners qualify) and removes deprecated inputs. We pass none. It isn't exercised by PR CI; the first release proves it. |
+| #14 | `setup-terraform` 3 → 4 | merge | Node 24 only. Our `terraform_version` and `terraform_wrapper` inputs still work; CI green. |
+| #15 | `configure-aws-credentials` 4 → 6 | merge | v5 changed boolean input parsing, and v6 moves to Node 24. We pass only `role-to-assume` and `aws-region`. It isn't exercised by PR CI; the first release and deploy prove it. |
+| #16 | `actions/checkout` 4 → 7 | merge | Node 24; credentials persisted to a separate file (v6); v7 refuses fork-PR checkouts under `pull_request_target` and `workflow_run`. Our `workflow_run` (release) only builds pushes to `main`, never fork PRs. CI green. |
+
+No major-version port is outstanding beyond these. The next quarterly review covers Ruby, Postgres
+16, Redis 7 and the Terraform CLI.

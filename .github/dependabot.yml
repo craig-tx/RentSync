@@ -17,6 +17,8 @@ updates:
     directory: /
     schedule: { interval: weekly }
     groups:
+      # CodeQL's init and analyze steps must stay on the same version, majors included.
+      codeql: { patterns: ["github/codeql-action*"] }
       actions: { update-types: [minor, patch] }
 
   - package-ecosystem: terraform
