@@ -97,15 +97,11 @@ jobs:
             --severity HIGH,CRITICAL --ignorefile /src/infra/terraform/.trivyignore /src/infra/terraform
       - name: Shellcheck
         run: |
-          find infra/host/bin infra/host/test infra/terraform infra/bootstrap infra/bootstrap/test -maxdepth 1 -type f \( -path "infra/host/bin/*" -o -name "*.sh" \) -print0 | xargs -0 shellcheck
+          find infra/host/bin infra/host/test infra/terraform infra/bootstrap infra/bootstrap/test infra/test -maxdepth 1 -type f \( -path "infra/host/bin/*" -o -name "*.sh" \) -print0 | xargs -0 shellcheck
       - name: Boot volume test (loop device)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xfsprogs
           sudo bash infra/host/test/boot_volume_test.sh
-      - name: Render-env test (stub aws)
-        run: bash infra/host/test/render_env_test.sh
-      - name: Deploy-script test (stub docker and aws)
-        run: bash infra/host/test/deploy_test.sh
       - name: Bootstrap scripts refuse bash older than 4.4 (macOS ships 3.2)
         run: |
           for v in 3.2 4.3; do
@@ -119,12 +115,9 @@ jobs:
           out="$(docker run --rm -v "$PWD":/src -w /src -e RENTSYNC_SETTINGS=/nonexistent bash:4.4 \
             bash infra/bootstrap/bootstrap-iam.sh 2>&1)" || true
           grep -q 'bootstrap-init.sh first' <<< "$out" || { echo "bash 4.4 was refused: $out"; exit 1; }
-      - name: Bootstrap-init test (stub gh)
-        run: bash infra/bootstrap/test/bootstrap_init_test.sh
-      - name: Bootstrap-IAM test (stub aws)
-        run: bash infra/bootstrap/test/bootstrap_iam_test.sh
-      - name: Bootstrap-GitHub test (stub gh)
-        run: bash infra/bootstrap/test/bootstrap_github_test.sh
+      # The same runner developers use on Windows and macOS, so it can't silently break.
+      - name: Host and bootstrap script tests (stub aws, gh and docker; in the test container)
+        run: bash infra/test/run.sh
       - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
         with:
           ruby-version: "3.3"

@@ -638,6 +638,32 @@ against the inputs this repository actually passes.
 No major-version port is outstanding beyond these. The next quarterly review covers Ruby, Postgres
 16, Redis 7 and the Terraform CLI.
 
+### 2026-10-26: cross-platform development (constitution v1.7.0)
+
+- **Done:** constitution v1.7.0 adds "Cross-platform development": a developer can build, test,
+  run and operate the project from Windows or macOS (PR #20). PR #21 replaced a GNU-only
+  `sed -i` in the IAM bootstrap test. This change adds `infra/test/run.sh`, which runs the host
+  and bootstrap shell tests in a pinned Debian container (`infra/test/Dockerfile`, with `jq`).
+  CI now calls the same runner, so it can't break unnoticed. `render_env_test.sh`'s mode check
+  also accepts BSD `stat`. The README has a "Running the tests" section for both platforms.
+- **Found:** on Windows (Git Bash), four of the five shell tests failed natively. Git Bash has
+  no `script(1)` (the teardown tests fake a terminal with it), no `flock` (deploy test), no
+  `jq` (the gh stub), and NTFS ignores `chmod 600` (render-env test). The macOS forms of
+  `script` and `stat` differ from Linux.
+- **Decision:** the documented way to run the shell tests is the container, on both Windows and
+  macOS, rather than native per-platform branches. The scripts under test run on Linux (EC2
+  hosts, CloudShell), and a native macOS branch could not be verified without a macOS CI job.
+  The constitution rule allows "run inside Docker". `boot_volume_test.sh` (root, loop devices)
+  and the bash 3.2/4.3 refusal step stay CI-only; the HCP Ruby test and `terraform test` run
+  natively (both verified on Windows).
+- **Tests:** `infra/test/run.sh` 5/5 in Docker on Windows, read-only mount; a deliberately
+  broken assertion was reported as FAIL with exit 1; HCP Ruby test 15 runs, 0 failures;
+  `terraform test` on modules/network 5 passed; shellcheck clean.
+- **Not verified:** the runner on a Mac (no Mac here). Docker Desktop behaves the same there,
+  and the script has no Windows-only path except the `cygpath` branch.
+
+**Next task:** the operator's blank-slate re-bootstrap, then T054.
+
 ### 2026-10-26: AMI lookup folded into bootstrap step 1
 
 - **Done:** `bootstrap-iam.sh` (CloudShell) ends its plan and apply by reading AWS's public
