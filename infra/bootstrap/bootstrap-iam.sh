@@ -12,7 +12,7 @@
 # that saves it in the settings on your machine.
 #
 # Settings come from .bootstrap/settings.env (bootstrap-init.sh prints a block that writes the
-# four this script needs). Filled-in copies go to $RENTSYNC_IAM_OUT (default
+# settings there). Filled-in copies go to $RENTSYNC_IAM_OUT (default
 # <repo>/.bootstrap/iam, gitignored), so no deployment's values land in a tracked file. Safe to
 # rerun: what exists is skipped or updated.
 set -euo pipefail
