@@ -5,7 +5,8 @@
 #      every GitHub trust uses the subject prefix GitHub reported, whatever its format;
 #   2. a bad or mismatched AWS account ID, a missing settings file, or a placeholder left in a
 #      source file, fails before any change;
-#   3. the default (plan) mode makes no mutating call;
+#   3. the default (plan) mode makes no mutating call, and ends with the current AMI ID and the
+#      command that saves it; a failed or malformed AMI lookup warns without failing the run;
 #   4. --apply on an empty AWS account creates both providers and all four policies and roles;
 #   5. --apply on a half-done AWS account skips what exists and never re-creates it;
 #   6. an Access Analyzer ERROR stops the run before any change;
@@ -61,6 +62,9 @@ case "$1 $2" in
   "ec2 describe-instances") echo "${INSTANCES:-}" ;;
   "ec2 describe-volumes") echo "${VOLUMES:-}" ;;
   "ce list-cost-allocation-tags") echo "${COST_TAG:-None}" ;;
+  "ssm get-parameter")
+    [ -n "${AMI_ERROR:-}" ] && { echo "An error occurred (ParameterNotFound)" >&2; exit 254; }
+    echo "${AMI:-ami-0123456789abcdef0}" ;;
   *) ;;
 esac
 STUB
@@ -117,6 +121,17 @@ grep -q '^+ aws iam create-open-id-connect-provider --url https://app.terraform.
   || fail "plan does not list the HCP provider"
 grep -q 'arn:aws:iam::123456789012:role/rentsync-github-actions-prod' <<< "$plan" \
   || fail "plan does not print the role ARNs"
+# The AMI: read in the settings' region, printed with the
+# command that saves it on the operator's machine.
+grep -qx 'ssm get-parameter --region eu-west-2 --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64 --query Parameter.Value --output text' \
+  "$AWS_LOG" || fail "the AMI was not read from the Amazon Linux 2023 arm64 parameter in the settings' region"
+grep -q '^  bash infra/bootstrap/bootstrap-init.sh --ami ami-0123456789abcdef0$' <<< "$plan" \
+  || fail "plan does not print the command that saves the AMI"
+out="$(AMI="not-an-ami" EXISTING="" run 2>&1)" || fail "a bad AMI value failed the plan"
+if grep -q -- '--ami not-an-ami' <<< "$out"; then fail "printed a malformed AMI ID as the one to save"; fi
+grep -q 'could not read the AMI' <<< "$out" || fail "a malformed AMI ID was not reported"
+out="$(AMI_ERROR=1 EXISTING="" run 2>&1)" || fail "a failed AMI lookup failed the plan"
+grep -q 'could not read the AMI' <<< "$out" || fail "a failed AMI lookup was not reported"
 
 # 4. Apply on an empty AWS account.
 EXISTING="" run --apply > /dev/null || fail "apply failed"

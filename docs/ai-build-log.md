@@ -637,3 +637,24 @@ against the inputs this repository actually passes.
 
 No major-version port is outstanding beyond these. The next quarterly review covers Ruby, Postgres
 16, Redis 7 and the Terraform CLI.
+
+### 2026-10-26: AMI lookup folded into bootstrap step 1
+
+- **Done:** `bootstrap-iam.sh` (CloudShell) ends its plan and apply by reading AWS's public
+  parameter for the latest Amazon Linux 2023 arm64 AMI in the settings' region, and prints
+  `bootstrap-init.sh --ami <id>`. The new `--ami` flag changes only the AMI ID, with no prompts
+  and no GitHub call. The separate lookup step is gone, so the runbook's bootstrap steps are now
+  0–4 (HCP is 2, GitHub 3, cost tag 4), with references renumbered in scripts, tests and specs.
+  The monthly patching procedure uses `--ami` too.
+- **Decisions:** `bootstrap-init.sh` cannot do the lookup itself, because the operator's machine
+  has no AWS credentials by design (no access keys; CloudShell is the AWS session). The ID needs
+  no human confirmation: its source is AWS's own parameter, and the `rentsync-shared-us` plan
+  shows it before the confirmed first apply. A failed or malformed lookup warns without failing
+  the IAM run, because the IAM changes are already done by then.
+- **Tests:** init test (new case 5: `--ami` alone, refusals, settings untouched); IAM test
+  (lookup in the right region and parameter, printed command, failure and malformed-value
+  warnings), run in the infra test container; each new assertion was shown to fail against a
+  broken script. HCP test 15/170; shellcheck clean.
+- **Historical task text** (T052a, T052b) keeps the step numbers it was written with.
+
+**Next task:** the operator's blank-slate re-bootstrap with the new step 1, then T054.

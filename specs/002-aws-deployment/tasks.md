@@ -629,7 +629,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   `docs/ai-build-log.md`, against FR-006's one-hour limit.
 - [ ] T054 [US1] **🧑 OPERATOR**: apply `rentsync-shared-us` (confirm), then
   `rentsync-dev-staging`, then `rentsync-prod-us` (confirm), with `acme_ca` set to the Let's
-  Encrypt staging endpoint. Then rerun `bootstrap-github.sh` with `--ecr-repository-url` (runbook §Bootstrap step 4), and add the A records (runbook §DNS; the workspace outputs
+  Encrypt staging endpoint. Then rerun `bootstrap-github.sh` with `--ecr-repository-url` (runbook §Bootstrap step 3), and add the A records (runbook §DNS; the workspace outputs
   are the record of the IPs). Record the elapsed time from the first apply to three hosts
   serving HTTPS, excluding DNS propagation, in `docs/ai-build-log.md`, against SC-001's 60
   minutes.
@@ -849,7 +849,7 @@ Ingest stays inside the VPC.
   - the **expand-only migrations** rule: a release may add tables and columns, never drop or
     rename them. Contraction happens a release later (research R9).
 - [ ] T074 [US4] **🧑 OPERATOR**: rerun `bootstrap-github.sh` with `--prod-reviewer <your GitHub
-  username>` (runbook §Bootstrap step 4). It adds you as the `prod-us` required reviewer; both
+  username>` (runbook §Bootstrap step 3). It adds you as the `prod-us` required reviewer; both
   Environments are already restricted to branch `main`.
 - [ ] T075 [US4] Run quickstart §3 (a visible change, staging first, then the approved
   promotion, timed against SC-005) and §6:

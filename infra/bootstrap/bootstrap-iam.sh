@@ -8,6 +8,9 @@
 #   bootstrap-iam.sh --teardown  list what the bootstrap created, then delete it after a typed
 #                                confirmation (constitution: Reversible bootstrap)
 #
+# The plan and --apply both end by printing the current Amazon Linux AMI ID, with the command
+# that saves it in the settings on your machine.
+#
 # Settings come from .bootstrap/settings.env (bootstrap-init.sh prints a block that writes the
 # four this script needs). Filled-in copies go to $RENTSYNC_IAM_OUT (default
 # <repo>/.bootstrap/iam, gitignored), so no deployment's values land in a tracked file. Safe to
@@ -227,3 +230,19 @@ echo "  arn:aws:iam::$aws_account_id:role/rentsync-hcp-terraform        -> HCP v
 echo "  arn:aws:iam::$aws_account_id:role/rentsync-github-build         -> GitHub repository variable AWS_BUILD_ROLE_ARN"
 echo "  arn:aws:iam::$aws_account_id:role/rentsync-github-actions       -> GitHub repository variable AWS_ROLE_ARN"
 echo "  arn:aws:iam::$aws_account_id:role/rentsync-github-actions-prod  -> GitHub prod-us Environment variable AWS_ROLE_ARN"
+
+# The AMI every host boots from (research R4): AWS's public parameter for the latest Amazon Linux
+# 2023 arm64 image in the region. A read, done here because CloudShell has AWS access and your
+# machine does not. It is saved on your machine with bootstrap-init.sh --ami.
+ami_parameter=/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+echo
+if ami="$(aws ssm get-parameter --region "$region" --name "$ami_parameter" \
+  --query Parameter.Value --output text 2>&1)" && [[ "$ami" =~ ^ami-[0-9a-f]{8,17}$ ]]; then
+  echo "AMI: $ami, the latest Amazon Linux 2023 arm64 image in $region (AWS parameter"
+  echo "$ami_parameter). Save it in your settings: on your machine, run"
+  echo "  bash infra/bootstrap/bootstrap-init.sh --ami $ami"
+else
+  echo "warning: could not read the AMI from $ami_parameter: $ami" >&2
+  echo "Rerun this script, or look it up with:" >&2
+  echo "  aws ssm get-parameter --region $region --name $ami_parameter --query Parameter.Value --output text" >&2
+fi

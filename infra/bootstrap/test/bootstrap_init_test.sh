@@ -5,7 +5,9 @@
 #      other scripts' loader accepts, and the CloudShell block carries only what step 1 needs;
 #   2. an invalid answer is asked again, and the AMI may stay blank;
 #   3. a rerun offers every saved value, so Enter keeps them all;
-#   4. a repository with a custom OIDC subject template is refused, and nothing is written.
+#   4. a repository with a custom OIDC subject template is refused, and nothing is written;
+#   5. --ami sets only the AMI ID, without prompts or GitHub, and refuses a malformed ID or a
+#      missing settings file.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -98,5 +100,24 @@ before="$(cat "$RENTSYNC_SETTINGS")"
 if printf '\n\n\n\n\n\n\n\n\n\n' | OIDC="false " run > "$work/err" 2>&1; then fail "accepted a custom OIDC subject template"; fi
 grep -q 'custom OIDC subject template' "$work/err" || fail "the custom template was not explained"
 [ "$(cat "$RENTSYNC_SETTINGS")" = "$before" ] || fail "a refused run changed the settings file"
+
+# 5. --ami sets only the AMI ID (the command step 1 prints): no prompts, no GitHub call.
+before="$(cat "$RENTSYNC_SETTINGS")"
+: > "$GH_LOG"
+run_ami() { bash "$script" --ami "$@" < /dev/null; }
+run_ami ami-0fedcba9876543210 > "$work/out" 2>&1 || fail "--ami failed"
+grep -qx "RENTSYNC_AMI_ID='ami-0fedcba9876543210'" "$RENTSYNC_SETTINGS" || fail "--ami did not save the AMI"
+[ "$(grep -v AMI "$RENTSYNC_SETTINGS")" = "$(grep -v AMI <<< "$before")" ] || fail "--ami changed another setting"
+[ ! -s "$GH_LOG" ] || fail "--ami called GitHub"
+if grep -q CloudShell "$work/out"; then fail "--ami printed the CloudShell block"; fi
+before="$(cat "$RENTSYNC_SETTINGS")"
+if run_ami ami-XYZ > /dev/null 2>&1; then fail "--ami accepted a malformed AMI ID"; fi
+if run_ami > /dev/null 2>&1; then fail "--ami accepted no AMI ID"; fi
+if bash "$script" --bogus < /dev/null > /dev/null 2>&1; then fail "accepted an unknown option"; fi
+[ "$(cat "$RENTSYNC_SETTINGS")" = "$before" ] || fail "a refused --ami changed the settings file"
+if RENTSYNC_SETTINGS="$work/none.env" run_ami ami-0fedcba9876543210 > /dev/null 2>&1; then
+  fail "--ami ran without a settings file"
+fi
+[ ! -e "$work/none.env" ] || fail "--ami created a settings file on its own"
 
 echo "PASS: bootstrap-init"
