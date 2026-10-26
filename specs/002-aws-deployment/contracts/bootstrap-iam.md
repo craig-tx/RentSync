@@ -78,7 +78,7 @@ deploy pins `<sha>@sha256:<digest>` (research R9).
 ### Role `rentsync-github-actions` (non-production deploys)
 
 **Trust**: `sub` **exactly** `<github-subject>:environment:dev-staging`. The `dev-staging`
-Environment is limited to `main` (runbook §Bootstrap step 4). Adding a side-by-side deployment
+Environment is limited to `main` (runbook §Bootstrap step 3). Adding a side-by-side deployment
 adds its Environment's exact subject to this list. That is a one-line change and the only IAM
 edit a new deployment needs. See `docs/deploy/iam/github-actions-trust.json`.
 

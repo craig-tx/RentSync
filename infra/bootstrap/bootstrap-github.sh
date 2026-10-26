@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runbook §Bootstrap step 4 (feature 002): the GitHub repository variables, the dev-staging and
+# Runbook §Bootstrap step 3 (feature 002): the GitHub repository variables, the dev-staging and
 # prod-us Environments, and secret scanning, through the GitHub API with the gh CLI. Run it from
 # your machine after `gh auth login`, once the IAM roles exist (step 1). The repository, AWS
 # account, AWS region and domain come from .bootstrap/settings.env (bootstrap-init.sh).

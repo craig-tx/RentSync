@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Test for bootstrap-hcp.rb (runbook §Bootstrap step 3). An in-memory fake of the HCP
+# Test for bootstrap-hcp.rb (runbook §Bootstrap step 2). An in-memory fake of the HCP
 # Terraform API stands in for app.terraform.io, so no HCP Terraform account or token is needed. Proves:
 #   1. plan mode changes nothing and never asks for a secret;
 #   2. --apply on an empty organization builds the project, the variable set, the three

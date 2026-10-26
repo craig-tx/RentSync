@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test for bootstrap-github.sh (runbook §Bootstrap step 4). A stub `gh` on PATH serves GitHub API
+# Test for bootstrap-github.sh (runbook §Bootstrap step 3). A stub `gh` on PATH serves GitHub API
 # responses from JSON files and logs every write, so no GitHub access is needed. GETs run the
 # script's real --jq expressions through jq. Proves:
 #   1. bad arguments fail before any API call;
