@@ -1,14 +1,3 @@
-<!--
-Sync Impact Report (remove before merge)
-- Version: 1.6.0 → 1.7.0 (MINOR: new Development Workflow rule)
-- Added: Development Workflow & Quality Gates → "Cross-platform development" (Windows and macOS
-  developer machines; portable bash, Ruby or Docker for scripts; side-by-side instructions;
-  line endings and modes fixed in the repo)
-- Modified principles: none. Removed sections: none.
-- Templates: none need changes (they read the constitution at runtime).
-- Follow-up: infra/bootstrap/test/bootstrap_iam_test.sh line 106 uses GNU `sed -i` with no
-  suffix, which fails on macOS sed. Fix in a separate change.
--->
 # RentSync Constitution
 
 ## Core Principles
