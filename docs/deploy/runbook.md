@@ -146,7 +146,7 @@ Run it in PowerShell or Windows Terminal. Git Bash's terminal can't hide the pas
 3. Print the plan. It changes nothing:
 
    ```powershell
-   ruby infra/bootstrap/bootstrap-hcp.rb --account <account ID> --ami <AMI from step 3> `
+   ruby infra/bootstrap/bootstrap-hcp.rb --aws-account <AWS account ID> --ami <AMI from step 3> `
      --acme-email <contact> --openobserve-email <sign-in email> --budget-email <alert recipient>
    ```
 
@@ -266,7 +266,7 @@ are the record.
 
 | Value | Where it comes from | Where it is entered |
 |---|---|---|
-| AWS account ID | AWS console, top right | read by `bootstrap-iam.sh`; `--render-only` for the console path |
+| AWS account ID | AWS console, top right | read by `bootstrap-iam.sh`; `--render-only` for the console path; `bootstrap-hcp.rb --aws-account` |
 | Region | `us-east-1` | variable defaults; GitHub `AWS_REGION` |
 | HCP organization | `craig-personal` | `versions.tf` (`cloud` block) |
 | `rentsync-hcp-terraform` role ARN | step 2 | variable set `TFC_AWS_RUN_ROLE_ARN` |

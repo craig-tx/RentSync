@@ -5,7 +5,7 @@
 # variable set, the three workspaces, remote state sharing and every workspace variable, through
 # the HCP Terraform API (contracts/workspace-variables.md).
 #
-#   ruby infra/bootstrap/bootstrap-hcp.rb --account ID --ami AMI --acme-email E \
+#   ruby infra/bootstrap/bootstrap-hcp.rb --aws-account ID --ami AMI --acme-email E \
 #     --openobserve-email E --budget-email E        print the plan; changes nothing
 #   ... --apply                                      make the changes
 #
@@ -186,7 +186,7 @@ module HcpBootstrap
 
     def varset_vars
       [{ key: "TFC_AWS_PROVIDER_AUTH", value: "true" },
-       { key: "TFC_AWS_RUN_ROLE_ARN", value: "arn:aws:iam::#{@opts[:account]}:role/rentsync-hcp-terraform" }]
+       { key: "TFC_AWS_RUN_ROLE_ARN", value: "arn:aws:iam::#{@opts[:aws_account]}:role/rentsync-hcp-terraform" }]
     end
 
     def var_payload(var, category, value = var[:value])
@@ -368,8 +368,8 @@ module HcpBootstrap
   def self.parse(argv)
     opts = { branch: "main", apply: false }
     OptionParser.new do |o|
-      o.banner = "usage: bootstrap-hcp.rb --account ID --ami AMI --acme-email E --openobserve-email E --budget-email E [options]"
-      o.on("--account ID", "AWS account ID (12 digits)") { |v| opts[:account] = v }
+      o.banner = "usage: bootstrap-hcp.rb --aws-account ID --ami AMI --acme-email E --openobserve-email E --budget-email E [options]"
+      o.on("--aws-account ID", "AWS account ID (12 digits), not an HCP or GitHub one") { |v| opts[:aws_account] = v }
       o.on("--ami AMI", "Amazon Linux 2023 arm64 AMI (runbook step 3)") { |v| opts[:ami] = v }
       o.on("--acme-email EMAIL", "Let's Encrypt contact") { |v| opts[:acme_email] = v }
       o.on("--openobserve-email EMAIL", "OpenObserve sign-in user") { |v| opts[:openobserve_email] = v }
@@ -380,7 +380,7 @@ module HcpBootstrap
       o.on("--health-assessments", "turn on drift detection (needs a plan that includes it)") { opts[:health_assessments] = true }
       o.on("--apply", "make the changes") { opts[:apply] = true }
     end.parse!(argv)
-    raise Abort, "--account must be 12 digits" unless opts[:account].to_s.match?(/\A\d{12}\z/)
+    raise Abort, "--aws-account must be 12 digits" unless opts[:aws_account].to_s.match?(/\A\d{12}\z/)
     raise Abort, "--ami must look like ami-0123456789abcdef0" unless opts[:ami].to_s.match?(/\Aami-[0-9a-f]{8,17}\z/)
 
     %i[acme_email openobserve_email budget_email].each do |key|

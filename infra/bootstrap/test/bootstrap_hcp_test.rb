@@ -112,7 +112,7 @@ end
 
 class BootstrapHcpTest < Minitest::Test
   PASSWORD = "Re$hearsal #0nly-Pw1"
-  OPTS = { account: "123456789012", ami: "ami-0123456789abcdef0", acme_email: "ops@example.test",
+  OPTS = { aws_account: "123456789012", ami: "ami-0123456789abcdef0", acme_email: "ops@example.test",
            openobserve_email: "o2@example.test", budget_email: "budget@example.test", branch: "main" }.freeze
 
   def setup
@@ -267,7 +267,7 @@ class BootstrapHcpTest < Minitest::Test
   end
 
   def test_arguments_are_validated
-    good = %w[--account 123456789012 --ami ami-0123456789abcdef0 --acme-email a@b.c --openobserve-email a@b.c
+    good = %w[--aws-account 123456789012 --ami ami-0123456789abcdef0 --acme-email a@b.c --openobserve-email a@b.c
               --budget-email a@b.c]
     assert_equal "main", HcpBootstrap.parse(good.dup)[:branch]
     refute HcpBootstrap.parse(good.dup)[:apply]
