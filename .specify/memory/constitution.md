@@ -1,3 +1,20 @@
+<!--
+Sync Impact Report (remove before merge)
+- Version change: 1.3.0 → 1.4.0 (MINOR: new rule added to a section)
+- Modified principles: none
+- Added: "Reversible bootstrap" rule in Development Workflow & Quality Gates. Everything the
+  bootstrap provisions MUST be removable by a teardown command that lists what it deletes, warns
+  that the deletion is permanent, and requires a correct answer to a simple arithmetic question.
+  Every bootstrap step ships with its teardown. The teardown refuses while infrastructure still
+  depends on what it would delete, removes only what the bootstrap created, and leaves security
+  protections on.
+- Removed sections: none
+- Templates: .specify/templates/* read the constitution at runtime; no edits needed
+- Follow-up TODOs (feature 002, before merge of the branch carrying this amendment):
+  - teardown modes for bootstrap-iam.sh, bootstrap-hcp.rb and bootstrap-github.sh, with tests
+    and a runbook section; bootstrap-iam.sh must tag the OIDC providers it creates, so teardown
+    can tell them from adopted ones
+-->
 # RentSync Constitution
 
 ## Core Principles
@@ -257,6 +274,24 @@ a second instance starts.
     Terraform, GitHub, NameCheap, OpenObserve). An operator who has to guess which one a value
     belongs to can enter it in the wrong place, and in a bootstrap step that mistake can grant
     access to the wrong system.
+- **Reversible bootstrap**: everything the bootstrap provisions MUST be removable by a teardown
+  command. This covers cloud identities and roles, HCP Terraform projects, variable sets and
+  workspaces, GitHub variables and Environments, and anything a future bootstrap step adds.
+  - Every bootstrap step MUST ship with its teardown, in the same change, tested the same way.
+  - The teardown MUST first list exactly what it will delete. It MUST then warn plainly that
+    everything listed will be permanently deleted, and ask the operator a simple arithmetic
+    question. Nothing is deleted unless the answer is correct; a wrong or missing answer, or no
+    interactive terminal, deletes nothing.
+  - The teardown MUST refuse while infrastructure still depends on what it would delete, for
+    example a workspace that still manages resources. Infrastructure is destroyed first, through
+    its own documented procedure, so nothing is left running without the identities that manage
+    it.
+  - The teardown removes only what the bootstrap created. Anything it adopted, such as an OIDC
+    provider that already existed, is left in place and reported. Security protections the
+    bootstrap turned on, such as secret scanning, are also left on and reported.
+  - **Rationale**: the bootstrap evolves, and the operator must be able to return to a blank
+    slate and prove the current bootstrap works from scratch. A deliberate confirmation step
+    keeps that power from being used by accident.
 
 ## Governance
 
@@ -274,4 +309,4 @@ a second instance starts.
   every PR review MUST verify compliance with these principles. Any unjustified violation
   blocks the merge.
 
-**Version**: 1.3.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-25
+**Version**: 1.4.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-25
