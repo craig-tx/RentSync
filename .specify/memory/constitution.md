@@ -1,21 +1,3 @@
-<!--
-Sync Impact Report (remove before merge)
-- Version change: 1.5.0 → 1.6.0 (MINOR: materially expanded guidance in Principle VIII)
-- Modified principles: VIII. Simplicity (title unchanged)
-  - A new dependency's plan.md justification must now say why a local implementation isn't
-    reasonable.
-  - New "Avoid trivial dependencies" rule: lean toward not taking a dependency when the
-    functionality can reasonably be written and tested locally; standard library first, then
-    a small tested local implementation, then a dependency. Dependencies are for genuinely
-    hard, large or security-sensitive problems, from widely used, maintained packages.
-    Cryptographic primitives are never written locally.
-  - Rationale cites the 2016 npm left-pad incident.
-- Added sections: none
-- Removed sections: none
-- Templates: .specify/templates/* read the constitution at runtime; no edits needed
-- Follow-up TODOs: none. Existing dependency justifications predate the "why not local" clause;
-  they are reviewed against it at the next quarterly dependency review.
--->
 # RentSync Constitution
 
 ## Core Principles
