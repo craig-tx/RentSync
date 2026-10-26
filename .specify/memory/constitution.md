@@ -1,3 +1,18 @@
+<!--
+Sync Impact Report (remove before merge)
+- Version change: 1.4.0 → 1.5.0 (MINOR: new rule added to a section)
+- Modified principles: none
+- Added: "Dependency maintenance" rule in Development Workflow & Quality Gates. A fixed
+  schedule, automated or not, covers Ruby and gems, container images, GitHub Actions, the
+  Terraform CLI and providers, and the host AMI: monthly review of every pending update (plus
+  AMI patching), high or critical advisories within 7 days, and a quarterly major-version and
+  end-of-life review. No component may run past end-of-life without a recorded decision.
+  Updates pass normal CI without weakening tests, and each review is recorded in the build log.
+- Removed sections: none
+- Templates: .specify/templates/* read the constitution at runtime; no edits needed
+- Follow-up TODOs: none. Dependabot (weekly PRs) and runbook §Monthly OS patching already
+  support the monthly pass.
+-->
 # RentSync Constitution
 
 ## Core Principles
@@ -275,6 +290,26 @@ a second instance starts.
   - **Rationale**: the bootstrap evolves, and the operator must be able to return to a blank
     slate and prove the current bootstrap works from scratch. A deliberate confirmation step
     keeps that power from being used by accident.
+- **Dependency maintenance**: maintainers MUST keep every dependency current on a fixed
+  schedule. Automation such as Dependabot helps but is optional; the schedule is not.
+  - **Scope:** the Ruby version and gems; container base images and service images (for
+    example Postgres, Redis, Caddy, OpenObserve and the OpenTelemetry Collector); GitHub
+    Actions; the Terraform CLI and providers; and the host operating system image (AMI).
+  - **At least monthly:** review every pending update and merge or decline it, recording why
+    when declined. Patch the host AMI in the same pass.
+  - **Security advisories rated high or critical:** address within 7 days, by updating,
+    mitigating, or recording why the advisory does not apply.
+  - **At least quarterly:** review every component that has a newer major version or is
+    approaching end-of-life. For each one, either plan the port as a tracked task or issue,
+    or record why not yet. A component MUST NOT run past its end-of-life without a recorded
+    decision.
+  - Updates go through the normal pull request and CI gates. A test MUST NOT be weakened to
+    accept an update (Principle III).
+  - Each review is recorded in `docs/ai-build-log.md`: what was updated, what was declined
+    and why, and which major-version ports are planned.
+  - **Rationale**: dependencies age whether or not anyone looks at them. Unpatched components
+    are a leading source of vulnerabilities, and a major-version jump deferred too long
+    becomes a rewrite. A fixed schedule keeps updates small, reviewed and routine.
 
 ## Governance
 
@@ -292,4 +327,4 @@ a second instance starts.
   every PR review MUST verify compliance with these principles. Any unjustified violation
   blocks the merge.
 
-**Version**: 1.4.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-25
+**Version**: 1.5.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-25
