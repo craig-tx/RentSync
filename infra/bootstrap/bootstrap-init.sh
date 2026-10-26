@@ -87,10 +87,12 @@ mv "$settings_file.tmp" "$settings_file"
 echo
 echo "Saved $settings_file."
 echo
-echo "For step 1, paste this into AWS CloudShell. It clones the repository and writes the four"
-echo "settings that step needs:"
+echo "For step 1, paste this into AWS CloudShell. It clones the repository, or updates an existing"
+echo "clone, and writes the four settings that step needs:"
 echo
-echo "git clone https://github.com/$RENTSYNC_GITHUB_REPO.git && cd \"\$(basename $RENTSYNC_GITHUB_REPO)\" && mkdir -p .bootstrap && cat > .bootstrap/settings.env <<'EOF'"
+repo_dir="${RENTSYNC_GITHUB_REPO#*/}"
+echo "[ -d $repo_dir ] || git clone https://github.com/$RENTSYNC_GITHUB_REPO.git"
+echo "cd $repo_dir && git pull --ff-only && mkdir -p .bootstrap && cat > .bootstrap/settings.env <<'EOF'"
 lines "$cloudshell_keys"
 echo "EOF"
 if [ -z "$RENTSYNC_AMI_ID" ]; then

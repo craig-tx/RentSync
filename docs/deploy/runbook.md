@@ -91,7 +91,8 @@ created.
 
 1. Sign in to the AWS console as an administrator, switch to your AWS region, and open
    **CloudShell** from the top bar.
-2. Paste the block that step 0 printed. It clones your repository, enters it, and writes the
+2. Paste the block that step 0 printed. It clones your repository (or updates an existing clone),
+   enters it, and writes the
    settings this step needs.
 3. Print the plan, and review the `+ aws …` lines:
 

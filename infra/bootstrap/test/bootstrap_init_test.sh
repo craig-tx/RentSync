@@ -67,11 +67,25 @@ grep -q 'The AMI ID is blank' <<< "$out" || fail "a blank AMI was not pointed ou
   [ "$RENTSYNC_GITHUB_SUBJECT" = "repo:example-owner@111/example-app@222" ] || fail "loader read the wrong subject"
 ) || exit 1
 
-# The CloudShell block clones the repository and writes only step 1's four settings.
-block="$(sed -n '/^git clone /,/^EOF$/p' <<< "$out")"
-grep -q '^git clone https://github.com/example-owner/example-app.git' <<< "$block" || fail "no clone in the CloudShell block"
+# The CloudShell block writes only step 1's four settings, and works whether or not the
+# repository is already cloned (a stub git stands in for GitHub).
+block="$(sed -n '/^\[ -d /,/^EOF$/p' <<< "$out")"
 [ "$(grep -c "^RENTSYNC_" <<< "$block")" -eq 4 ] || fail "the CloudShell block should carry 4 settings: $block"
 if grep -q EMAIL <<< "$block"; then fail "the CloudShell block carries emails it doesn't need"; fi
+mkdir -p "$work/cloudshell" "$work/gitbin"
+cat > "$work/gitbin/git" <<'STUB'
+#!/usr/bin/env bash
+echo "git $*" >> "$GIT_LOG"
+if [ "$1" = clone ]; then mkdir -p "$(basename "$2" .git)"; fi
+STUB
+chmod +x "$work/gitbin/git"
+for pass in fresh existing; do
+  (cd "$work/cloudshell" && PATH="$work/gitbin:$PATH" GIT_LOG="$work/git.log" bash -e <<< "$block") \
+    || fail "the CloudShell block failed on a $pass clone"
+  cmp -s <(grep '^RENTSYNC_' <<< "$block") "$work/cloudshell/example-app/.bootstrap/settings.env" \
+    || fail "the CloudShell block did not write the settings on a $pass clone"
+done
+[ "$(grep -c '^git clone' "$work/git.log")" -eq 1 ] || fail "the CloudShell block cloned over an existing clone"
 
 # 3. A rerun with only Enter keeps every value; one answer changes the AMI.
 before="$(cat "$RENTSYNC_SETTINGS")"
