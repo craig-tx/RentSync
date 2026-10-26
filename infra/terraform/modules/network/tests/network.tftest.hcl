@@ -3,10 +3,23 @@
 mock_provider "aws" {}
 
 variables {
-  name              = "rentsync-dev-staging"
-  vpc_cidr          = "10.41.0.0/16"
-  subnet_cidr       = "10.41.1.0/24"
-  availability_zone = "us-east-1a"
+  name                = "rentsync-dev-staging"
+  vpc_cidr            = "10.41.0.0/16"
+  subnet_cidr         = "10.41.1.0/24"
+  availability_zone   = "us-east-1a"
+  flow_log_bucket_arn = "arn:aws:s3:::rentsync-shared-us-logs-123456789012"
+}
+
+# Every VPC records all its traffic, under its own prefix in the shared log bucket.
+run "flow_logs" {
+  command = plan
+
+  assert {
+    condition = (aws_flow_log.this.traffic_type == "ALL" &&
+      aws_flow_log.this.log_destination_type == "s3" &&
+    aws_flow_log.this.log_destination == "arn:aws:s3:::rentsync-shared-us-logs-123456789012/vpc-flow-logs/rentsync-dev-staging/")
+    error_message = "Each VPC must send all its Flow Logs to the shared log bucket, under its own prefix."
+  }
 }
 
 run "names_derive" {

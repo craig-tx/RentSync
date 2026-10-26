@@ -38,6 +38,7 @@ mountpoint -q "$mnt" || fail "volume not mounted after first boot"
 for d in postgres caddy receiver openobserve openobserve-db; do
   [ -d "$mnt/$d" ] || fail "missing $d/ after first boot"
 done
+[ "$(stat -c %u:%g "$mnt/receiver")" = "10001:10001" ] || fail "receiver/ is not owned by the image's UID 10001"
 grep -q "UUID=" "$etc/fstab" || fail "no UUID fstab entry"
 grep -q "nofail" "$etc/fstab" || fail "fstab entry lacks nofail"
 

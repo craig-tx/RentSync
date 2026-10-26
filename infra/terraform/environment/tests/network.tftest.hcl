@@ -22,6 +22,7 @@ override_data {
       ecr_repository_arn          = "arn:aws:ecr:us-east-1:123456789012:repository/shared-us/mock_pms"
       otlp_endpoint               = "http://10.40.1.10:5080/api/default"
       ingest_ssm_path             = "/rentsync/shared-us/openobserve/ingest"
+      log_bucket_arn              = "arn:aws:s3:::rentsync-shared-us-logs-123456789012"
     }
   }
 }

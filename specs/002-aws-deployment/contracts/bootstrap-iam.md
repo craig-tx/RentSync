@@ -39,6 +39,9 @@ purpose for a demo, and are listed in the production-differences document:
 | ECR | `ecr:*` | `arn:aws:ecr:<aws-region>:<aws-account-id>:repository/*` (repositories are named `<deployment_id>/...`, so no fixed prefix exists), plus `ecr:GetAuthorizationToken` on `*` |
 | DLM | `dlm:*` | `*` |
 | Budgets | `budgets:*` | `arn:aws:budgets::<aws-account-id>:budget/rentsync-*` |
+| S3 (audit log bucket) | `s3:*` | `arn:aws:s3:::rentsync-*` and `arn:aws:s3:::rentsync-*/*` |
+| CloudTrail | `cloudtrail:*` on `arn:aws:cloudtrail:*:<aws-account-id>:trail/rentsync-*`; `cloudtrail:DescribeTrails`, `cloudtrail:ListTrails` | `*` for the two reads |
+| Flow Log delivery to S3 | `logs:CreateLogDelivery`, `logs:DeleteLogDelivery` | `*` (required by VPC Flow Logs with an S3 destination) |
 | KMS | `kms:DescribeKey`, `kms:ListAliases` | `*` (AWS-managed keys only; no key is created) |
 
 ## GitHub release roles: one job, one role, exact trust

@@ -1,0 +1,30 @@
+# Weekly dependency updates. Every update arrives as a PR and must pass CI like any other change.
+# GitHub Actions are pinned to commit SHAs with the version in a comment; Dependabot updates
+# both.
+version: 2
+updates:
+  - package-ecosystem: bundler
+    directory: /mock_pms
+    schedule: { interval: weekly }
+    groups:
+      gems: { update-types: [minor, patch] }
+
+  - package-ecosystem: docker
+    directory: /mock_pms
+    schedule: { interval: weekly }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { update-types: [minor, patch] }
+
+  - package-ecosystem: terraform
+    directories:
+      - /infra/terraform/shared
+      - /infra/terraform/environment
+      - /infra/terraform/modules/host
+      - /infra/terraform/modules/network
+    schedule: { interval: weekly }
+    groups:
+      providers: { update-types: [minor, patch] }

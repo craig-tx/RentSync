@@ -1,0 +1,13 @@
+# Trivy findings accepted for this demo. Each is a deliberate choice, compared with production
+# in docs/deploy/production-differences.md. Any finding not listed here fails CI.
+
+# Security groups allow all egress. Hosts need HTTPS to ECR, SSM, Let's Encrypt and Docker
+# registries; tight egress needs VPC endpoints (about $7 a month each). See "Outbound traffic
+# unrestricted".
+AVD-AWS-0104
+
+# CloudTrail and the log bucket use AWS-managed encryption (SSE-S3), not a customer managed KMS
+# key: a CMK costs $1 a month plus requests, and its value is cross-account key control, which
+# belongs to the separate log-archive account production would use.
+AVD-AWS-0015
+AVD-AWS-0132

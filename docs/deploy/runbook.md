@@ -450,6 +450,48 @@ recreates the instance, and the rest of the steps are the same.
 **Reboot or stop/start**: no action is needed (US5 AC5). systemd mounts the volume, Docker
 waits for it, and `rentsync.service` re-renders secrets and starts the stack.
 
+## Monthly OS patching (AMI update)
+
+Hosts are immutable and the AMI is pinned (research R4), so a host gets no operating system
+security patches until its AMI changes. Patch by replacing every host with the latest Amazon
+Linux 2023 AMI, **once a month**, and sooner for a critical advisory. Each host keeps its
+address, data and certificates, as in §Host replacement. Each one is down for a few minutes.
+
+1. Look up the current AMI, in CloudShell or anywhere with AWS CLI access:
+
+   ```bash
+   source .bootstrap/settings.env
+   aws ssm get-parameter --region "$RENTSYNC_AWS_REGION" \
+     --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64 \
+     --query Parameter.Value --output text
+   ```
+
+   If it equals the `ami_id` in `rentsync-shared-us`, there's nothing to do.
+2. In `rentsync-shared-us`, set `ami_id` to the new ID and apply (confirm). This replaces the
+   telemetry host. The environments read `ami_id` from the shared outputs.
+3. Start a run in `rentsync-dev-staging`. It plans a replacement of the staging host and
+   applies automatically. Check `https://pms-staging.<domain>/healthz`.
+4. Start a run in `rentsync-prod-us` and confirm it. Check `https://pms.<domain>/healthz`.
+5. Rerun `bootstrap-init.sh` and enter the new AMI ID, so the settings match. Record the date and
+   AMI ID in `docs/ai-build-log.md`.
+
+## Audit logs
+
+The shared deployment records, into one private, encrypted S3 bucket
+(`rentsync-shared-us-logs-<AWS account ID>`, kept for 90 days):
+- **CloudTrail:** every API call in the AWS account, in every region, with log file validation,
+  so tampering with a delivered log is detectable. Look up recent events in the console under
+  CloudTrail → **Event history**, or read the files under `AWSLogs/<AWS account ID>/CloudTrail/`.
+- **VPC Flow Logs:** accepted and rejected traffic for each deployment's VPC, under
+  `vpc-flow-logs/rentsync-<deployment_id>/`. For example, to see what reached production's VPC
+  today:
+
+  ```bash
+  aws s3 ls --recursive "s3://rentsync-shared-us-logs-$RENTSYNC_AWS_ACCOUNT_ID/vpc-flow-logs/rentsync-prod-us/" | tail
+  ```
+
+To keep logs beyond 90 days or past a teardown, copy them out first.
+
 ## Backup restore
 
 AWS Data Lifecycle Manager snapshots every data volume daily at 05:00 UTC and keeps 7
@@ -663,6 +705,8 @@ then `shared-us`, because the environments depend on its network.
 
 4. Do the same for `rentsync-shared-us` (`infra/terraform/shared`), with
    `terraform state rm 'module.telemetry_host.aws_ebs_volume.data'`, then queue its destroy.
+   This also deletes the CloudTrail trail and the log bucket, with every CloudTrail and Flow
+   Log record in it. Download anything you want to keep first (§Audit logs).
 5. Delete the released data volumes, and any snapshots you don't want:
 
    ```bash

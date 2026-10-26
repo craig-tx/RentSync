@@ -236,6 +236,10 @@ Constitution VIII requires a one-line justification for each new dependency:
 | `jq` (hosts, from the Amazon Linux 2023 repository) | `rentsync-deploy` parses `/healthz` JSON to check `status`, `version` and `deployment_id` (FR-028). |
 | AWS CLI and the SSM Session Manager plugin (operator machine) | Shell access with no inbound port (FR-010). Not a project runtime dependency. |
 | `nmap`, `gitleaks` (operator machine, optional) | Validation only: the port scan (SC-003) and the secret scan (SC-004). GitHub secret scanning covers the latter in CI. |
+| `bundler-audit` 0.9.2 (CI only, installed in the job, not in the Gemfile) | Fails CI when a locked gem has a published vulnerability (ruby-advisory-db). |
+| `aquasec/trivy` 0.57.1 image (CI only) | Scans the Terraform for misconfigurations; deliberate demo choices are listed with reasons in `infra/terraform/.trivyignore`. |
+| `github/codeql-action` (CI only) | Static security analysis of the Ruby code, free for public repositories. |
+| Dependabot (GitHub, configuration only) | Weekly update PRs for gems, Actions (pinned to commit SHAs), Docker base images and Terraform providers. |
 
 The existing images (Postgres 16, Redis 7, otel-collector-contrib, OpenObserve) are reused from
 feature 001. No new Ruby gems are added.
