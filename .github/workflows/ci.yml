@@ -100,6 +100,8 @@ jobs:
         run: bash infra/host/test/deploy_test.sh
       - name: Bootstrap-IAM test (stub aws)
         run: bash infra/bootstrap/test/bootstrap_iam_test.sh
+      - name: Bootstrap-GitHub test (stub gh)
+        run: bash infra/bootstrap/test/bootstrap_github_test.sh
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
