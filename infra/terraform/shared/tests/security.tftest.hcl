@@ -33,13 +33,10 @@ run "telemetry_surface" {
     error_message = "Public telemetry rules must be single TCP ports from 0.0.0.0/0."
   }
 
+  # OTLP 5080 has no rule here: each environment admits only its own subnet (environment tests).
   assert {
-    condition = (aws_vpc_security_group_ingress_rule.otlp.from_port == 5080 &&
-      aws_vpc_security_group_ingress_rule.otlp.to_port == 5080 &&
-      aws_vpc_security_group_ingress_rule.otlp.cidr_ipv4 == null &&
-      aws_vpc_security_group_ingress_rule.otlp.cidr_ipv6 == null &&
-    aws_vpc_security_group_ingress_rule.otlp.prefix_list_id == null)
-    error_message = "OTLP 5080 must be admitted only from the otlp-client security group, never a CIDR (FR-011)."
+    condition     = !contains([for r in aws_vpc_security_group_ingress_rule.telemetry_public : r.from_port], 5080)
+    error_message = "OTLP 5080 must never be open to the internet (FR-011)."
   }
 }
 

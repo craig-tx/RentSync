@@ -42,9 +42,24 @@ variable "hostname" {
   description = "Public hostname, e.g. pms-staging.example.com (DNS set by hand, FR-021)."
 }
 
+variable "vpc_cidr" {
+  type        = string
+  description = "This deployment's own VPC range; must not overlap the shared VPC or another deployment's (ADR 0008)."
+}
+
+variable "subnet_cidr" {
+  type        = string
+  description = "This deployment's public subnet, inside vpc_cidr."
+}
+
 variable "private_ip" {
   type        = string
-  description = "Fixed private IP in the shared subnet (configuration, research R3)."
+  description = "Fixed private IP of the host, inside subnet_cidr (configuration, research R3)."
+
+  validation {
+    condition     = can(cidrnetmask("${var.private_ip}/32"))
+    error_message = "private_ip must be an IPv4 address, e.g. 10.41.1.20."
+  }
 }
 
 variable "instance_type" {

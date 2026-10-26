@@ -73,6 +73,10 @@ implementation.
   its data volume must share a zone.
 - VPC `10.40.0.0/16`, with one public subnet `10.40.1.0/24`. Both CIDRs are `shared-us`
   configuration.
+  > **Amended 2026-10-25 (ADR-0008):** every deployment now owns its VPC. `shared-us` keeps
+  > `10.40.0.0/16`; `dev-staging` uses `10.41.0.0/16` (host `10.41.1.20`) and `prod-us`
+  > `10.42.0.0/16` (host `10.42.1.30`). Each environment VPC is peered only with the shared VPC,
+  > and every subnet stays in the shared availability zone.
 - Each host has a **fixed private IP**, supplied as its deployment's configuration and never
   hard-coded (constitution VI): `shared-us` `10.40.1.10`, `dev-staging` `10.40.1.20`,
   `prod-us` `10.40.1.30`. The IP sits on a standalone `aws_network_interface`, attached to the
@@ -233,6 +237,11 @@ OpenObserve's data directory is `/srv/data/openobserve` (FR-020).
 - The traffic stays inside the VPC. The telemetry security group admits 5080 only from members of
   `rentsync-shared-us-otlp-client`. Every environment host attaches that group, so adding a
   deployment never edits a shared rule. Port 5080 is never open to the internet (FR-011, US3 AC5).
+  > **Amended 2026-10-25 (ADR-0008):** the traffic now crosses each environment's peering
+  > connection, staying on the private AWS network. The `otlp-client` group is gone, because a
+  > security group can't be attached across VPCs. Each environment adds its own standalone rule
+  > on the telemetry group, admitting 5080 from its subnet, so adding a deployment still edits no
+  > shared code.
 - `infra/otel/collector.yaml` gets one change: its exporter endpoint becomes
   `${env:OPENOBSERVE_OTLP_ENDPOINT}`. Local `.env.example` sets it to
   `http://openobserve:5080/api/default`. Local and deployed hosts then share one config file,
@@ -413,6 +422,10 @@ never stored in state or shown in plans (FR-022 to FR-024).
 | `rentsync-<id>-sg` (each environment deployment) | TCP 80, 443 from `0.0.0.0/0` | all (ECR, SSM, ACME, OTLP) |
 | `rentsync-shared-us-otlp-client` (attached by every environment host) | none | all |
 | `rentsync-shared-us-sg` (telemetry host) | TCP 80, 443 from `0.0.0.0/0`; TCP 5080 from `rentsync-shared-us-otlp-client` | all |
+
+> **Amended 2026-10-25 (ADR-0008):** `rentsync-shared-us-otlp-client` no longer exists. The
+> telemetry group admits TCP 5080 from each environment's subnet (for example `10.41.1.0/24`), one
+> standalone rule per environment, owned by that environment's state.
 
 - No port 22, and no key pair (FR-009).
 - Shell access is through **SSM Session Manager**: the instance role has

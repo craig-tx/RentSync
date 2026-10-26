@@ -35,3 +35,13 @@ output "ssm_parameter_names" {
 output "user_data_gzip_bytes" {
   value = module.host.user_data_gzip_bytes
 }
+
+output "network" {
+  description = "This deployment's own network and the only range it routes to privately (ADR 0008)."
+  value = {
+    vpc_cidr          = module.network.vpc_cidr
+    subnet_cidr       = module.network.subnet_cidr
+    availability_zone = module.network.availability_zone
+    private_routes    = [aws_route.to_shared.destination_cidr_block]
+  }
+}

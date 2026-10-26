@@ -4,7 +4,7 @@
 resource "aws_security_group" "this" {
   name        = "${local.name}-sg"
   description = "Environment host: HTTP and HTTPS from the internet only (FR-009)"
-  vpc_id      = local.shared.vpc_id
+  vpc_id      = module.network.vpc_id
 
   tags = { Name = "${local.name}-sg" }
 }
@@ -32,9 +32,9 @@ module "host" {
   ami_id             = local.shared.ami_id
   instance_type      = var.instance_type
   availability_zone  = local.shared.availability_zone
-  subnet_id          = local.shared.subnet_id
+  subnet_id          = module.network.subnet_id
   private_ip         = var.private_ip
-  security_group_ids = [aws_security_group.this.id, local.shared.otlp_client_security_group_id]
+  security_group_ids = [aws_security_group.this.id]
   ssm_read_paths     = [local.ssm_prefix, local.shared.ingest_ssm_path]
   ssm_write_params   = [aws_ssm_parameter.image_tag.name, aws_ssm_parameter.previous_image_tag.name]
   ecr_repository_arn = local.shared.ecr_repository_arn

@@ -3,7 +3,11 @@
 #   1. the host data volume keeps prevent_destroy (FR-034);
 #   2. root volumes carry tags, because provider default_tags don't reach them (constitution VI);
 #   3. no SecureString parameter sets `value`; secrets use value_wo only (research R11);
-#   4. no host sets key_name: there is no SSH key pair (FR-009).
+#   4. no host sets key_name: there is no SSH key pair (FR-009);
+#   5. route tables and security groups have no inline route, ingress or egress blocks. An
+#      environment adds its return route to the shared route table and its OTLP rule to the
+#      telemetry security group from its own workspace; inline blocks are authoritative and
+#      would delete those on the next shared apply (ADR 0008).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")" && pwd)"
@@ -34,6 +38,16 @@ done < <(find "$root" -name '*.tf' -not -path '*/.terraform/*')
 if grep -rn --include="*.tf" -E "^[[:space:]]*key_name[[:space:]]*=" "$root" --exclude-dir=.terraform; then
   fail "hosts must not set key_name (no SSH, FR-009)"
 fi
+
+while IFS= read -r tf; do
+  for hdr in 'resource "aws_route_table" ' 'resource "aws_security_group" '; do
+    while IFS= read -r name; do
+      if grep -qE '^[[:space:]]+(route|ingress|egress)[[:space:]]*[{]' <<< "$(block "$tf" "$hdr$name")"; then
+        fail "${tf#"$root"/}: $hdr$name has an inline route, ingress or egress block; use standalone resources"
+      fi
+    done < <(grep -oE "^$hdr\"[^\"]+\"" "$tf" | sed "s/^$hdr//")
+  done
+done < <(find "$root" -name '*.tf' -not -path '*/.terraform/*')
 
 [ "$status" -eq 0 ] && echo "ok: check_prevent_destroy"
 exit "$status"

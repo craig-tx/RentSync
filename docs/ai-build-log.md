@@ -531,3 +531,49 @@ Then, for the blank slate:
 
 **Next task:** unchanged. The operator runs the blank-slate teardown and re-bootstrap from
 `main`, then T054.
+
+### 2026-10-25: one VPC per deployment (ADR-0008, T052h)
+
+- **Operator's decision:** separate VPCs for staging and production, to avoid review questions
+  about environments sharing a network.
+  - Three VPCs, one per deployment, chosen over putting shared telemetry inside staging's VPC.
+    With shared in staging, production's telemetry would depend on staging's network, and it
+    breaks deployment ownership.
+  - The operator asked that the docs say plainly: this demo uses VPC isolation; true production
+    would use the gold standard, the Multi-Account Strategy via AWS Organizations. That phrase
+    is in the spec clarification, ADR-0008, production-differences and the README.
+- **Terraform:**
+  - **`modules/network`:** each deployment gets a VPC, subnet, gateway and route table, with
+    standalone routes only.
+  - **Environment root:**
+    - creates its VPC in the shared zone, and peers it with the shared VPC (auto-accepted,
+      same account);
+    - adds a route to the shared range, plus the return route in the shared route table;
+    - adds the OTLP rule on the telemetry security group: 5080 from its subnet only.
+  - **The `otlp-client` group is gone,** because a security group can't be attached across VPCs.
+  - **Ranges:** shared `10.40.0.0/16`, staging `10.41.0.0/16` (host `10.41.1.20`), prod
+    `10.42.0.0/16` (host `10.42.1.30`).
+  - **No `moved` blocks:** no workspace has state.
+- **Advisor-flagged trap:** inline `route {}` blocks are authoritative. A shared apply would
+  silently delete each environment's return route, and with it telemetry.
+  - The module uses standalone `aws_route` resources.
+  - `check_prevent_destroy.sh` now fails on any inline route, ingress or egress block. It was
+    mutation-checked by injecting both kinds.
+- **Tests:**
+  - new module tests (4);
+  - a new environment network test: peering to shared only; both routes; OTLP from its own
+    subnet only; shared zone; staging and production each route privately only to
+    `10.40.0.0/16`;
+  - mutation-checked: opening OTLP to `0.0.0.0/0` fails the environment network test;
+  - Terraform: shared 7, environment 15, host 2, network 4;
+  - `bootstrap-hcp.rb` sets the new variables; its tests pass, 15 runs.
+- **Docs:**
+  - spec: Session 2026-10-25 supersedes input (1), and FR-007 and FR-011 are rewritten;
+  - ADR-0008 is new, and ADR-0005's "one VPC" is marked superseded;
+  - contracts, data model, research (amendment notes), plan (amendment note), runbook
+    side-by-side, and the README;
+  - quickstart §2 gains a live isolation check: staging reaches telemetry, but not production.
+- **Cost:** unchanged. VPCs, gateways and same-zone peering traffic are free.
+
+**Next task:** merge, then the operator's re-bootstrap. Step 3 hasn't run, so the new variables
+land on the first apply. Then the CLI speculative plan check, then T054.

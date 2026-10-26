@@ -1,16 +1,22 @@
 # Read by the environment root through terraform_remote_state, and by the runbook
 # (contracts/workspace-variables.md).
 
+# An environment peers its own VPC with this one, adds its return route to this route table,
+# and admits its subnet to the telemetry security group (ADR 0008).
 output "vpc_id" {
-  value = aws_vpc.this.id
+  value = module.network.vpc_id
 }
 
-output "subnet_id" {
-  value = aws_subnet.public.id
+output "vpc_cidr" {
+  value = module.network.vpc_cidr
 }
 
-output "otlp_client_security_group_id" {
-  value = aws_security_group.otlp_client.id
+output "route_table_id" {
+  value = module.network.route_table_id
+}
+
+output "telemetry_security_group_id" {
+  value = aws_security_group.telemetry.id
 }
 
 output "availability_zone" {

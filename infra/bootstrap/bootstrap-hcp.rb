@@ -429,11 +429,16 @@ module HcpBootstrap
          { key: "budget_email", value: @opts[:budget_email] }]
       when "rentsync-dev-staging"
         [{ key: "deployment_id", value: "dev-staging" }, { key: "environment", value: "staging" },
-         { key: "hostname", value: "pms-staging.#{domain}" }, { key: "private_ip", value: "10.40.1.20" },
+         { key: "hostname", value: "pms-staging.#{domain}" },
+         # Each environment has its own VPC, peered only with shared-us (ADR 0008).
+         { key: "vpc_cidr", value: "10.41.0.0/16" }, { key: "subnet_cidr", value: "10.41.1.0/24" },
+         { key: "private_ip", value: "10.41.1.20" },
          { key: "hcp_organization", value: @org }, *common, { key: "admin_token", sensitive: :token }]
       else
         [{ key: "deployment_id", value: "prod-us" }, { key: "environment", value: "production" },
-         { key: "hostname", value: "pms.#{domain}" }, { key: "private_ip", value: "10.40.1.30" },
+         { key: "hostname", value: "pms.#{domain}" },
+         { key: "vpc_cidr", value: "10.42.0.0/16" }, { key: "subnet_cidr", value: "10.42.1.0/24" },
+         { key: "private_ip", value: "10.42.1.30" },
          { key: "hcp_organization", value: @org }, *common, { key: "admin_token", sensitive: :token },
          { key: "protected", value: "true" }]
       end

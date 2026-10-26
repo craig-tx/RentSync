@@ -80,7 +80,7 @@ jobs:
       - run: terraform fmt -check -recursive infra/terraform
       - name: Validate and test each root and the host module
         run: |
-          for root in infra/terraform/shared infra/terraform/environment infra/terraform/modules/host; do
+          for root in infra/terraform/shared infra/terraform/environment infra/terraform/modules/host infra/terraform/modules/network; do
             terraform -chdir=$root init -backend=false -input=false
             terraform -chdir=$root validate
             terraform -chdir=$root test

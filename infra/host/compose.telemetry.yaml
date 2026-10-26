@@ -30,7 +30,7 @@ services:
       ZO_META_POSTGRES_DSN: postgres://openobserve:${OPENOBSERVE_DB_PASSWORD}@openobserve-db:5432/${DB_NAME}
     ports:
       # OTLP ingest on the private IP only. The security group admits 5080 only from the
-      # otlp-client group, so it is never reachable from the internet (FR-011).
+      # environment subnets' peering rules, so it is never reachable from the internet (FR-011).
       - "${PRIVATE_IP}:5080:5080"
     volumes:
       - /srv/data/openobserve:/data # FR-020: telemetry data survives host replacement

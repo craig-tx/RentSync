@@ -1,40 +1,13 @@
-# One VPC for every deployment, with a single public subnet (research R3). Real production
-# would use separate VPCs and accounts per environment (docs/deploy/production-differences.md).
+# The shared deployment's own VPC (ADR 0008). It holds only the telemetry host. Each
+# environment has its own VPC and peers with this one, so environments never share a network or
+# reach each other. Production would go further, with a separate AWS account per environment
+# (Multi-Account Strategy via AWS Organizations; docs/deploy/production-differences.md).
 
-resource "aws_vpc" "this" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_support   = true
-  enable_dns_hostnames = true
+module "network" {
+  source = "../modules/network"
 
-  tags = { Name = "${local.name}-vpc" }
-}
-
-resource "aws_subnet" "public" {
-  vpc_id            = aws_vpc.this.id
-  cidr_block        = var.subnet_cidr
+  name              = local.name
+  vpc_cidr          = var.vpc_cidr
+  subnet_cidr       = var.subnet_cidr
   availability_zone = var.availability_zone
-
-  tags = { Name = "${local.name}-subnet" }
-}
-
-resource "aws_internet_gateway" "this" {
-  vpc_id = aws_vpc.this.id
-
-  tags = { Name = "${local.name}-igw" }
-}
-
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.this.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.this.id
-  }
-
-  tags = { Name = "${local.name}-rt" }
-}
-
-resource "aws_route_table_association" "public" {
-  subnet_id      = aws_subnet.public.id
-  route_table_id = aws_route_table.public.id
 }

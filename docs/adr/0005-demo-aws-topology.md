@@ -1,6 +1,7 @@
 # ADR-0005: Demo AWS topology — one VPC, one EC2 host per deployment, named by DeploymentId
 
-- **Status:** Accepted
+- **Status:** Accepted. Its "one VPC" decision is superseded by ADR-0008 (one VPC per deployment, each
+  environment peered only with shared); everything else stands.
 - **Date:** 2026-10-21
 - **Feature:** 002-aws-deployment (research R1, R3–R7, R17)
 
@@ -19,8 +20,9 @@ month, and was rejected.
 
 ## Decision
 
-- **One VPC with one public subnet**, owned by the `shared-us` deployment. There is no NAT
-  gateway: hosts have public IPs, and only TCP 80 and 443 are open.
+- **One VPC with one public subnet**, owned by the `shared-us` deployment. *Superseded by
+  ADR-0008: every deployment now owns its VPC.* There is no NAT gateway: hosts have public IPs,
+  and only TCP 80 and 443 are open.
 - **One EC2 host per deployment** (`t4g.small`, Amazon Linux 2023 arm64, pinned AMI). Each host
   runs its whole stack in Docker Compose behind Caddy, which handles TLS. The stacks are:
   - environments: the mock PMS web service and worker, Postgres, Redis, and the Collector;

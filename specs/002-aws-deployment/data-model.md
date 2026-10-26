@@ -20,7 +20,9 @@ DeploymentId (FR-038 to FR-042).
 | hostname | `telemetry.rentsync.org` | `pms-staging.rentsync.org` | `pms.rentsync.org` |
 | HCP workspace | `rentsync-shared-us` (manual apply) | `rentsync-dev-staging` (auto-apply) | `rentsync-prod-us` (manual apply) |
 | GitHub Environment | — | `dev-staging` (no reviewer) | `prod-us` (required reviewer: operator) |
-| private IP (configuration) | `10.40.1.10` | `10.40.1.20` | `10.40.1.30` |
+| own VPC / subnet (ADR-0008) | `10.40.0.0/16` / `10.40.1.0/24` | `10.41.0.0/16` / `10.41.1.0/24` | `10.42.0.0/16` / `10.42.1.0/24` |
+| private IP (configuration) | `10.40.1.10` | `10.41.1.20` | `10.42.1.30` |
+| peered with | both environment VPCs | `shared-us` only | `shared-us` only |
 | name prefix | `rentsync-shared-us-` | `rentsync-dev-staging-` | `rentsync-prod-us-` |
 | SSM prefix | `/rentsync/shared-us/` | `/rentsync/dev-staging/` | `/rentsync/prod-us/` |
 | database name | `openobserve_shared_us` (metadata) | `mock_pms_dev_staging` | `mock_pms_prod_us` |
@@ -37,7 +39,9 @@ DeploymentId (FR-038 to FR-042).
 | SSM parameters | `/rentsync/<id>/...` |
 | Postgres database | `mock_pms_<id_>`, set in `DATABASE_URL` |
 | ECR repository (owned by `shared-us`) | `shared-us/mock_pms` |
-| VPC, subnet, IGW, route table, DLM policy, budget (owned by `shared-us`) | `rentsync-shared-us-vpc`, `-subnet`, ... |
+| VPC, subnet, IGW, route table (each deployment owns its own) | `rentsync-<id>-vpc`, `-subnet`, `-igw`, `-rt` |
+| peering connection to shared (each environment) | `rentsync-<id>-to-shared` |
+| DLM policy, budget (owned by `shared-us`) | `rentsync-shared-us-*` |
 
 Tags on every resource, set through AWS provider `default_tags`:
 
@@ -46,13 +50,15 @@ Tags on every resource, set through AWS provider `default_tags`:
 - `ManagedBy = terraform`.
 
 **Side by side**: a further deployment, e.g. `pr-42`, needs only a new workspace on the
-`environment` root and its variables: `deployment_id`, `hostname`, `private_ip`, and secrets.
+`environment` root and its variables: `deployment_id`, `hostname`, its own `vpc_cidr` and
+`subnet_cidr` (the next free range, e.g. `10.43.0.0/16`), `private_ip`, and secrets.
 None of the three existing deployments, and no bootstrap policy, changes (FR-042).
 
 **Rule**: the two environment deployments share no application data, secrets, volumes or roles
-(FR-015). Everything they share is owned by `shared-us`: the VPC and subnet, the ECR repository,
-the OTLP client security group, the telemetry ingest endpoint and its credentials, and the
-backup policy.
+(FR-015), and no network: each has its own VPC with no route to the other (FR-007, ADR-0008).
+Everything they share is owned by `shared-us`: the ECR repository, the telemetry ingest endpoint
+and its credentials, and the backup policy. Each environment reaches the telemetry endpoint over
+its own peering connection.
 
 ## Host
 

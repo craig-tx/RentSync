@@ -608,7 +608,8 @@ release role's trust policy, step 2:
    - `deployment_id = pr-42`;
    - `environment` (`staging` for anything that isn't production);
    - `hostname = pms-pr-42.<domain>`;
-   - a free `private_ip` in `10.40.1.0/24`, such as `10.40.1.42`;
+   - its own network, the next free range: `vpc_cidr = 10.43.0.0/16`, `subnet_cidr = 10.43.1.0/24`
+     and `private_ip = 10.43.1.42` (ADR-0008);
    - `acme_email` and `acme_ca`;
    - `region` and `hcp_organization`, the same as the other environment workspaces;
    - a fresh `admin_token`.
@@ -624,7 +625,7 @@ release role's trust policy, step 2:
 4. **DNS:** add an A record `pms-pr-42` → the workspace's `public_ip` output.
 5. Apply, then run **Deploy** for `pr-42` from `main`.
 
-It gets its own host, volume, role, parameters (`/rentsync/pr-42/…`), database
+It gets its own VPC peered only with shared, host, volume, role, parameters (`/rentsync/pr-42/…`), database
 (`mock_pms_pr_42`), Compose project and telemetry label (`deployment.id=pr-42`). It costs
 about $17 a month while it exists; Cost Explorer shows it under the `DeploymentId` tag.
 

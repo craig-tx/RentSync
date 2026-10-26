@@ -11,8 +11,13 @@ under `rentsync.org`.
 ## Summary
 
 Run the feature 001 mock PMS on AWS as two independent environments, staging and production,
-plus one shared OpenObserve host. All of it lives in a single VPC and is applied from HCP
-Terraform. This is a cost-conscious demo, about $55 per month.
+plus one shared OpenObserve host, applied from HCP Terraform. This is a cost-conscious demo, about
+$55 per month.
+
+> **Amended 2026-10-25 (ADR-0008):** the plan below describes one VPC. Every deployment now owns
+> its VPC instead, and each environment VPC is peered only with the shared telemetry VPC, so
+> staging and production have no route to each other. Production would use the Multi-Account
+> Strategy via AWS Organizations, with a separate AWS account per environment.
 
 The main technical choices:
 
