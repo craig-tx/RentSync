@@ -13,6 +13,25 @@ docker compose exec mock_pms bundle exec bin/setup
 curl -s localhost:4001/healthz
 ```
 
+### Running the tests
+
+The same commands work on Windows and macOS (constitution: Cross-platform development). Run them
+from the repository root: in **Git Bash** on Windows, in **Terminal** on macOS. You need Docker
+Desktop, plus Ruby 3+ and Terraform for the last two lines (see the runbook's §Bootstrap for how
+to install them on each platform).
+
+```bash
+docker compose run --rm mock_pms bundle exec rspec   # the mock PMS (Compose starts Postgres and Redis)
+bash infra/test/run.sh                               # host and bootstrap scripts, in a Linux container
+ruby infra/bootstrap/test/bootstrap_hcp_test.rb      # HCP bootstrap, against a fake API
+terraform -chdir=infra/terraform/shared test         # likewise environment, modules/host, modules/network (init -backend=false first)
+```
+
+`infra/test/run.sh` runs the shell tests inside a container because they exercise scripts that run
+on Linux (the EC2 hosts and AWS CloudShell). Two checks run only in CI:
+`infra/host/test/boot_volume_test.sh`, which needs a Linux host with root and loop devices, and the
+check that the bootstrap scripts refuse bash 3.2 and 4.3, which is a step in `ci.yml`.
+
 See [`mock_pms/README.md`](mock_pms/README.md) for details and [`specs/001-mock-pms/quickstart.md`](specs/001-mock-pms/quickstart.md) for the full validation walkthrough.
 
 ## Deployment (AWS, feature 002)
