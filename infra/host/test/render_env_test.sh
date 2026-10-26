@@ -44,7 +44,7 @@ render() { PATH="$work/bin:$PATH" RENTSYNC_ETC="$work/etc" RENTSYNC_RUN="$work/r
 # 1. Complete set.
 render > /dev/null || fail "render failed with every parameter present"
 env_file="$work/run/env"
-[ "$(stat -c %a "$env_file")" = "600" ] || fail "env file is not mode 600"
+[ "$(stat -c %a "$env_file" 2> /dev/null || stat -f %Lp "$env_file")" = "600" ] || fail "env file is not mode 600"
 for line in ADMIN_TOKEN=tok-123 POSTGRES_PASSWORD=pw-456 IMAGE_TAG=abc OPENOBSERVE_USER=ops@example.test \
             OPENOBSERVE_PASSWORD=ingest-789 COMPOSE_PROJECT_NAME=rentsync-pr-42 DEPLOYMENT_ID=pr-42 \
             "DATABASE_URL=postgres://postgres:pw-456@postgres:5432/mock_pms_pr_42"; do

@@ -239,6 +239,7 @@ Constitution VIII requires a one-line justification for each new dependency:
 | `bundler-audit` 0.9.2 (CI only, installed in the job, not in the Gemfile) | Fails CI when a locked gem has a published vulnerability (ruby-advisory-db). |
 | `aquasec/trivy` 0.57.1 image (CI only) | Scans the Terraform for misconfigurations; deliberate demo choices are listed with reasons in `infra/terraform/.trivyignore`. |
 | `github/codeql-action` (CI only) | Static security analysis of the Ruby code, free for public repositories. |
+| `debian:12-slim` image plus `jq` (test container, `infra/test/`) | Runs the infra shell tests the same way on Windows, macOS and CI (constitution: Cross-platform development). Those tests need GNU tools, `script(1)`, `flock`, POSIX file modes and `jq`, which Git Bash lacks and macOS has in different forms; reimplementing them is not reasonable. |
 | Dependabot (GitHub, configuration only) | Weekly update PRs for gems, Actions (pinned to commit SHAs), Docker base images and Terraform providers. |
 
 The existing images (Postgres 16, Redis 7, otel-collector-contrib, OpenObserve) are reused from

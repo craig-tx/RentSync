@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Loop-device test for rentsync-boot (feature 002 research R6, T025). Run as root on Linux:
+# Loop-device test for rentsync-boot (feature 002 research R6, T025). Linux only, as root (it
+# needs loop devices and mkfs.xfs), so it runs in CI rather than in infra/test/run.sh:
 #   sudo bash infra/host/test/boot_volume_test.sh
 # Proves the data-safety rule: a blank volume is formatted and laid out, and a volume that
 # already has a filesystem is never reformatted.
