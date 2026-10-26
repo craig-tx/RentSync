@@ -332,12 +332,22 @@ Terraform does not manage DNS (FR-021). After §First apply, create three A reco
 The workspace outputs are the record of each address; don't copy them into this file. They never
 change, because the Elastic IPs survive host replacement.
 
-Check that each record resolves:
+Check that each record resolves, on your machine (Git Bash on Windows, Terminal on macOS) from
+the repository root. CloudShell's copy of the settings has no domain. The check asks Google's
+public DNS over HTTPS, with `curl`, because public DNS is what Let's Encrypt and visitors see;
+your local network's resolver may cache old answers or add its own search domain:
 
 ```bash
 source .bootstrap/settings.env
-for h in telemetry pms-staging pms; do echo "$h -> $(dig +short "$h.$RENTSYNC_DOMAIN")"; done
+for h in telemetry pms-staging pms; do
+  ip="$(curl -s "https://dns.google/resolve?name=$h.$RENTSYNC_DOMAIN&type=A" |
+    grep -o '"type":1,"TTL":[0-9]*,"data":"[^"]*"' | cut -d'"' -f8 | tr '\n' ' ')"
+  echo "$h.$RENTSYNC_DOMAIN -> ${ip:-not resolving yet}"
+done
 ```
+
+Each line should show the IP from the matching workspace output. `not resolving yet` means the
+record is missing or hasn't propagated; new records usually appear within minutes.
 
 **Switching to production certificates**: hosts first come up with `acme_ca` pointing at the
 Let's Encrypt staging endpoint. That avoids rate limits while DNS propagates, but its
