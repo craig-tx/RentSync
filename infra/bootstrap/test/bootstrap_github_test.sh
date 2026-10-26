@@ -34,9 +34,15 @@ prev=""
 for a in "$@"; do [ "$prev" = "--input" ] && echo "  body $(cat "$a")" >> "$GH_LOG"; prev="$a"; done
 STUB
 chmod +x "$work/bin/gh"
-export PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GH_STATE="$work/state"
+export PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GH_STATE="$work/state" RENTSYNC_SETTINGS="$work/settings.env"
+cat > "$RENTSYNC_SETTINGS" <<'EOF'
+RENTSYNC_AWS_ACCOUNT_ID='123456789012'
+RENTSYNC_AWS_REGION='eu-west-2'
+RENTSYNC_GITHUB_REPO='example-owner/example-app'
+RENTSYNC_DOMAIN='example.com'
+EOF
 
-R="repos/craig-tx/RentSync"
+R="repos/example-owner/example-app"
 put() { mkdir -p "$GH_STATE"; echo "$2" > "$GH_STATE/${1//\//__}.json"; }
 reset() { rm -rf "$GH_STATE" "$GH_LOG"; mkdir -p "$GH_STATE"; : > "$GH_LOG"; }
 run() { bash "$script" "$@"; }
@@ -48,22 +54,23 @@ matching() {
   reset
   put "$R/actions/variables/AWS_BUILD_ROLE_ARN" "{\"value\":\"arn:aws:iam::$ACCT:role/rentsync-github-build\"}"
   put "$R/actions/variables/AWS_ROLE_ARN" "{\"value\":\"arn:aws:iam::$ACCT:role/rentsync-github-actions\"}"
-  put "$R/actions/variables/AWS_REGION" '{"value":"us-east-1"}'
+  put "$R/actions/variables/AWS_REGION" '{"value":"eu-west-2"}'
   for env in dev-staging prod-us; do
     put "$R/environments/$env" '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"protection_rules":[]}'
     put "$R/environments/$env/deployment-branch-policies" '{"branch_policies":[{"id":7,"name":"main","type":"branch"}]}'
   done
-  put "$R/environments/dev-staging/variables/SITE_URL" '{"value":"https://pms-staging.rentsync.org"}'
-  put "$R/environments/prod-us/variables/SITE_URL" '{"value":"https://pms.rentsync.org"}'
+  put "$R/environments/dev-staging/variables/SITE_URL" '{"value":"https://pms-staging.example.com"}'
+  put "$R/environments/prod-us/variables/SITE_URL" '{"value":"https://pms.example.com"}'
   put "$R/environments/prod-us/variables/AWS_ROLE_ARN" "{\"value\":\"arn:aws:iam::$ACCT:role/rentsync-github-actions-prod\"}"
   put "$R" '{"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"enabled"}}}'
 }
 
 # 1. Bad arguments.
 reset
-if run > /dev/null 2>&1; then fail "ran without --aws-account"; fi
+if RENTSYNC_SETTINGS="$work/missing.env" run > "$work/err" 2>&1; then fail "ran without a settings file"; fi
+grep -q bootstrap-init.sh "$work/err" || fail "a missing settings file did not point at bootstrap-init.sh"
 if run --aws-account 12345 > /dev/null 2>&1; then fail "accepted a short AWS account ID"; fi
-if run --aws-account $ACCT --ecr-repository-url 999999999999.dkr.ecr.us-east-1.amazonaws.com/x > /dev/null 2>&1; then
+if run --aws-account $ACCT --ecr-repository-url 999999999999.dkr.ecr.eu-west-2.amazonaws.com/x > /dev/null 2>&1; then
   fail "accepted an ECR URL from another AWS account"
 fi
 if run --aws-account $ACCT --bogus > /dev/null 2>&1; then fail "accepted an unknown option"; fi
@@ -72,7 +79,7 @@ if run --aws-account $ACCT --bogus > /dev/null 2>&1; then fail "accepted an unkn
 # 2. Plan on an empty repository (its security settings are off).
 reset
 put "$R" '{"security_and_analysis":{"secret_scanning":{"status":"disabled"},"secret_scanning_push_protection":{"status":"disabled"}}}'
-plan="$(run --aws-account $ACCT)" || fail "plan failed"
+plan="$(run)" || fail "plan failed"
 [ "$(writes)" -eq 0 ] || fail "plan mode made a write"
 [ "$(grep -c '^+ ' <<< "$plan")" -eq 11 ] || fail "plan should list 11 changes: $plan"
 grep -qF "+ set repository variable AWS_BUILD_ROLE_ARN = arn:aws:iam::$ACCT:role/rentsync-github-build" <<< "$plan" \
@@ -80,11 +87,14 @@ grep -qF "+ set repository variable AWS_BUILD_ROLE_ARN = arn:aws:iam::$ACCT:role
 grep -qF "+ set prod-us Environment variable AWS_ROLE_ARN = arn:aws:iam::$ACCT:role/rentsync-github-actions-prod" <<< "$plan" \
   || fail "plan lacks the prod-us role override"
 grep -q 'rerun with --ecr-repository-url' <<< "$plan" || fail "plan does not mention ECR_REPOSITORY_URL"
+# --aws-account still overrides the settings.
+grep -qF "arn:aws:iam::210987654321:role/rentsync-github-build" <<< "$(run --aws-account 210987654321)" \
+  || fail "--aws-account did not override the settings"
 
 # 3. Apply on the same empty repository.
-run --aws-account $ACCT --apply > /dev/null || fail "apply failed"
+run --apply > /dev/null || fail "apply failed"
 [ "$(grep -c 'variable set' "$GH_LOG")" -eq 6 ] || fail "expected 6 variables set"
-grep -q 'variable set AWS_ROLE_ARN --repo craig-tx/RentSync --body arn:aws:iam::123456789012:role/rentsync-github-actions-prod --env prod-us' "$GH_LOG" \
+grep -q 'variable set AWS_ROLE_ARN --repo example-owner/example-app --body arn:aws:iam::123456789012:role/rentsync-github-actions-prod --env prod-us' "$GH_LOG" \
   || fail "the prod-us override was not set on the Environment"
 [ "$(grep -c "^api -X PUT $R/environments/" "$GH_LOG")" -eq 2 ] || fail "expected 2 Environments created"
 grep -q '"custom_branch_policies":true' "$GH_LOG" || fail "Environments not restricted to custom branches"
@@ -93,7 +103,7 @@ grep -q "^api -X PATCH $R --input" "$GH_LOG" || fail "secret scanning not turned
 
 # 4. Everything already matches.
 matching
-out="$(run --aws-account $ACCT --apply)" || fail "apply on a matching repository failed"
+out="$(run --apply)" || fail "apply on a matching repository failed"
 [ "$(writes)" -eq 0 ] || fail "a matching repository got writes: $(cat "$GH_LOG")"
 grep -q 'No changes' <<< "$out" || fail "no-change run not reported"
 
@@ -103,10 +113,10 @@ put "$R/actions/variables/AWS_REGION" '{"value":"us-west-2"}'
 put "$R/environments/prod-us" '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"protection_rules":[{"type":"required_reviewers","reviewers":[{"type":"Team","reviewer":{"id":5}}]}]}'
 put "$R/environments/dev-staging/deployment-branch-policies" '{"branch_policies":[{"id":7,"name":"main","type":"branch"},{"id":9,"name":"feature/*","type":"branch"}]}'
 put "users/octo" '{"id":42}'
-out="$(run --aws-account $ACCT --prod-reviewer octo --ecr-repository-url $ACCT.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_pms --apply)" \
+out="$(run --prod-reviewer octo --ecr-repository-url $ACCT.dkr.ecr.eu-west-2.amazonaws.com/shared-us/mock_pms --apply)" \
   || fail "apply with drift failed"
-grep -q 'variable set AWS_REGION --repo craig-tx/RentSync --body us-east-1$' "$GH_LOG" || fail "differing AWS_REGION not set again"
-grep -q "variable set ECR_REPOSITORY_URL --repo craig-tx/RentSync --body $ACCT.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_pms" "$GH_LOG" \
+grep -q 'variable set AWS_REGION --repo example-owner/example-app --body eu-west-2$' "$GH_LOG" || fail "differing AWS_REGION not set again"
+grep -q "variable set ECR_REPOSITORY_URL --repo example-owner/example-app --body $ACCT.dkr.ecr.eu-west-2.amazonaws.com/shared-us/mock_pms" "$GH_LOG" \
   || fail "ECR_REPOSITORY_URL not set"
 grep -q "^api -X DELETE $R/environments/dev-staging/deployment-branch-policies/9$" "$GH_LOG" \
   || fail "extra deployment branch not removed"
@@ -119,7 +129,7 @@ if grep -q "PUT $R/environments/dev-staging" "$GH_LOG"; then fail "touched a mat
 # 6. A server error stops the run.
 matching
 echo "$R/environments/prod-us" > "$GH_STATE/FAIL"
-if run --aws-account $ACCT --apply > /dev/null 2> "$work/err"; then fail "a server error did not stop the run"; fi
+if run --apply > /dev/null 2> "$work/err"; then fail "a server error did not stop the run"; fi
 grep -q 'HTTP 500' "$work/err" || fail "the server error was not shown"
 
 echo "PASS: bootstrap-github"

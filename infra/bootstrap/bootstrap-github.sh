@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Runbook §Bootstrap step 4 (feature 002): the GitHub repository variables, the dev-staging and
 # prod-us Environments, and secret scanning, through the GitHub API with the gh CLI. Run it from
-# your machine after `gh auth login`, once the IAM roles exist (step 1).
+# your machine after `gh auth login`, once the IAM roles exist (step 1). The repository, AWS
+# account, AWS region and domain come from .bootstrap/settings.env (bootstrap-init.sh).
 #
-#   bootstrap-github.sh --aws-account ID [options]          print the plan; changes nothing
-#   bootstrap-github.sh --aws-account ID [options] --apply  the same, then make the changes
+#   bootstrap-github.sh [options]          print the plan; changes nothing
+#   bootstrap-github.sh [options] --apply  the same, then make the changes
 #
 # Options:
+#   --aws-account ID          override the settings' AWS account ID
 #   --ecr-repository-url URL  also set ECR_REPOSITORY_URL (rerun after the first shared-us apply)
 #   --prod-reviewer LOGIN     add a GitHub user as the prod-us required reviewer (task T074)
 #
@@ -14,13 +16,17 @@
 # matches is left alone, a value that differs is set again, and an existing reviewer is kept.
 set -euo pipefail
 
-repo="${RENTSYNC_GITHUB_REPO:-craig-tx/RentSync}"
-region="us-east-1"
-usage="usage: $0 --aws-account AWS_ACCOUNT_ID [--ecr-repository-url URL] [--prod-reviewer LOGIN] [--apply]"
+usage="usage: $0 [--aws-account AWS_ACCOUNT_ID] [--ecr-repository-url URL] [--prod-reviewer LOGIN] [--apply]"
 
 die() { echo "error: $*" >&2; exit 1; }
 
-mode="plan" aws_account_id="" ecr_url="" reviewer=""
+# shellcheck source=infra/bootstrap/settings.sh
+. "$(dirname "$0")/settings.sh"
+load_settings
+require_settings RENTSYNC_GITHUB_REPO RENTSYNC_AWS_REGION RENTSYNC_DOMAIN
+repo="$RENTSYNC_GITHUB_REPO" region="$RENTSYNC_AWS_REGION" domain="$RENTSYNC_DOMAIN"
+
+mode="plan" aws_account_id="${RENTSYNC_AWS_ACCOUNT_ID:-}" ecr_url="" reviewer=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --aws-account) aws_account_id="${2:-}"; shift ;;
@@ -31,7 +37,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-[[ "$aws_account_id" =~ ^[0-9]{12}$ ]] || die "--aws-account must be a 12-digit AWS account ID"
+[[ "$aws_account_id" =~ ^[0-9]{12}$ ]] || die "the AWS account ID (settings or --aws-account) must be 12 digits"
 if [ -n "$ecr_url" ] && ! [[ "$ecr_url" =~ ^$aws_account_id\.dkr\.ecr\.$region\.amazonaws\.com/[a-z0-9._/-]+$ ]]; then
   die "--ecr-repository-url must be an ECR repository URL in AWS account $aws_account_id ($region)"
 fi
@@ -128,11 +134,11 @@ ensure_var AWS_REGION "$region"
 
 ensure_environment dev-staging
 ensure_main_only dev-staging
-ensure_var SITE_URL "https://pms-staging.rentsync.org" dev-staging
+ensure_var SITE_URL "https://pms-staging.$domain" dev-staging
 
 ensure_environment prod-us "$reviewer_id"
 ensure_main_only prod-us
-ensure_var SITE_URL "https://pms.rentsync.org" prod-us
+ensure_var SITE_URL "https://pms.$domain" prod-us
 ensure_var AWS_ROLE_ARN "$(role github-actions-prod)" prod-us
 
 security=""

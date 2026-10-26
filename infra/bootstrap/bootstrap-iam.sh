@@ -6,14 +6,15 @@
 #   bootstrap-iam.sh          render, validate, and print the plan; changes nothing
 #   bootstrap-iam.sh --apply  the same, then create or update what the plan lists
 #
-# Filled-in copies go to $RENTSYNC_IAM_OUT (default <repo>/.bootstrap/iam, gitignored), so the
-# AWS account ID never lands in a tracked file. Safe to rerun: what exists is skipped or updated.
+# Settings come from .bootstrap/settings.env (bootstrap-init.sh prints a block that writes the
+# four this script needs). Filled-in copies go to $RENTSYNC_IAM_OUT (default
+# <repo>/.bootstrap/iam, gitignored), so no deployment's values land in a tracked file. Safe to
+# rerun: what exists is skipped or updated.
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
 src="${RENTSYNC_IAM_SRC:-$repo/docs/deploy/iam}"
 out="${RENTSYNC_IAM_OUT:-$repo/.bootstrap/iam}"
-region="us-east-1"
 # Each <stem>-policy.json and <stem>-trust.json pair becomes policy and role rentsync-<stem>.
 stems="hcp-terraform github-build github-actions github-actions-prod"
 
@@ -26,13 +27,23 @@ case "${1:-}" in
   *) die "usage: $0 [--apply]" ;;
 esac
 
+# shellcheck source=infra/bootstrap/settings.sh
+. "$repo/infra/bootstrap/settings.sh"
+load_settings
+require_settings RENTSYNC_AWS_ACCOUNT_ID RENTSYNC_AWS_REGION RENTSYNC_HCP_ORG RENTSYNC_GITHUB_SUBJECT
+region="$RENTSYNC_AWS_REGION"
+
 aws_account_id="$(aws sts get-caller-identity --query Account --output text)"
 [[ "$aws_account_id" =~ ^[0-9]{12}$ ]] || die "AWS account ID must be 12 digits, got '$aws_account_id'"
+[ "$aws_account_id" = "$RENTSYNC_AWS_ACCOUNT_ID" ] \
+  || die "signed in to AWS account $aws_account_id, but the settings say $RENTSYNC_AWS_ACCOUNT_ID"
 
 # --- Render ------------------------------------------------------------------------------
 mkdir -p "$out"
 for f in "$src"/*.json; do
-  sed "s/<aws-account-id>/$aws_account_id/g" "$f" > "$out/$(basename "$f")"
+  sed -e "s/<aws-account-id>/$aws_account_id/g" -e "s/<aws-region>/$region/g" \
+    -e "s/<hcp-organization>/$RENTSYNC_HCP_ORG/g" -e "s|<github-subject>|$RENTSYNC_GITHUB_SUBJECT|g" \
+    "$f" > "$out/$(basename "$f")"
 done
 if grep -l '<[A-Za-z_-]*>' "$out"/*.json >&2; then
   die "placeholders remain in the files above"
@@ -121,7 +132,7 @@ fi
 
 echo
 echo "Role ARNs. Nothing to copy: bootstrap-hcp.rb and bootstrap-github.sh build them from"
-echo "--aws-account $aws_account_id and set them where shown."
+echo "the settings and set them where shown."
 echo "  arn:aws:iam::$aws_account_id:role/rentsync-hcp-terraform        -> HCP variable set TFC_AWS_RUN_ROLE_ARN"
 echo "  arn:aws:iam::$aws_account_id:role/rentsync-github-build         -> GitHub repository variable AWS_BUILD_ROLE_ARN"
 echo "  arn:aws:iam::$aws_account_id:role/rentsync-github-actions       -> GitHub repository variable AWS_ROLE_ARN"

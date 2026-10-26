@@ -24,10 +24,8 @@ require "securerandom"
 require "uri"
 
 module HcpBootstrap
-  ORG = "craig-personal"
   PROJECT = "RentSync"
   VARSET = "rentsync-aws"
-  REPO = "craig-tx/RentSync"
   TERRAFORM_VERSION = "1.16.6"
   TRIGGER_PATTERNS = ["infra/**"].freeze
   LE_STAGING = "https://acme-staging-v02.api.letsencrypt.org/directory"
@@ -63,6 +61,31 @@ module HcpBootstrap
     raise Abort, "the two passwords differ" unless console.getpass("Again: ") == first
 
     first
+  end
+
+  # The settings bootstrap-init.sh writes: KEY='value' lines, read as data.
+  SETTINGS = {
+    "RENTSYNC_AWS_ACCOUNT_ID" => :aws_account, "RENTSYNC_AWS_REGION" => :region, "RENTSYNC_AWS_AZ" => :availability_zone,
+    "RENTSYNC_HCP_ORG" => :hcp_org, "RENTSYNC_GITHUB_REPO" => :github_repo, "RENTSYNC_DOMAIN" => :domain,
+    "RENTSYNC_ACME_EMAIL" => :acme_email, "RENTSYNC_OPENOBSERVE_EMAIL" => :openobserve_email,
+    "RENTSYNC_BUDGET_EMAIL" => :budget_email, "RENTSYNC_AMI_ID" => :ami
+  }.freeze
+
+  def self.settings_file
+    ENV.fetch("RENTSYNC_SETTINGS") { File.expand_path("../../.bootstrap/settings.env", __dir__) }
+  end
+
+  def self.load_settings(file = settings_file)
+    raise Abort, "no settings at #{file}; run infra/bootstrap/bootstrap-init.sh first (from Git Bash)" unless File.exist?(file)
+
+    File.readlines(file, chomp: true).each_with_object({}) do |line, opts| # chomp drops CRLF too
+      next if line.empty? || line.start_with?("#")
+
+      key, value = line.match(/^(RENTSYNC_[A-Z_]+)='([^']*)'$/)&.captures
+      raise Abort, "#{file}: not a RENTSYNC_KEY='value' line: #{line}" unless key
+
+      opts[SETTINGS[key]] = value if SETTINGS[key] && !value.empty?
+    end
   end
 
   def self.load_token
@@ -130,12 +153,13 @@ module HcpBootstrap
       @password_source = password
       @token_source = token
       @apply = opts[:apply]
+      @org = opts[:hcp_org]
       @changes = 0
       @workspace_attrs = {}
     end
 
     def run
-      @api.get("/organizations/#{ORG}") or raise Abort, "organization #{ORG} not found, or the token can't see it"
+      @api.get("/organizations/#{@org}") or raise Abort, "organization #{@org} not found, or the token can't see it"
       password_first
       say "Plan (#{@apply ? 'apply' : 'plan'}):"
       project = ensure_project
@@ -164,7 +188,7 @@ module HcpBootstrap
     def password_first
       return unless @apply
 
-      shared = @api.get("/organizations/#{ORG}/workspaces/#{SHARED}")
+      shared = @api.get("/organizations/#{@org}/workspaces/#{SHARED}")
       return if shared && @api.list("/workspaces/#{shared['data']['id']}/vars").any? { |v| v.dig("attributes", "key") == "openobserve_root_password" }
 
       @password = @password_source.call
@@ -173,20 +197,22 @@ module HcpBootstrap
     end
 
     def ensure_project
-      found = @api.list("/organizations/#{ORG}/projects?filter%5Bnames%5D=#{PROJECT}")
+      found = @api.list("/organizations/#{@org}/projects?filter%5Bnames%5D=#{PROJECT}")
                   .find { |p| p.dig("attributes", "name") == PROJECT }
       if found
         note "project #{PROJECT} exists"
         return found["id"]
       end
       step("create project #{PROJECT}") do
-        @api.post("/organizations/#{ORG}/projects", { data: { type: "projects", attributes: { name: PROJECT } } })["data"]["id"]
+        @api.post("/organizations/#{@org}/projects", { data: { type: "projects", attributes: { name: PROJECT } } })["data"]["id"]
       end
     end
 
     def varset_vars
       [{ key: "TFC_AWS_PROVIDER_AUTH", value: "true" },
-       { key: "TFC_AWS_RUN_ROLE_ARN", value: "arn:aws:iam::#{@opts[:aws_account]}:role/rentsync-hcp-terraform" }]
+       { key: "TFC_AWS_RUN_ROLE_ARN", value: "arn:aws:iam::#{@opts[:aws_account]}:role/rentsync-hcp-terraform" },
+       # The cloud blocks in versions.tf name no organization; runs read it from here.
+       { key: "TF_CLOUD_ORGANIZATION", value: @org }]
     end
 
     def var_payload(var, category, value = var[:value])
@@ -194,10 +220,10 @@ module HcpBootstrap
     end
 
     def ensure_varset(project)
-      found = @api.list("/organizations/#{ORG}/varsets?q=#{VARSET}").find { |v| v.dig("attributes", "name") == VARSET }
+      found = @api.list("/organizations/#{@org}/varsets?q=#{VARSET}").find { |v| v.dig("attributes", "name") == VARSET }
       unless found
         step("create variable set #{VARSET} (env #{varset_vars.map { |v| v[:key] }.join(', ')}), applied to project #{PROJECT}") do
-          @api.post("/organizations/#{ORG}/varsets", { data: {
+          @api.post("/organizations/#{@org}/varsets", { data: {
                       type: "varsets",
                       attributes: { name: VARSET, description: "AWS sign-in for RentSync workspaces (runbook §Bootstrap)", global: false },
                       relationships: { projects: { data: [{ type: "projects", id: project }] },
@@ -228,12 +254,12 @@ module HcpBootstrap
       return { "oauth-token-id" => @opts[:oauth_token_id] } if @opts[:oauth_token_id]
       return { "github-app-installation-id" => @opts[:github_app_installation_id] } if @opts[:github_app_installation_id]
 
-      clients = @api.list("/organizations/#{ORG}/oauth-clients")
+      clients = @api.list("/organizations/#{@org}/oauth-clients")
                     .select { |c| c.dig("attributes", "service-provider").to_s.start_with?("github") }
       tokens = clients.flat_map { |c| @api.list("/oauth-clients/#{c['id']}/oauth-tokens") }
       return { "oauth-token-id" => tokens.first["id"] } if tokens.size == 1
 
-      owner = REPO.split("/").first
+      owner = @opts[:github_repo].split("/").first
       installs = tokens.empty? ? @api.list("/github-app/installations").select { |i| i.dig("attributes", "name") == owner } : []
       return { "github-app-installation-id" => installs.first["id"] } if installs.size == 1
 
@@ -252,7 +278,7 @@ module HcpBootstrap
         "terraform-version" => TERRAFORM_VERSION,
         "file-triggers-enabled" => true,
         "trigger-patterns" => TRIGGER_PATTERNS,
-        "vcs-repo" => { "identifier" => REPO, "branch" => @opts[:branch] }.merge(vcs)
+        "vcs-repo" => { "identifier" => @opts[:github_repo], "branch" => @opts[:branch] }.merge(vcs)
       }
       settings["assessments-enabled"] = true if @opts[:health_assessments]
       settings
@@ -261,10 +287,10 @@ module HcpBootstrap
     def ensure_workspace(ws, project, vcs)
       name = ws[:name]
       desired = desired_settings(ws, vcs)
-      found = @api.get("/organizations/#{ORG}/workspaces/#{name}")
+      found = @api.get("/organizations/#{@org}/workspaces/#{name}")
       if found.nil?
         id = step("create workspace #{name} (#{ws[:dir]}, #{ws[:auto_apply] ? 'auto apply' : 'manual apply'}, branch #{@opts[:branch]})") do
-          @api.post("/organizations/#{ORG}/workspaces", { data: {
+          @api.post("/organizations/#{@org}/workspaces", { data: {
                       type: "workspaces", attributes: { name: name }.merge(desired),
                       relationships: { project: { data: { type: "projects", id: project } } }
                     } })["data"]["id"]
@@ -320,22 +346,27 @@ module HcpBootstrap
     end
 
     def workspace_vars(name)
-      common = [{ key: "acme_email", value: @opts[:acme_email] }, { key: "acme_ca", value: LE_STAGING }]
+      common = [{ key: "acme_email", value: @opts[:acme_email] }, { key: "acme_ca", value: LE_STAGING },
+                { key: "region", value: @opts[:region] }]
+      domain = @opts[:domain]
       case name
       when SHARED
         [{ key: "deployment_id", value: "shared-us" }, { key: "ami_id", value: @opts[:ami] },
+         { key: "availability_zone", value: @opts[:availability_zone] },
+         { key: "telemetry_hostname", value: "telemetry.#{domain}" },
          { key: "telemetry_private_ip", value: "10.40.1.10" }, *common,
          { key: "openobserve_root_email", value: @opts[:openobserve_email] },
          { key: "openobserve_root_password", sensitive: :password },
          { key: "budget_email", value: @opts[:budget_email] }]
       when "rentsync-dev-staging"
         [{ key: "deployment_id", value: "dev-staging" }, { key: "environment", value: "staging" },
-         { key: "hostname", value: "pms-staging.rentsync.org" }, { key: "private_ip", value: "10.40.1.20" },
-         *common, { key: "admin_token", sensitive: :token }]
+         { key: "hostname", value: "pms-staging.#{domain}" }, { key: "private_ip", value: "10.40.1.20" },
+         { key: "hcp_organization", value: @org }, *common, { key: "admin_token", sensitive: :token }]
       else
         [{ key: "deployment_id", value: "prod-us" }, { key: "environment", value: "production" },
-         { key: "hostname", value: "pms.rentsync.org" }, { key: "private_ip", value: "10.40.1.30" },
-         *common, { key: "admin_token", sensitive: :token }, { key: "protected", value: "true" }]
+         { key: "hostname", value: "pms.#{domain}" }, { key: "private_ip", value: "10.40.1.30" },
+         { key: "hcp_organization", value: @org }, *common, { key: "admin_token", sensitive: :token },
+         { key: "protected", value: "true" }]
       end
     end
 
@@ -365,10 +396,10 @@ module HcpBootstrap
     end
   end
 
-  def self.parse(argv)
-    opts = { branch: "main", apply: false }
+  def self.parse(argv, settings = load_settings)
+    opts = settings.merge(branch: "main", apply: false)
     OptionParser.new do |o|
-      o.banner = "usage: bootstrap-hcp.rb --aws-account ID --ami AMI --acme-email E --openobserve-email E --budget-email E [options]"
+      o.banner = "usage: bootstrap-hcp.rb [options] (settings from bootstrap-init.sh; these flags override them)"
       o.on("--aws-account ID", "AWS account ID (12 digits), not an HCP or GitHub one") { |v| opts[:aws_account] = v }
       o.on("--ami AMI", "Amazon Linux 2023 arm64 AMI (runbook §Bootstrap step 2)") { |v| opts[:ami] = v }
       o.on("--acme-email EMAIL", "Let's Encrypt contact") { |v| opts[:acme_email] = v }
@@ -380,11 +411,20 @@ module HcpBootstrap
       o.on("--health-assessments", "turn on drift detection (needs a plan that includes it)") { opts[:health_assessments] = true }
       o.on("--apply", "make the changes") { opts[:apply] = true }
     end.parse!(argv)
-    raise Abort, "--aws-account must be 12 digits" unless opts[:aws_account].to_s.match?(/\A\d{12}\z/)
-    raise Abort, "--ami must look like ami-0123456789abcdef0" unless opts[:ami].to_s.match?(/\Aami-[0-9a-f]{8,17}\z/)
+    raise Abort, "the AWS account ID must be 12 digits" unless opts[:aws_account].to_s.match?(/\A\d{12}\z/)
+    unless opts[:ami].to_s.match?(/\Aami-[0-9a-f]{8,17}\z/)
+      raise Abort, "the AMI ID must look like ami-0123456789abcdef0; rerun bootstrap-init.sh or pass --ami"
+    end
 
     %i[acme_email openobserve_email budget_email].each do |key|
-      raise Abort, "--#{key.to_s.tr('_', '-')} must be an email address" unless opts[key].to_s.match?(/\A[^@\s]+@[^@\s]+\z/)
+      raise Abort, "the #{key.to_s.tr('_', ' ')} must be an email address" unless opts[key].to_s.match?(/\A[^@\s]+@[^@\s]+\z/)
+    end
+    { hcp_org: /\A[A-Za-z0-9_-]+\z/, github_repo: %r{\A[A-Za-z0-9-]+/[A-Za-z0-9._-]+\z},
+      region: /\A[a-z]{2}(-[a-z]+)+-\d\z/, domain: /\A([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}\z/ }.each do |key, re|
+      raise Abort, "setting #{key} is missing or malformed; rerun bootstrap-init.sh" unless opts[key].to_s.match?(re)
+    end
+    unless opts[:availability_zone].to_s.match?(/\A#{Regexp.escape(opts[:region])}[a-z]\z/)
+      raise Abort, "setting availability_zone must be a zone in #{opts[:region]}; rerun bootstrap-init.sh"
     end
     opts
   rescue OptionParser::ParseError => e

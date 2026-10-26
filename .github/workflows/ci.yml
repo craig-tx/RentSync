@@ -98,6 +98,8 @@ jobs:
         run: bash infra/host/test/render_env_test.sh
       - name: Deploy-script test (stub docker and aws)
         run: bash infra/host/test/deploy_test.sh
+      - name: Bootstrap-init test (stub gh)
+        run: bash infra/bootstrap/test/bootstrap_init_test.sh
       - name: Bootstrap-IAM test (stub aws)
         run: bash infra/bootstrap/test/bootstrap_iam_test.sh
       - name: Bootstrap-GitHub test (stub gh)

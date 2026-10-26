@@ -11,6 +11,7 @@
 #   6. the GitHub connection is never guessed.
 require "minitest/autorun"
 require "stringio"
+require "tmpdir"
 require_relative "../bootstrap-hcp"
 
 class FakeHcp
@@ -31,8 +32,8 @@ class FakeHcp
 
   def get(path)
     case path
-    when "/organizations/craig-personal" then { "data" => { "id" => "craig-personal" } }
-    when %r{\A/organizations/craig-personal/workspaces/([\w-]+)\z}
+    when "/organizations/example-org" then { "data" => { "id" => "example-org" } }
+    when %r{\A/organizations/example-org/workspaces/([\w-]+)\z}
       w = @workspaces[Regexp.last_match(1)] or return nil
       { "data" => { "id" => w[:id], "attributes" => w[:attrs],
                     "relationships" => { "project" => { "data" => { "id" => w[:project] } } } } }
@@ -49,7 +50,7 @@ class FakeHcp
           "relationships" => { "projects" => { "data" => v[:projects].map { |p| { "id" => p } } } } }
       end
     when %r{\A/varsets/([\w-]+)/relationships/vars\z} then @varsets[Regexp.last_match(1)][:vars]
-    when "/organizations/craig-personal/oauth-clients"
+    when "/organizations/example-org/oauth-clients"
       @oauth_tokens.empty? ? [] : [{ "id" => "oc-1", "attributes" => { "service-provider" => "github" } }]
     when "/oauth-clients/oc-1/oauth-tokens" then @oauth_tokens.map { |t| { "id" => t } }
     when "/github-app/installations" then @installs
@@ -65,18 +66,18 @@ class FakeHcp
     @mutations << [:post, path]
     data = body[:data]
     case path
-    when "/organizations/craig-personal/projects"
+    when "/organizations/example-org/projects"
       id = next_id("prj")
       @projects[data[:attributes][:name]] = id
       { "data" => { "id" => id } }
-    when "/organizations/craig-personal/varsets"
+    when "/organizations/example-org/varsets"
       id = next_id("varset")
       @varsets[id] = { name: data[:attributes][:name], projects: data[:relationships][:projects][:data].map { |p| p[:id] },
                        vars: data[:relationships][:vars][:data].map { |v| stored(v) } }
       { "data" => { "id" => id } }
     when %r{\A/varsets/([\w-]+)/relationships/projects\z} then @varsets[Regexp.last_match(1)][:projects] << data.first[:id]
     when %r{\A/varsets/([\w-]+)/relationships/vars\z} then @varsets[Regexp.last_match(1)][:vars] << stored(data)
-    when "/organizations/craig-personal/workspaces"
+    when "/organizations/example-org/workspaces"
       id = next_id("ws")
       attrs = data[:attributes].transform_keys(&:to_s)
       @workspaces[attrs.delete("name")] = { id: id, attrs: attrs, project: data[:relationships][:project][:data][:id],
@@ -112,8 +113,11 @@ end
 
 class BootstrapHcpTest < Minitest::Test
   PASSWORD = "Re$hearsal #0nly-Pw1"
-  OPTS = { aws_account: "123456789012", ami: "ami-0123456789abcdef0", acme_email: "ops@example.test",
-           openobserve_email: "o2@example.test", budget_email: "budget@example.test", branch: "main" }.freeze
+  SETTINGS = { aws_account: "123456789012", ami: "ami-0123456789abcdef0", acme_email: "ops@example.test",
+               openobserve_email: "o2@example.test", budget_email: "budget@example.test", hcp_org: "example-org",
+               github_repo: "example-owner/example-app", region: "eu-west-2", availability_zone: "eu-west-2b",
+               domain: "example.com" }.freeze
+  OPTS = SETTINGS.merge(branch: "main").freeze
 
   def setup
     @hcp = FakeHcp.new
@@ -155,7 +159,8 @@ class BootstrapHcpTest < Minitest::Test
     varset = @hcp.varsets.values.first
     assert_equal "rentsync-aws", varset[:name]
     assert_equal [project], varset[:projects]
-    assert_equal({ "TFC_AWS_PROVIDER_AUTH" => "true", "TFC_AWS_RUN_ROLE_ARN" => "arn:aws:iam::123456789012:role/rentsync-hcp-terraform" },
+    assert_equal({ "TFC_AWS_PROVIDER_AUTH" => "true", "TFC_AWS_RUN_ROLE_ARN" => "arn:aws:iam::123456789012:role/rentsync-hcp-terraform",
+                   "TF_CLOUD_ORGANIZATION" => "example-org" },
                  varset[:vars].to_h { |v| [v["attributes"]["key"], v["attributes"]["value"]] })
     assert(varset[:vars].all? { |v| v["attributes"]["category"] == "env" })
 
@@ -169,7 +174,7 @@ class BootstrapHcpTest < Minitest::Test
       assert_equal "1.16.6", ws[:attrs]["terraform-version"]
       assert_equal ["infra/**"], ws[:attrs]["trigger-patterns"]
       assert ws[:attrs]["file-triggers-enabled"]
-      assert_equal({ "identifier" => "craig-tx/RentSync", "branch" => "main", "oauth-token-id" => "ot-github" }, ws[:attrs]["vcs-repo"])
+      assert_equal({ "identifier" => "example-owner/example-app", "branch" => "main", "oauth-token-id" => "ot-github" }, ws[:attrs]["vcs-repo"])
       refute ws[:attrs].key?("assessments-enabled"), "assessments are opt-in"
       assert_equal [tag], ws[:tags]
     end
@@ -180,15 +185,19 @@ class BootstrapHcpTest < Minitest::Test
 
     expected = {
       "rentsync-shared-us" => { "deployment_id" => "shared-us", "ami_id" => "ami-0123456789abcdef0",
+                                "availability_zone" => "eu-west-2b", "telemetry_hostname" => "telemetry.example.com",
+                                "region" => "eu-west-2",
                                 "telemetry_private_ip" => "10.40.1.10", "acme_email" => "ops@example.test",
                                 "acme_ca" => HcpBootstrap::LE_STAGING, "openobserve_root_email" => "o2@example.test",
                                 "openobserve_root_password" => PASSWORD, "budget_email" => "budget@example.test" },
       "rentsync-dev-staging" => { "deployment_id" => "dev-staging", "environment" => "staging",
-                                  "hostname" => "pms-staging.rentsync.org", "private_ip" => "10.40.1.20",
+                                  "hostname" => "pms-staging.example.com", "private_ip" => "10.40.1.20",
+                                  "hcp_organization" => "example-org", "region" => "eu-west-2",
                                   "acme_email" => "ops@example.test", "acme_ca" => HcpBootstrap::LE_STAGING,
                                   "admin_token" => @tokens[0] },
       "rentsync-prod-us" => { "deployment_id" => "prod-us", "environment" => "production",
-                              "hostname" => "pms.rentsync.org", "private_ip" => "10.40.1.30",
+                              "hostname" => "pms.example.com", "private_ip" => "10.40.1.30",
+                              "hcp_organization" => "example-org", "region" => "eu-west-2",
                               "acme_email" => "ops@example.test", "acme_ca" => HcpBootstrap::LE_STAGING,
                               "admin_token" => @tokens[1], "protected" => "true" }
     }
@@ -260,19 +269,62 @@ class BootstrapHcpTest < Minitest::Test
     run_bootstrap(apply: true, hcp: two, oauth_token_id: "ot-b")
     assert_equal "ot-b", two.ws("rentsync-prod-us")[:attrs]["vcs-repo"]["oauth-token-id"]
 
-    app = FakeHcp.new(oauth_tokens: [], installs: [{ "id" => "ghain-1", "attributes" => { "name" => "craig-tx" } },
+    app = FakeHcp.new(oauth_tokens: [], installs: [{ "id" => "ghain-1", "attributes" => { "name" => "example-owner" } },
                                                    { "id" => "ghain-2", "attributes" => { "name" => "someone-else" } }])
     run_bootstrap(apply: true, hcp: app)
     assert_equal "ghain-1", app.ws("rentsync-shared-us")[:attrs]["vcs-repo"]["github-app-installation-id"]
   end
 
   def test_arguments_are_validated
-    good = %w[--aws-account 123456789012 --ami ami-0123456789abcdef0 --acme-email a@b.c --openobserve-email a@b.c
-              --budget-email a@b.c]
-    assert_equal "main", HcpBootstrap.parse(good.dup)[:branch]
-    refute HcpBootstrap.parse(good.dup)[:apply]
-    assert_raises(HcpBootstrap::Abort) { HcpBootstrap.parse(good.dup.tap { |a| a[1] = "12345" }) }
-    assert_raises(HcpBootstrap::Abort) { HcpBootstrap.parse(good.dup.tap { |a| a[3] = "ami-xyz" }) }
-    assert_raises(HcpBootstrap::Abort) { HcpBootstrap.parse(good.dup.tap { |a| a[5] = "not-an-email" }) }
+    opts = HcpBootstrap.parse([], SETTINGS.dup)
+    assert_equal "main", opts[:branch]
+    refute opts[:apply]
+    assert_equal "example-org", opts[:hcp_org]
+
+    # The flags still override the settings.
+    flags = %w[--aws-account 210987654321 --ami ami-0fedcba9876543210 --acme-email a@b.c]
+    assert_equal({ aws_account: "210987654321", ami: "ami-0fedcba9876543210", acme_email: "a@b.c" },
+                 HcpBootstrap.parse(flags, SETTINGS.dup).slice(:aws_account, :ami, :acme_email))
+
+    assert_raises(HcpBootstrap::Abort) { HcpBootstrap.parse(%w[--aws-account 12345], SETTINGS.dup) }
+    assert_raises(HcpBootstrap::Abort) { HcpBootstrap.parse(%w[--acme-email not-an-email], SETTINGS.dup) }
+    missing_ami = assert_raises(HcpBootstrap::Abort) { HcpBootstrap.parse([], SETTINGS.except(:ami)) }
+    assert_match(/--ami/, missing_ami.message)
+    { hcp_org: "bad org", github_repo: "no-slash", domain: "Example.COM", region: "useast1",
+      availability_zone: "us-west-2a" }.each do |key, bad|
+      assert_raises(HcpBootstrap::Abort, key) { HcpBootstrap.parse([], SETTINGS.merge(key => bad)) }
+    end
+  end
+
+  def test_settings_file_is_read_as_data
+    Dir.mktmpdir do |dir|
+      file = File.join(dir, "settings.env")
+      File.write(file, "# comment\r\nRENTSYNC_HCP_ORG='example-org'\r\nRENTSYNC_AMI_ID=''\nRENTSYNC_FUTURE_KEY='x'\n")
+      assert_equal({ hcp_org: "example-org" }, HcpBootstrap.load_settings(file))
+
+      File.write(file, "RENTSYNC_HCP_ORG=$(touch pwned)\n")
+      assert_raises(HcpBootstrap::Abort) { HcpBootstrap.load_settings(file) }
+      error = assert_raises(HcpBootstrap::Abort) { HcpBootstrap.load_settings(File.join(dir, "missing.env")) }
+      assert_match(/bootstrap-init\.sh/, error.message)
+    end
+  end
+
+  # A deployment bootstrapped before the settings file existed (the reference one) gains only
+  # the new variables; nothing it already has is changed.
+  def test_upgrade_adds_only_the_new_variables
+    run_bootstrap(apply: true)
+    added = { varset: "TF_CLOUD_ORGANIZATION", "rentsync-shared-us" => %w[region availability_zone telemetry_hostname],
+              "rentsync-dev-staging" => %w[region hcp_organization], "rentsync-prod-us" => %w[region hcp_organization] }
+    @hcp.varsets.values.first[:vars].reject! { |v| v["attributes"]["key"] == added[:varset] }
+    added.except(:varset).each { |name, keys| @hcp.ws(name)[:vars].reject! { |v| keys.include?(v["attributes"]["key"]) } }
+    before = @hcp.workspaces.transform_values { |w| w[:vars].map { |v| v["attributes"].dup } }
+
+    out = run_bootstrap(apply: true, password: nil)
+    assert_match(/^8 change\(s\) applied\.$/, out)
+    assert_includes @hcp.varsets.values.first[:vars].map { |v| v["attributes"]["key"] }, "TF_CLOUD_ORGANIZATION"
+    before.each do |name, vars|
+      assert_equal vars, @hcp.ws(name)[:vars].first(vars.size).map { |v| v["attributes"] }, "#{name} changed an existing variable"
+    end
+    assert_equal 2, @tokens.size, "no new admin_token on an upgrade"
   end
 end

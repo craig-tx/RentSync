@@ -5,13 +5,13 @@
       "Sid": "RunDeployDocument",
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
-      "Resource": "arn:aws:ssm:us-east-1::document/AWS-RunShellScript"
+      "Resource": "arn:aws:ssm:<aws-region>::document/AWS-RunShellScript"
     },
     {
       "Sid": "OnlyOnProtectedHosts",
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
-      "Resource": "arn:aws:ec2:us-east-1:<aws-account-id>:instance/*",
+      "Resource": "arn:aws:ec2:<aws-region>:<aws-account-id>:instance/*",
       "Condition": { "StringEquals": { "ssm:resourceTag/rentsync:deployable": "protected" } }
     },
     {

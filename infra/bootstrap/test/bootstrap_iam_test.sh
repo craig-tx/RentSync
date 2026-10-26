@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Test for bootstrap-iam.sh (runbook §Bootstrap). A stub `aws` on PATH simulates IAM, STS and
 # Access Analyzer and logs every call, so no cloud access is needed. Proves:
-#   1. the render fills every <aws-account-id> placeholder with the AWS account ID from STS;
-#      every GitHub trust uses the repository's immutable subject format;
-#   2. a bad AWS account ID, or a placeholder left in a source file, fails before any change;
+#   1. the render fills every placeholder from the settings file, for any deployment;
+#      every GitHub trust uses the subject prefix GitHub reported, whatever its format;
+#   2. a bad or mismatched AWS account ID, a missing settings file, or a placeholder left in a
+#      source file, fails before any change;
 #   3. the default (plan) mode makes no mutating call;
 #   4. --apply on an empty AWS account creates both providers and all four policies and roles;
 #   5. --apply on a half-done AWS account skips what exists and never re-creates it;
@@ -49,32 +50,46 @@ esac
 STUB
 chmod +x "$work/bin/aws"
 
-export AWS_LOG="$work/aws.log"
+# A deployment that is not the reference one, in a region other than us-east-1, with the
+# classic (mutable) GitHub subject format.
+SUBJECT="repo:example-owner/example-app"
+cat > "$work/settings.env" <<EOF
+RENTSYNC_AWS_ACCOUNT_ID='123456789012'
+RENTSYNC_AWS_REGION='eu-west-2'
+RENTSYNC_HCP_ORG='example-org'
+RENTSYNC_GITHUB_SUBJECT='$SUBJECT'
+EOF
+
+export AWS_LOG="$work/aws.log" RENTSYNC_SETTINGS="$work/settings.env"
 run() { : > "$AWS_LOG"; PATH="$work/bin:$PATH" RENTSYNC_IAM_OUT="$work/out" bash "$script" "$@"; }
 mutations() { grep -cE '^iam (create|update|attach|add)-' "$AWS_LOG" || true; }
 calls() { grep -c "^iam $1 " "$AWS_LOG" || true; }
 
-# 1. The render, with the AWS account ID read from STS.
+# 1. The render fills every placeholder from the settings.
 EXISTING="" run > /dev/null || fail "plan failed"
 [ "$(find "$work/out" -name '*.json' | wc -l)" -eq 8 ] || fail "expected 8 rendered files"
-if grep -l '<aws-account-id>' "$work/out"/*.json; then fail "a placeholder survived the render"; fi
+if grep -l '<[a-z-]*>' "$work/out"/*.json; then fail "a placeholder survived the render"; fi
 grep -q 'arn:aws:iam::123456789012:oidc-provider/app.terraform.io' "$work/out/hcp-terraform-trust.json" \
   || fail "trust policy lacks the AWS account ID"
-# The repository's tokens carry immutable subjects (contracts/bootstrap-iam.md); a trust in the
-# older repo:craig-tx/RentSync: form would never match.
+grep -q '"aws:RequestedRegion": "eu-west-2"' "$work/out/hcp-terraform-policy.json" || fail "region not filled in"
+grep -q '"organization:example-org:project:RentSync:' "$work/out/hcp-terraform-trust.json" || fail "HCP Terraform organization not filled in"
+# Each GitHub trust matches the subject prefix GitHub reported (contracts/bootstrap-iam.md).
 for f in "$work/out"/github-*-trust.json; do
-  grep -q '"repo:craig-tx@16706018/RentSync@1427164274:' "$f" || fail "$(basename "$f") lacks the immutable subject"
-  if grep -q 'repo:craig-tx/RentSync:' "$f"; then fail "$(basename "$f") uses the old subject format"; fi
+  grep -q "\"$SUBJECT:" "$f" || fail "$(basename "$f") lacks the settings' GitHub subject"
 done
+if grep -rqE 'craig|us-east-1' "$work/out"; then fail "a reference-deployment value is hard-coded in a template"; fi
 
 # 2. Bad input.
 if STS_ACCOUNT=12345 run > /dev/null 2>&1; then fail "accepted a short AWS account ID"; fi
+if STS_ACCOUNT=999999999999 run > /dev/null 2>&1; then fail "ran against an AWS account the settings don't name"; fi
+if RENTSYNC_SETTINGS="$work/missing.env" run > "$work/err" 2>&1; then fail "ran without a settings file"; fi
+grep -q 'bootstrap-init.sh' "$work/err" || fail "a missing settings file did not point at bootstrap-init.sh"
 if run --render-only 123456789012 > /dev/null 2>&1; then fail "accepted the removed --render-only"; fi
 mkdir -p "$work/src"
 cp "$here/../../../docs/deploy/iam"/*.json "$work/src/"
-sed -i 's/us-east-1/<region>/' "$work/src/hcp-terraform-policy.json"
+sed -i 's/RentSync/<project>/' "$work/src/hcp-terraform-trust.json"
 if RENTSYNC_IAM_SRC="$work/src" run --apply > /dev/null 2>&1; then
-  fail "a leftover <region> placeholder did not fail the render"
+  fail "a leftover <project> placeholder did not fail the render"
 fi
 [ "$(mutations)" -eq 0 ] || fail "a failed render still made changes"
 
