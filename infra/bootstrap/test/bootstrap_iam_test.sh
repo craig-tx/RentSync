@@ -103,7 +103,7 @@ grep -q 'bootstrap-init.sh' "$work/err" || fail "a missing settings file did not
 if run --render-only 123456789012 > /dev/null 2>&1; then fail "accepted the removed --render-only"; fi
 mkdir -p "$work/src"
 cp "$here/../../../docs/deploy/iam"/*.json "$work/src/"
-sed -i 's/RentSync/<project>/' "$work/src/hcp-terraform-trust.json"
+sed 's/RentSync/<project>/' "$here/../../../docs/deploy/iam/hcp-terraform-trust.json" > "$work/src/hcp-terraform-trust.json"
 if RENTSYNC_IAM_SRC="$work/src" run --apply > /dev/null 2>&1; then
   fail "a leftover <project> placeholder did not fail the render"
 fi
