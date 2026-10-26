@@ -574,6 +574,14 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   script, GitHub script, cost allocation tag by AWS CLI), with no console click paths. Remove
   `bootstrap-iam.sh --render-only`, and reword spec.md (Bootstrap), contracts/bootstrap-iam.md
   and quickstart §1 to match.
+- [X] T052e [US1] Make the deployment operator-neutral (spec Session 2026-10-25): `bootstrap-init.sh`
+  asks for the deployment settings and writes the gitignored `.bootstrap/settings.env`, which
+  every bootstrap script reads. IAM documents become templates (`<aws-region>`,
+  `<hcp-organization>`, `<github-subject>`, read from GitHub), Terraform loses its region, zone,
+  hostname and organization defaults (`TF_CLOUD_ORGANIZATION`, `hcp_organization`), and the
+  runbook, contracts and quickstart use `<domain>` and `$RENTSYNC_…`. Proven against the
+  reference deployment: the IAM render is byte-identical, and the HCP plan only adds the new
+  variables. Test: `infra/bootstrap/test/bootstrap_init_test.sh`, run in CI.
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the
@@ -586,8 +594,8 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   `docs/ai-build-log.md`, against FR-006's one-hour limit.
 - [ ] T054 [US1] **🧑 OPERATOR**: apply `rentsync-shared-us` (confirm), then
   `rentsync-dev-staging`, then `rentsync-prod-us` (confirm), with `acme_ca` set to the Let's
-  Encrypt staging endpoint. Then rerun `bootstrap-github.sh` with `--ecr-repository-url` (runbook §Bootstrap step 4), add the A records (runbook §DNS), and record the three
-  public IPs in runbook §DNS. Record the elapsed time from the first apply to three hosts
+  Encrypt staging endpoint. Then rerun `bootstrap-github.sh` with `--ecr-repository-url` (runbook §Bootstrap step 4), and add the A records (runbook §DNS; the workspace outputs
+  are the record of the IPs). Record the elapsed time from the first apply to three hosts
   serving HTTPS, excluding DNS propagation, in `docs/ai-build-log.md`, against SC-001's 60
   minutes.
 - [ ] T055 [US1] Run quickstart §2 and §9a's tag audit:

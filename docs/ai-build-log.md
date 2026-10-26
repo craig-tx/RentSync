@@ -386,3 +386,67 @@ runbook step 8 and T054.
 - `bootstrap-github.sh --aws-account … --apply`;
 
 then T054.
+
+### 2026-10-25 (last): operator-neutral deployment (T052e)
+
+- **Operator's decisions:**
+  - make both the runbook and the code generic;
+  - include the AWS region;
+  - ship placeholders only;
+  - add an interactive first script that saves the settings to an uncommitted file the other
+    scripts read.
+
+  Spec Session 2026-10-25 records this. Input (4) now describes the reference deployment.
+- **`bootstrap-init.sh` (step 0):** asks for each setting and writes `.bootstrap/settings.env`
+  as `RENTSYNC_KEY='value'` lines.
+  - **Settings:** AWS account, region and zone; HCP Terraform organization; GitHub repository;
+    domain; the three emails; and the AMI, which can stay blank.
+  - **Validation:** every answer is checked by regex and asked again if wrong.
+  - **OIDC subject:** reads the repository's subject prefix from
+    `actions/oidc/customization/sub`, rather than assuming a format, and refuses custom
+    templates.
+  - **CloudShell:** prints a paste block that clones the repository and writes only the four
+    settings step 1 needs.
+  - **Loading:** `settings.sh` (bash) and `HcpBootstrap.load_settings` (Ruby) read the file as
+    data; neither executes it.
+- **Scripts:**
+  - **IAM:** fills `<aws-region>`, `<hcp-organization>` and `<github-subject>` too, and stops if
+    CloudShell is signed in to an AWS account other than the one the settings name.
+  - **HCP:** takes the organization, repository, domain, region and zone from settings. It adds
+    `TF_CLOUD_ORGANIZATION` to the variable set, `region`, `availability_zone` and
+    `telemetry_hostname` to shared-us, and `region` and `hcp_organization` to the environments.
+  - **GitHub:** takes the repository, region, domain and AWS account from settings.
+  - **Flags:** existing flags still override the settings.
+- **Terraform:**
+  - the `cloud` blocks no longer name an organization (`TF_CLOUD_ORGANIZATION`);
+  - the remote state uses `var.hcp_organization`;
+  - `region`, `availability_zone` and `telemetry_hostname` lose their defaults;
+  - the tests pass them explicitly.
+- **Docs:**
+  - the runbook, contracts and quickstart use `<domain>` and `$RENTSYNC_…`;
+  - the DNS section is provider-neutral, and the recorded-IP table is gone (the outputs are the
+    record);
+  - the Git Bash note covers both PowerShell and Command Prompt;
+  - the README keeps the reference URLs, labeled as such.
+
+  plan.md, research.md, data-model.md and completed task text keep the reference values as
+  design history.
+- **Reference deployment unchanged (merge gate):**
+  - **IAM:** the new templates, rendered with the reference values, are byte-identical to the
+    old render.
+  - **HCP:** a live read-only plan with those values listed exactly 8 additions, each equal to
+    the old default.
+  - **GitHub:** a live read-only plan showed no changes.
+- **Tests:**
+  - new `bootstrap_init_test.sh`, mutation-checked: a dropped validation and leaked CloudShell
+    keys are each caught;
+  - the IAM, GitHub and HCP tests now use a non-reference deployment (eu-west-2, example
+    org/repo/domain, classic subject format);
+  - HCP gained a settings-loader test and an upgrade test (only the new variables are added);
+  - HCP: 10 runs, 131 assertions; all shell tests pass; shellcheck 0.11 is clean; Terraform
+    7, 12 and 2 tests pass.
+
+**Next task:** before merging this PR, the operator runs `bootstrap-init.sh`, then
+`bootstrap-hcp.rb --apply`, which adds the 8 variables. The PR's HCP Terraform speculative plans
+must then pass with no changes, which also proves that a `cloud` block without `organization`
+works. Then merge, and continue T053/T054.

@@ -1,54 +1,98 @@
 # RentSync deployment runbook
 
-Operator procedures for the AWS deployment of the mock PMS (feature 002). Design and rationale:
+Operator procedures for deploying the mock PMS to AWS (feature 002). Design and rationale:
 [specs/002-aws-deployment/](../../specs/002-aws-deployment/). End-to-end validation:
 [quickstart.md](../../specs/002-aws-deployment/quickstart.md).
 
+Nothing here is specific to one operator. Your own values (AWS account and region, HCP Terraform
+organization, GitHub repository, domain, contact emails) live in `.bootstrap/settings.env`.
+Bootstrap step 0 writes that file, and it is never committed. In this runbook, `<domain>` means
+your domain. Commands use the `$RENTSYNC_…` variables from that file, so load it into your shell
+first:
+
+```bash
+source .bootstrap/settings.env
+```
+
 Deployments (constitution Principle VI, DeploymentId):
 
-| DeploymentId | Serves | HCP workspace | URL |
+| DeploymentId | Serves | HCP Terraform workspace | URL |
 |---|---|---|---|
-| `shared-us` | VPC, ECR, telemetry, backups, budget | `rentsync-shared-us` | `https://telemetry.rentsync.org` |
-| `dev-staging` | staging | `rentsync-dev-staging` | `https://pms-staging.rentsync.org` |
-| `prod-us` | production | `rentsync-prod-us` | `https://pms.rentsync.org` |
+| `shared-us` | VPC, ECR, telemetry, backups, budget | `rentsync-shared-us` | `https://telemetry.<domain>` |
+| `dev-staging` | staging | `rentsync-dev-staging` | `https://pms-staging.<domain>` |
+| `prod-us` | production | `rentsync-prod-us` | `https://pms.<domain>` |
 
 ## Bootstrap
 
-This one-time setup should take under an hour (FR-006). Three scripts and two AWS CLI commands
-do all of it, so you don't click through any console. Each script prints a plan and changes
-nothing until you rerun it with `--apply`. Each is safe to rerun. The setup creates no AWS access
-keys, and no credential ever goes into chat, the repository, or a terminal history. Afterwards,
-every change goes through HCP Terraform runs. Note the start time; T053 records how long it took.
+This one-time setup should take under an hour (FR-006). Four scripts and two AWS CLI commands do
+all of it, so you don't click through any console. Each script except step 0 prints a plan and
+changes nothing until you rerun it with `--apply`, and each is safe to rerun. The setup creates no
+AWS access keys, and no credential ever goes into chat, the repository, or a terminal history.
+Afterwards, every change goes through HCP Terraform runs. Note the start time; T053 records how
+long it took.
 
 | Step | What | Where it runs | When |
 |---|---|---|---|
-| 1 | `bootstrap-iam.sh`: AWS OIDC providers and roles | AWS CloudShell | first |
+| 0 | `bootstrap-init.sh`: asks for your settings and saves them | Git Bash, your machine | first |
+| 1 | `bootstrap-iam.sh`: AWS OIDC providers and roles | AWS CloudShell | after step 0 |
 | 2 | AWS CLI: look up the AMI | AWS CloudShell | after step 1 |
 | 3 | `bootstrap-hcp.rb`: HCP Terraform project, workspaces and variables | PowerShell, your machine | after step 2 |
-| 4 | `bootstrap-github.sh`: GitHub variables, Environments and secret scanning | Git Bash (not WSL), your machine | after step 1; rerun after T054 and at T074 |
+| 4 | `bootstrap-github.sh`: GitHub variables, Environments and secret scanning | Git Bash, your machine | after step 1; rerun after T054 and at T074 |
 | 5 | AWS CLI: activate the `DeploymentId` cost allocation tag | AWS CloudShell | about a day after the first apply |
 
-You need an AWS account (AWS region `us-east-1`), owner access to the HCP Terraform
-organization `craig-personal`, admin access to `craig-tx/RentSync` on GitHub, and the NameCheap
-account for `rentsync.org`. On your machine, you need Ruby, Terraform and the `gh` CLI.
+You need:
+- an AWS account you can sign in to as an administrator;
+- an HCP Terraform organization you own;
+- admin access to your copy of this repository on GitHub;
+- a domain, and access to its DNS records;
+- on your machine: Git Bash, Ruby, Terraform and the `gh` CLI.
+
+**Git Bash, not WSL.** On Windows, a bare `bash` typed in PowerShell or Command Prompt starts WSL,
+which can't see the Windows `gh`. Open a Git Bash window, or call it by path: in Command Prompt,
+`"C:\Program Files\Git\bin\bash.exe" infra/bootstrap/<script> …`, and in PowerShell, prefix that
+with `&`.
+
+### 0. Your settings
+
+[`infra/bootstrap/bootstrap-init.sh`](../../infra/bootstrap/bootstrap-init.sh) asks for each
+setting and writes `.bootstrap/settings.env` (gitignored). The other scripts read it from there.
+It asks for:
+- your AWS account ID, AWS region and availability zone;
+- your HCP Terraform organization and GitHub repository;
+- your domain;
+- the Let's Encrypt, OpenObserve and AWS budget emails;
+- the AMI ID, which you can leave blank until step 2.
+
+It also reads your repository's OIDC subject format from GitHub, which the IAM trust policies
+need. It asks for nothing secret: step 3 handles the password and tokens. Rerun it any time; Enter
+keeps each current value.
+
+1. Sign in to GitHub once, if you haven't: `gh auth login`.
+2. From the repository root, in Git Bash:
+
+   ```bash
+   bash infra/bootstrap/bootstrap-init.sh
+   ```
+
+It ends by printing a block to paste into CloudShell in step 1.
 
 ### 1. AWS: OIDC providers and bootstrap roles
 
 [`infra/bootstrap/bootstrap-iam.sh`](../../infra/bootstrap/bootstrap-iam.sh) creates the two OIDC
-providers and four roles, using the policy documents in [`iam/`](iam/)
+providers and four roles, from the policy documents in [`iam/`](iam/)
 (contracts/bootstrap-iam.md). CloudShell acts as your console session, so no access key is
-created. The script reads the AWS account ID from that session, writes filled-in copies of the
-documents to the gitignored `.bootstrap/iam/`, and validates each one with IAM Access Analyzer.
-Any error or security warning stops it before it changes anything.
+created.
+- **Templates:** the documents hold placeholders such as `<aws-account-id>` and
+  `<github-subject>`. The script fills them from the settings into the gitignored
+  `.bootstrap/iam/`.
+- **Checks before any change:** it stops if CloudShell is signed in to a different AWS account
+  than the settings name. It validates each document with IAM Access Analyzer, and stops on any
+  error or security warning.
 
-1. Sign in to the AWS console as an administrator, switch to `us-east-1`, and open
+1. Sign in to the AWS console as an administrator, switch to your AWS region, and open
    **CloudShell** from the top bar.
-2. Clone the repository:
-
-   ```bash
-   git clone https://github.com/craig-tx/RentSync.git && cd RentSync
-   ```
-
+2. Paste the block that step 0 printed. It clones your repository, enters it, and writes the
+   settings this step needs.
 3. Print the plan, and review the `+ aws …` lines:
 
    ```bash
@@ -62,39 +106,42 @@ Any error or security warning stops it before it changes anything.
    ```
 
 The script ends by printing the role ARNs. You don't need to copy them: steps 3 and 4 build them
-from the AWS account ID.
+from the settings.
 
 ### 2. AWS: look up the AMI
 
-In the same CloudShell session, print the current Amazon Linux 2023 arm64 AMI ID. Step 3 takes it
-as `--ami`:
+In the same CloudShell session, print the current Amazon Linux 2023 arm64 AMI ID:
 
 ```bash
-aws ssm get-parameter --region us-east-1 \
+source .bootstrap/settings.env
+aws ssm get-parameter --region "$RENTSYNC_AWS_REGION" \
   --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64 \
   --query Parameter.Value --output text
 ```
 
-The AMI is pinned on purpose: changing `ami_id` later replaces every host (research R4).
+Back on your machine, rerun step 0 and enter it as the AMI ID; Enter keeps everything else. Or
+pass it to step 3 as `--ami`. The AMI is pinned on purpose: changing `ami_id` later replaces every
+host (research R4).
 
 ### 3. HCP Terraform: project, workspaces and variables
 
 [`infra/bootstrap/bootstrap-hcp.rb`](../../infra/bootstrap/bootstrap-hcp.rb) does this through the
 HCP Terraform API:
 - the `RentSync` project, and the `rentsync-aws` variable set holding the
-  `rentsync-hcp-terraform` role ARN;
+  `rentsync-hcp-terraform` role ARN and `TF_CLOUD_ORGANIZATION`;
 - the three workspaces, tracking `main`, with their apply methods and tags;
 - remote state sharing from `rentsync-shared-us`;
-- every workspace variable in contracts/workspace-variables.md.
+- every workspace variable in contracts/workspace-variables.md, including the AWS region, the
+  zone and the hostnames from your settings.
 
 It needs only Ruby, with no gems.
 - **Secrets:** each `admin_token` is generated inside the script, a different one per
   environment, and sent straight to HCP Terraform as a sensitive variable. The OpenObserve root
   password is asked for twice, without echo, and checked against Terraform's rule before anything
   changes.
-- **Reruns:** it restores workspace settings that drifted, but never changes a variable that
-  exists. It reports one whose value differs, because you change those on purpose later
-  (`acme_ca`, `ami_id`, rotations).
+- **Reruns:** it restores workspace settings that drifted, and adds variables that are missing.
+  It never changes a variable that exists; it only reports one whose value differs, because you
+  change those on purpose later (`acme_ca`, `ami_id`, rotations).
 
 Run it in PowerShell or Windows Terminal. Git Bash's terminal can't hide the password prompt.
 
@@ -108,11 +155,11 @@ Run it in PowerShell or Windows Terminal. Git Bash's terminal can't hide the pas
 2. Print the plan:
 
    ```powershell
-   ruby infra/bootstrap/bootstrap-hcp.rb --aws-account <AWS account ID> --ami <AMI from step 2> `
-     --acme-email <contact> --openobserve-email <sign-in email> --budget-email <alert recipient>
+   ruby infra/bootstrap/bootstrap-hcp.rb
    ```
 
-3. Add `--apply` to make the changes. Other options:
+3. Add `--apply` to make the changes. Options:
+   - `--ami`, `--aws-account` and the email flags override the settings;
    - `--branch` changes the branch the workspaces track (default `main`);
    - `--health-assessments` turns on drift detection, if your HCP Terraform plan includes it.
 
@@ -123,7 +170,8 @@ through the GitHub API, with the `gh` CLI:
 - the repository variables `AWS_BUILD_ROLE_ARN`, `AWS_ROLE_ARN` and `AWS_REGION`;
 - the Environments `dev-staging` and `prod-us`. Each allows only branch `main`, because the
   release roles trust these Environments by name;
-- each Environment's `SITE_URL`, the only place deployment URLs are recorded;
+- each Environment's `SITE_URL` (`https://pms-staging.<domain>` and `https://pms.<domain>`), the
+  only place deployment URLs are recorded;
 - the `prod-us` `AWS_ROLE_ARN` override, which points production jobs at
   `rentsync-github-actions-prod`;
 - secret scanning and push protection (SC-004).
@@ -131,39 +179,32 @@ through the GitHub API, with the `gh` CLI:
 It sets only non-secret values. On a rerun, a value that differs is set again, an extra deployment
 branch is removed, and an existing reviewer is kept.
 
-You run it three times. Each run passes the earlier flags again and adds one:
+You run it three times. Each later run adds one flag:
 
 | When | Flags | What the run adds |
 |---|---|---|
-| Now | `--aws-account <AWS account ID>` | everything in the list above |
-| After the first `rentsync-shared-us` apply (T054) | add `--ecr-repository-url <URL>` | `ECR_REPOSITORY_URL`, from that workspace's `ecr_repository_url` output (HCP Terraform → `rentsync-shared-us` → **Outputs**). Releases are skipped until it is set. |
-| Task T074 | add `--prod-reviewer <your GitHub username>` | you, as the `prod-us` required reviewer |
+| Now | none | everything in the list above |
+| After the first `rentsync-shared-us` apply (T054) | `--ecr-repository-url <URL>` | `ECR_REPOSITORY_URL`, from that workspace's `ecr_repository_url` output (HCP Terraform → `rentsync-shared-us` → **Outputs**). Releases are skipped until it is set. |
+| Task T074 | `--prod-reviewer <your GitHub username>` | you, as the `prod-us` required reviewer |
 
-1. Sign in to GitHub once, if you haven't: `gh auth login`.
-2. Print the plan from **Git Bash**:
+1. In Git Bash, print the plan:
 
    ```bash
-   bash infra/bootstrap/bootstrap-github.sh --aws-account <AWS account ID>
+   bash infra/bootstrap/bootstrap-github.sh
    ```
 
-   Or from PowerShell, call Git Bash explicitly. A bare `bash` in PowerShell starts WSL, which
-   can't see the Windows `gh`:
-
-   ```powershell
-   & "C:\Program Files\Git\bin\bash.exe" infra/bootstrap/bootstrap-github.sh --aws-account <AWS account ID>
-   ```
-
-3. Add `--apply` to make the changes.
+2. Add `--apply` to make the changes.
 
 ### 5. AWS: activate the cost allocation tag
 
 AWS can only activate a tag after its billing data has seen it, which happens about a day after
-the first apply. Then, in CloudShell:
+the first apply. Then, in CloudShell, from the repository directory:
 
 ```bash
-aws ce list-cost-allocation-tags --region us-east-1 --tag-keys DeploymentId \
+source .bootstrap/settings.env
+aws ce list-cost-allocation-tags --region "$RENTSYNC_AWS_REGION" --tag-keys DeploymentId \
   --query 'CostAllocationTags[].Status' --output text
-aws ce update-cost-allocation-tags-status --region us-east-1 \
+aws ce update-cost-allocation-tags-status --region "$RENTSYNC_AWS_REGION" \
   --cost-allocation-tags-status TagKey=DeploymentId,Status=Active
 ```
 
@@ -172,6 +213,11 @@ Cost Explorer can group spend by deployment (constitution VI).
 
 ### If a step fails
 
+- **A script says there are no settings:** run step 0. In CloudShell, paste the block step 0
+  printed.
+- **Step 1 says the signed-in AWS account differs from the settings:** you're in the wrong AWS
+  account, or the settings are wrong. Fix whichever it is, then rerun step 0 and repaste the
+  block.
 - **`create-role` fails with "Invalid principal" (step 1):** the OIDC providers were created
   moments before, and IAM hasn't caught up. Wait a few seconds and rerun `--apply`.
 - **Step 1 says a policy exists and was not changed:** an existing policy is never changed
@@ -179,34 +225,37 @@ Cost Explorer can group spend by deployment (constitution VI).
   `create-policy-version` command the script prints.
 - **Step 3 says it found no GitHub connection:** HCP Terraform isn't connected to GitHub yet.
   Connect it once, in HCP Terraform: **New** → **Workspace** → **Version control workflow** →
-  **GitHub**. Authorize and install the app for `craig-tx`, cancel before creating the workspace,
-  and rerun the script.
+  **GitHub**. Authorize and install the app for your GitHub account, cancel before creating the
+  workspace, and rerun the script.
 - **Step 3 reports a variable whose value differs:** that's expected after a deliberate change,
   such as the switch to production certificates. To change a variable, edit it in the workspace.
+- **A script says `gh` was not found:** you're in WSL. Use Git Bash (see above).
 
-### Values
+### Where each setting ends up
 
-Every value below is non-secret, but don't write them into this file: the repository is public
-and never names an AWS account ID. You pass each one to a script, and the script sets it in the
-place shown. Those places are the record.
+Every value is non-secret, but none of them is written into the repository. The settings file is
+gitignored, and the places in the last column are the record.
 
-| Value | Where it comes from | Passed to | Ends up in |
-|---|---|---|---|
-| AWS account ID | AWS console, top right | `bootstrap-hcp.rb` and `bootstrap-github.sh` (`--aws-account`); step 1 reads it itself | the role ARNs below |
-| AWS region | `us-east-1` | fixed in the scripts | variable defaults; GitHub `AWS_REGION` |
-| HCP Terraform organization | `craig-personal` | fixed in `bootstrap-hcp.rb` | `versions.tf` (`cloud` block) |
-| `rentsync-hcp-terraform` role ARN | built from the AWS account ID | `bootstrap-hcp.rb` | variable set `TFC_AWS_RUN_ROLE_ARN` |
-| `rentsync-github-build` role ARN | built from the AWS account ID | `bootstrap-github.sh` | GitHub repository variable `AWS_BUILD_ROLE_ARN` |
-| `rentsync-github-actions` role ARN | built from the AWS account ID | `bootstrap-github.sh` | GitHub repository variable `AWS_ROLE_ARN` |
-| `rentsync-github-actions-prod` role ARN | built from the AWS account ID | `bootstrap-github.sh` | GitHub `prod-us` Environment variable `AWS_ROLE_ARN` |
-| AMI ID | step 2 | `bootstrap-hcp.rb --ami` | `rentsync-shared-us` `ami_id` |
-| ECR repository URL | `rentsync-shared-us` output `ecr_repository_url` | `bootstrap-github.sh --ecr-repository-url` | GitHub `ECR_REPOSITORY_URL` |
+| Setting | Read by | Ends up in |
+|---|---|---|
+| AWS account ID | steps 1, 3 and 4 | the role ARNs: the variable set's `TFC_AWS_RUN_ROLE_ARN`, and GitHub's `AWS_BUILD_ROLE_ARN` and `AWS_ROLE_ARN` (repository and `prod-us`) |
+| AWS region | steps 1, 3 and 4 | the IAM documents, the workspaces' `region`, and GitHub's `AWS_REGION` |
+| AWS availability zone | step 3 | `rentsync-shared-us` `availability_zone` |
+| HCP Terraform organization | steps 1 and 3 | the `rentsync-hcp-terraform` trust, `TF_CLOUD_ORGANIZATION`, and the environment workspaces' `hcp_organization` |
+| GitHub repository and OIDC subject | steps 1, 3 and 4 | the GitHub role trusts, the workspaces' VCS connection, and the target of step 4 |
+| Domain | steps 3 and 4 | the workspaces' `hostname` and `telemetry_hostname`, and GitHub's `SITE_URL`s |
+| Emails | step 3 | `acme_email`, `openobserve_root_email`, `budget_email` |
+| AMI ID | step 3 | `rentsync-shared-us` `ami_id` |
+| ECR repository URL (not a setting) | step 4, `--ecr-repository-url` | GitHub `ECR_REPOSITORY_URL` |
+
+**Local Terraform commands** (teardown, backup restore) need the organization too, because the
+`cloud` blocks don't name it. Run `export TF_CLOUD_ORGANIZATION="$RENTSYNC_HCP_ORG"` after loading
+the settings.
 
 ## DNS
 
-Terraform does not manage DNS (FR-021). After the first applies, create three A records at
-NameCheap (**Domain List** → `rentsync.org` → **Manage** → **Advanced DNS** → **Add new
-record**):
+Terraform does not manage DNS (FR-021). After the first applies, create three A records for
+`<domain>` at your DNS provider:
 
 | Type | Host | Value (workspace output) | TTL |
 |---|---|---|---|
@@ -214,18 +263,13 @@ record**):
 | A Record | `pms-staging` | `rentsync-dev-staging` → `public_ip` | 5 min |
 | A Record | `pms` | `rentsync-prod-us` → `public_ip` | 5 min |
 
-Recorded addresses (filled in at task T054):
-
-| Host | Elastic IP |
-|---|---|
-| `telemetry.rentsync.org` | _TBD_ |
-| `pms-staging.rentsync.org` | _TBD_ |
-| `pms.rentsync.org` | _TBD_ |
+The workspace outputs are the record of each address; don't copy them into this file. They never
+change, because the Elastic IPs survive host replacement.
 
 Check that each record resolves:
 
 ```bash
-for h in telemetry pms-staging pms; do echo "$h -> $(dig +short $h.rentsync.org)"; done
+for h in telemetry pms-staging pms; do echo "$h -> $(dig +short "$h.$RENTSYNC_DOMAIN")"; done
 ```
 
 **Switching to production certificates**: hosts first come up with `acme_ca` pointing at the
@@ -236,7 +280,7 @@ certificates are not publicly trusted. Once every record resolves to its IP:
 2. Apply `rentsync-shared-us` (confirm), then `rentsync-dev-staging`, then `rentsync-prod-us`
    (confirm). Changing the host configuration replaces each host. Its address and data are
    kept (research R6).
-3. Check with `curl -sv https://pms-staging.rentsync.org/healthz 2>&1 | grep issuer`, which
+3. Check with `curl -sv "https://pms-staging.$RENTSYNC_DOMAIN/healthz" 2>&1 | grep issuer`, which
    should name a Let's Encrypt production issuer.
 
 After bring-up, set the TTLs back to **Automatic**. The records never change again, because
@@ -266,7 +310,7 @@ with the **Deploy** workflow:
 2. Check it:
 
    ```bash
-   curl -s https://pms-staging.rentsync.org/healthz | jq
+   curl -s "https://pms-staging.$RENTSYNC_DOMAIN/healthz" | jq
    ```
 
    It should show `"status":"ok"`, `"version":"<sha>"` and `"deployment_id":"dev-staging"`.
@@ -295,11 +339,11 @@ run succeeds starts **Release** (`.github/workflows/release.yml`):
    `<ECR>/shared-us/mock_pms:<sha>`. Tags are immutable, and an existing tag is skipped.
    Releases are skipped until `ECR_REPOSITORY_URL` is set (§Bootstrap step 4, after T054).
 2. **`deploy-dev-staging`** runs `rentsync-deploy <sha>` on the `dev-staging` host, then checks
-   `https://pms-staging.rentsync.org/healthz` for `status=ok`, `version=<sha>` and
+   `https://pms-staging.<domain>/healthz` for `status=ok`, `version=<sha>` and
    `deployment_id=dev-staging`. The target is 15 minutes from merge (SC-005).
 3. **`deploy-prod-us`** waits for you. Open the run → **Review deployments** → `prod-us` →
    **Approve and deploy**. It deploys the **same** SHA (FR-027) and checks
-   `https://pms.rentsync.org/healthz`. The target is 10 minutes after approval.
+   `https://pms.<domain>/healthz`. The target is 10 minutes after approval.
 
 Watch it under GitHub → **Actions** → **Release**. Releases run one at a time: a newer merge
 waits for the current one.
@@ -334,7 +378,7 @@ rollback therefore returns to where you started. The data is untouched: no resee
 down-migration (SC-006, under 10 minutes). Afterwards, check:
 
 ```bash
-curl -s https://pms.rentsync.org/healthz | jq -r .version   # the previous SHA
+curl -s "https://pms.$RENTSYNC_DOMAIN/healthz" | jq -r .version   # the previous SHA
 ```
 
 If a `prod-us` release is still waiting for approval, the manual rollback queues behind it,
@@ -400,7 +444,7 @@ you ever need it on `prod-us` (task T083).
 1. **Pick a snapshot:**
 
    ```bash
-   aws ec2 describe-snapshots --region us-east-1 --owner-ids self \
+   aws ec2 describe-snapshots --region "$RENTSYNC_AWS_REGION" --owner-ids self \
      --filters Name=tag:DeploymentId,Values=dev-staging \
      --query 'reverse(sort_by(Snapshots,&StartTime))[].[SnapshotId,StartTime,VolumeSize]' --output table
    ```
@@ -410,7 +454,7 @@ you ever need it on `prod-us` (task T083).
 
    ```bash
    cd infra/terraform/environment
-   export TF_WORKSPACE=rentsync-dev-staging
+   export TF_CLOUD_ORGANIZATION="$RENTSYNC_HCP_ORG" TF_WORKSPACE=rentsync-dev-staging
    terraform init
    terraform state rm 'module.host.aws_ebs_volume.data'
    ```
@@ -434,10 +478,10 @@ you ever need it on `prod-us` (task T083).
    `available` state with the deployment's Name tag:
 
    ```bash
-   aws ec2 describe-volumes --region us-east-1 \
+   aws ec2 describe-volumes --region "$RENTSYNC_AWS_REGION" \
      --filters Name=tag:DeploymentId,Values=dev-staging Name=status,Values=available \
      --query 'Volumes[].[VolumeId,CreateTime]' --output table
-   aws ec2 delete-volume --region us-east-1 --volume-id vol-…
+   aws ec2 delete-volume --region "$RENTSYNC_AWS_REGION" --volume-id vol-…
    ```
 
 ## Secret rotation
@@ -469,7 +513,8 @@ otherwise, so run these steps back to back:
 
    ```bash
    sudo -i
-   NEW="$(aws ssm get-parameter --region us-east-1 --with-decryption \
+   . /etc/rentsync/host.env   # the host's non-secret settings, including AWS_REGION
+   NEW="$(aws ssm get-parameter --region "$AWS_REGION" --with-decryption \
      --name /rentsync/dev-staging/postgres_password --query Parameter.Value --output text)"
    printf "ALTER USER postgres PASSWORD '%s';\n" "$NEW" \
      | docker exec -i rentsync-dev-staging-postgres-1 psql -U postgres -q
@@ -484,7 +529,7 @@ otherwise, so run these steps back to back:
 **OpenObserve root password** (shared). OpenObserve reads `ZO_ROOT_USER_PASSWORD` only when it
 first initializes, so change the password on the OpenObserve root user first:
 
-1. Sign in to `https://telemetry.rentsync.org` → **IAM** → **Users** → the root user →
+1. Sign in to `https://telemetry.<domain>` → **IAM** → **Users** → the root user →
    **Change password**, and set the new value.
 2. In `rentsync-shared-us`, set `openobserve_root_password` to the same value and increase
    `openobserve_root_password_version` by 1. Apply (confirm). Both the root and ingest
@@ -505,9 +550,9 @@ The admin API is the same as in feature 001 (`specs/001-mock-pms/contracts/opena
 the admin token into your own shell from SSM. Never paste it into chat or a file:
 
 ```bash
-BASE=https://pms-staging.rentsync.org            # or https://pms.rentsync.org
+BASE="https://pms-staging.$RENTSYNC_DOMAIN"     # or https://pms.$RENTSYNC_DOMAIN
 DEPLOYMENT_ID=dev-staging                        # or prod-us
-ADMIN_TOKEN="$(aws ssm get-parameter --region us-east-1 --with-decryption \
+ADMIN_TOKEN="$(aws ssm get-parameter --region "$RENTSYNC_AWS_REGION" --with-decryption \
   --name "/rentsync/$DEPLOYMENT_ID/admin_token" --query Parameter.Value --output text)"
 
 # Find deliveries that ran out of attempts for one client (status: pending, in_flight, succeeded, exhausted)
@@ -542,20 +587,21 @@ release role's trust policy, step 2:
    to `rentsync-shared-us`'s remote state sharing list, and set its variables:
    - `deployment_id = pr-42`;
    - `environment` (`staging` for anything that isn't production);
-   - `hostname = pms-pr-42.rentsync.org`;
+   - `hostname = pms-pr-42.<domain>`;
    - a free `private_ip` in `10.40.1.0/24`, such as `10.40.1.42`;
    - `acme_email` and `acme_ca`;
+   - `region` and `hcp_organization`, the same as the other environment workspaces;
    - a fresh `admin_token`.
-2. **AWS IAM:** add `"repo:craig-tx@16706018/RentSync@1427164274:environment:pr-42"` to the `sub` list in the
+2. **AWS IAM:** add `"<github-subject>:environment:pr-42"` to the `sub` list in the
    `rentsync-github-actions` trust policy
    ([`iam/github-actions-trust.json`](iam/github-actions-trust.json)). Merge that, then rerun
    `bootstrap-iam.sh --apply` in CloudShell, which updates the role's trust policy. Trust uses
    exact names, so a job in an unlisted Environment can't assume the role (security review
    2026-10-21).
-3. **GitHub:** create Environment `pr-42` with `SITE_URL = https://pms-pr-42.rentsync.org`,
+3. **GitHub:** create Environment `pr-42` with `SITE_URL = https://pms-pr-42.<domain>`,
    limited to `main`. Add `pr-42` to the `deployment_id` choice list in
    `.github/workflows/deploy.yml`, which is the only code change.
-4. **NameCheap:** add an A record `pms-pr-42` → the workspace's `public_ip` output.
+4. **DNS:** add an A record `pms-pr-42` → the workspace's `public_ip` output.
 5. Apply, then run **Deploy** for `pr-42` from `main`.
 
 It gets its own host, volume, role, parameters (`/rentsync/pr-42/…`), database
@@ -578,7 +624,7 @@ then `shared-us`, because the environments depend on its network.
 
    ```bash
    cd infra/terraform/environment
-   export TF_WORKSPACE=rentsync-prod-us
+   export TF_CLOUD_ORGANIZATION="$RENTSYNC_HCP_ORG" TF_WORKSPACE=rentsync-prod-us
    terraform init
    terraform state rm 'module.host.aws_ebs_volume.data'
    ```
@@ -590,8 +636,8 @@ then `shared-us`, because the environments depend on its network.
 
    ```bash
    repo=shared-us/mock_pms
-   aws ecr list-images --region us-east-1 --repository-name "$repo" --query 'imageIds[*]' --output json > /tmp/ids.json
-   aws ecr batch-delete-image --region us-east-1 --repository-name "$repo" --image-ids file:///tmp/ids.json
+   aws ecr list-images --region "$RENTSYNC_AWS_REGION" --repository-name "$repo" --query 'imageIds[*]' --output json > /tmp/ids.json
+   aws ecr batch-delete-image --region "$RENTSYNC_AWS_REGION" --repository-name "$repo" --image-ids file:///tmp/ids.json
    ```
 
 4. Do the same for `rentsync-shared-us` (`infra/terraform/shared`), with
@@ -599,15 +645,15 @@ then `shared-us`, because the environments depend on its network.
 5. Delete the released data volumes, and any snapshots you don't want:
 
    ```bash
-   aws ec2 describe-volumes --region us-east-1 --filters Name=tag:Project,Values=rentsync \
+   aws ec2 describe-volumes --region "$RENTSYNC_AWS_REGION" --filters Name=tag:Project,Values=rentsync \
      --query 'Volumes[].[VolumeId,Tags[?Key==`DeploymentId`]|[0].Value,State]' --output table
-   aws ec2 delete-volume --region us-east-1 --volume-id vol-…
-   aws ec2 describe-snapshots --region us-east-1 --owner-ids self --filters Name=tag:Project,Values=rentsync \
+   aws ec2 delete-volume --region "$RENTSYNC_AWS_REGION" --volume-id vol-…
+   aws ec2 describe-snapshots --region "$RENTSYNC_AWS_REGION" --owner-ids self --filters Name=tag:Project,Values=rentsync \
      --query 'Snapshots[].[SnapshotId,StartTime]' --output table
-   aws ec2 delete-snapshot --region us-east-1 --snapshot-id snap-…
+   aws ec2 delete-snapshot --region "$RENTSYNC_AWS_REGION" --snapshot-id snap-…
    ```
 
-6. Delete the NameCheap A records.
+6. Delete the A records at your DNS provider.
 7. If you're leaving for good, also delete the bootstrap roles, policies and OIDC providers
    (§Bootstrap step 1), and the HCP workspaces.
 

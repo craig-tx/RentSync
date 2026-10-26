@@ -18,6 +18,8 @@ See [`mock_pms/README.md`](mock_pms/README.md) for details and [`specs/001-mock-
 ## Deployment (AWS, feature 002)
 
 The mock PMS runs on AWS as two independent deployments, plus one shared telemetry host, all applied from HCP Terraform. Each deployment is named by its DeploymentId (constitution Principle VI):
+The URLs below are the reference deployment, at `rentsync.org`. To deploy your own copy under your own domain and accounts, follow [`docs/deploy/runbook.md`](docs/deploy/runbook.md): its first step asks for your settings, and nothing operator-specific is committed.
+
 
 | DeploymentId | Serves | URL |
 |---|---|---|

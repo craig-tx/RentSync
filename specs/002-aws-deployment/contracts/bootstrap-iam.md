@@ -1,7 +1,9 @@
 # Contract: bootstrap IAM (created once, by script)
 
 The operator creates these during bootstrap (FR-006) by running `infra/bootstrap/bootstrap-iam.sh`
-in AWS CloudShell (runbook §Bootstrap step 1). No access keys are created. `<aws-account-id>` is the AWS account ID.
+in AWS CloudShell (runbook §Bootstrap step 1). No access keys are created. The documents are
+templates: the script fills `<aws-account-id>`, `<aws-region>`, `<hcp-organization>` and
+`<github-subject>` from the deployment settings (bootstrap-init.sh).
 
 ## OIDC identity providers
 
@@ -21,7 +23,7 @@ in AWS CloudShell (runbook §Bootstrap step 1). No access keys are created. `<aw
   "Action": "sts:AssumeRoleWithWebIdentity",
   "Condition": {
     "StringEquals": { "app.terraform.io:aud": "aws.workload.identity" },
-    "StringLike":   { "app.terraform.io:sub": "organization:craig-personal:project:RentSync:workspace:rentsync-*:run_phase:*" }
+    "StringLike":   { "app.terraform.io:sub": "organization:<hcp-organization>:project:RentSync:workspace:rentsync-*:run_phase:*" }
   }
 }
 ```
@@ -31,10 +33,10 @@ purpose for a demo, and are listed in the production-differences document:
 
 | Service | Actions | Resources |
 |---|---|---|
-| EC2 | `ec2:*` | `*`, with condition `aws:RequestedRegion = us-east-1` |
+| EC2 | `ec2:*` | `*`, with condition `aws:RequestedRegion = <aws-region>` |
 | IAM | `iam:*Role*`, `iam:*InstanceProfile*`, `iam:*RolePolicy*`, `iam:PassRole`, `iam:GetPolicy*`, `iam:List*` | `arn:aws:iam::<aws-account-id>:role/rentsync-*`, `arn:aws:iam::<aws-account-id>:instance-profile/rentsync-*`, plus the AWS-managed policies it attaches |
-| SSM | `ssm:*Parameter*`, `ssm:AddTagsToResource`, `ssm:ListTagsForResource`, `ssm:DescribeParameters` | `arn:aws:ssm:us-east-1:<aws-account-id>:parameter/rentsync/*` |
-| ECR | `ecr:*` | `arn:aws:ecr:us-east-1:<aws-account-id>:repository/*` (repositories are named `<deployment_id>/...`, so no fixed prefix exists), plus `ecr:GetAuthorizationToken` on `*` |
+| SSM | `ssm:*Parameter*`, `ssm:AddTagsToResource`, `ssm:ListTagsForResource`, `ssm:DescribeParameters` | `arn:aws:ssm:<aws-region>:<aws-account-id>:parameter/rentsync/*` |
+| ECR | `ecr:*` | `arn:aws:ecr:<aws-region>:<aws-account-id>:repository/*` (repositories are named `<deployment_id>/...`, so no fixed prefix exists), plus `ecr:GetAuthorizationToken` on `*` |
 | DLM | `dlm:*` | `*` |
 | Budgets | `budgets:*` | `arn:aws:budgets::<aws-account-id>:budget/rentsync-*` |
 | KMS | `kms:DescribeKey`, `kms:ListAliases` | `*` (AWS-managed keys only; no key is created) |
@@ -47,15 +49,16 @@ under an upcoming commit's tag and get it to production past the reviewer. Each 
 therefore trusts **exact** subjects with `StringEquals`, and only one role can push images.
 Every trust uses `token.actions.githubusercontent.com:aud = sts.amazonaws.com`.
 
-Subjects use GitHub's **immutable** format, `repo:<owner>@<owner-id>/<repo>@<repo-id>:…`. The
-repository was created after 2026-07-15, so its tokens never carry the older
-`repo:craig-tx/RentSync:…` form, and a trust written that way would never match. Check the
-prefix with `gh api repos/craig-tx/RentSync/actions/oidc/customization/sub`
-(`sub_claim_prefix`).
+`<github-subject>` is the prefix GitHub puts on the repository's tokens. A repository created after
+2026-07-15 gets the **immutable** format, `repo:<owner>@<owner-id>/<repo>@<repo-id>`; an older one
+may still get `repo:<owner>/<repo>`. A trust written in the wrong format never matches, so
+`bootstrap-init.sh` reads the prefix from
+`gh api repos/<owner>/<repo>/actions/oidc/customization/sub` (`sub_claim_prefix`) instead of
+assuming one. A custom subject template is not supported.
 
 ### Role `rentsync-github-build` (image builds)
 
-**Trust**: `sub` **exactly** `repo:craig-tx@16706018/RentSync@1427164274:ref:refs/heads/main`. Only jobs running on
+**Trust**: `sub` **exactly** `<github-subject>:ref:refs/heads/main`. Only jobs running on
 `main` can build: `release.yml` and `deploy.yml` dispatched from `main`. See
 `docs/deploy/iam/github-build-trust.json`.
 
@@ -64,14 +67,14 @@ prefix with `gh api repos/craig-tx/RentSync/actions/oidc/customization/sub`
 | Actions | Resources |
 |---|---|
 | `ecr:GetAuthorizationToken` | `*` |
-| `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:DescribeImages` | `arn:aws:ecr:us-east-1:<aws-account-id>:repository/*/mock_pms` |
+| `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:DescribeImages` | `arn:aws:ecr:<aws-region>:<aws-account-id>:repository/*/mock_pms` |
 
 It is the **only** principal that can push images. Builds output the image digest, and every
 deploy pins `<sha>@sha256:<digest>` (research R9).
 
 ### Role `rentsync-github-actions` (non-production deploys)
 
-**Trust**: `sub` **exactly** `repo:craig-tx@16706018/RentSync@1427164274:environment:dev-staging`. The `dev-staging`
+**Trust**: `sub` **exactly** `<github-subject>:environment:dev-staging`. The `dev-staging`
 Environment is limited to `main` (runbook §Bootstrap step 4). Adding a side-by-side deployment
 adds its Environment's exact subject to this list. That is a one-line change and the only IAM
 edit a new deployment needs. See `docs/deploy/iam/github-actions-trust.json`.
@@ -80,7 +83,7 @@ edit a new deployment needs. See `docs/deploy/iam/github-actions-trust.json`.
 
 | Actions | Resources |
 |---|---|
-| `ssm:SendCommand` | `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`, and `arn:aws:ec2:us-east-1:<aws-account-id>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = true` |
+| `ssm:SendCommand` | `arn:aws:ssm:<aws-region>::document/AWS-RunShellScript`, and `arn:aws:ec2:<aws-region>:<aws-account-id>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = true` |
 | `ssm:GetCommandInvocation`, `ssm:ListCommandInvocations` | `*` |
 
 It cannot push images, and it cannot touch production: production hosts are tagged
@@ -93,7 +96,7 @@ could run commands on production, and the `prod-us` approval would be enforced o
 workflow, not by IAM.
 
 **Trust**: the GitHub OIDC provider, with `aud = sts.amazonaws.com` and `sub` **exactly**
-`repo:craig-tx@16706018/RentSync@1427164274:environment:prod-us` (StringEquals). GitHub issues that token only to
+`<github-subject>:environment:prod-us` (StringEquals). GitHub issues that token only to
 a job in the `prod-us` Environment, which is limited to `main` and gated by the required
 reviewer. See `docs/deploy/iam/github-actions-prod-trust.json`.
 
@@ -101,7 +104,7 @@ reviewer. See `docs/deploy/iam/github-actions-prod-trust.json`.
 
 | Actions | Resources |
 |---|---|
-| `ssm:SendCommand` | `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`, and `arn:aws:ec2:us-east-1:<aws-account-id>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = protected` |
+| `ssm:SendCommand` | `arn:aws:ssm:<aws-region>::document/AWS-RunShellScript`, and `arn:aws:ec2:<aws-region>:<aws-account-id>:instance/*` with condition `ssm:resourceTag/rentsync:deployable = protected` |
 | `ssm:GetCommandInvocation`, `ssm:ListCommandInvocations` | `*` |
 
 It has no ECR access: production only runs images the release role already built.
