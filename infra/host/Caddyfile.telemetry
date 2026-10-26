@@ -1,0 +1,16 @@
+# Telemetry host TLS proxy (feature 002 research R7, R13). Installed as /opt/rentsync/Caddyfile.
+# OpenObserve shows its own sign-in page; nothing is visible before sign-in (US3 AC3).
+{
+	email {$ACME_EMAIL}
+	acme_ca {$ACME_CA}
+}
+
+{$SITE_HOSTNAME} {
+	# Ingest stays inside the VPC (FR-011): the environment Collectors reach 5080 directly on
+	# the private IP. Over the public hostname, refuse OpenObserve's ingestion endpoints and
+	# serve only the UI and its query API.
+	@ingest path_regexp ingest ^/api/[^/]+/(v1/(logs|metrics|traces)|_bulk|_multi|_json|[^/]+/(_json|_multi|_bulk|_kinesis_firehose))$
+	respond @ingest 404
+
+	reverse_proxy openobserve:5080
+}

@@ -8,6 +8,11 @@ module MockPms
 
       HEARTBEAT_MAX_AGE_S = 30
 
+      helpers do
+        # Feature 002 FR-028: releases verify the build and the deployment they reached.
+        def build_info = { version: Settings.service_version, deployment_id: Settings.deployment_id }
+      end
+
       get "/healthz" do
         db_ok = begin
           MockPms.db.get(1) == 1
@@ -20,11 +25,11 @@ module MockPms
         healthy = db_ok && redis_ok && age && age < HEARTBEAT_MAX_AGE_S
         status(healthy ? 200 : 503)
         { status: healthy ? "ok" : "degraded", db: db_ok ? "ok" : "down", redis: redis_ok ? "ok" : "down",
-          worker_heartbeat_age_s: age }
+          worker_heartbeat_age_s: age, **build_info }
       end
 
       get "/healthz/live" do
-        { status: "ok" }
+        { status: "ok", **build_info }
       end
 
       get "/metrics" do

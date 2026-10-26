@@ -95,8 +95,9 @@ auditable safety boundary.
   - The backend and its endpoint MUST be configuration only, using the standard `OTEL_*`
     environment variables or the Collector's config. Application code MUST NOT call a
     vendor-specific telemetry API, so changing the backend never requires a code change.
-  - All telemetry MUST carry the resource attributes `service.name`, `service.version`, and
-    `deployment.environment`. Instance-level data MUST also carry `service.instance.id`.
+  - All telemetry MUST carry the resource attributes `service.name`, `service.version`,
+    `deployment.environment`, and `deployment.id` (the DeploymentId, below). Instance-level
+    data MUST also carry `service.instance.id`.
 - Exporting telemetry MUST NOT block a request or a job, and MUST NOT make one fail.
   - Export runs asynchronously from bounded buffers (Principle X).
   - If the backend is unreachable, telemetry is dropped, and the number dropped is itself
@@ -107,9 +108,41 @@ auditable safety boundary.
 - Local development and CI MUST run an OTLP backend (or Collector plus backend), so that every
   feature's telemetry can be seen and checked end to end.
 
+**DeploymentId.** Every standalone deployment of the set of services MUST have a
+DeploymentId.
+
+- **What it identifies**: one long-lived stack instance, for example `prod-us` (production),
+  `dev-staging` (staging), or `local-<name>` (a developer machine). It does not identify a
+  release. The build that is running stays `service.version`.
+- **Format**: 3 to 16 characters of lowercase letters, digits, and hyphens. It starts with a
+  letter and does not end with a hyphen (`^[a-z][a-z0-9-]{1,14}[a-z0-9]$`). Infrastructure code
+  MUST validate it.
+- **Telemetry**: all logs and metrics MUST carry it as the `deployment.id` resource attribute.
+- **Resource names**: it MUST be a component of the identifier of every resource the deployment
+  owns. This includes cloud resource names, IAM roles, parameter and secret paths, container
+  registry paths where they are per-deployment, and database names. Where a naming scheme
+  forbids hyphens, as unquoted Postgres identifiers do, hyphens become underscores
+  (`mock_pms_prod_us`).
+- **Tags**: every cloud resource MUST carry a `DeploymentId` tag with its value. Infrastructure
+  code MUST apply the tag by default, through provider-level default tags, rather than one
+  resource at a time.
+- **Shared resources**: a resource that several deployments use, such as a shared telemetry
+  backend, belongs to a deployment of its own and carries that deployment's DeploymentId.
+- **Never hard-coded**: no name, path, address, or identifier owned by a deployment may be
+  hard-coded. Each one MUST be derived from the DeploymentId or supplied as that deployment's
+  configuration.
+
+These rules let any number of deployments run **side by side in the same cloud account**, for
+example a short-lived `pr-42` next to `dev-staging` and `prod-us`. Their names, paths, and
+databases never collide. Each deployment's resources, cost, and telemetry can be found and
+attributed by one value. A deployment can be torn down completely by selecting everything that
+carries its tag.
+
 **Rationale**: Diagnosing a ledger discrepancy means being able to follow one event across
 every service it touched. Delivering logs and metrics to one place over an open protocol makes
-that possible, without tying the code to any one vendor.
+that possible, without tying the code to any one vendor. Tying every log line, metric, and
+resource to one DeploymentId makes "which stack did this come from, and what does it cost?" a
+single filter, and lets new deployments be added without editing the old ones.
 
 ### VII. Secure by Default
 
@@ -210,6 +243,20 @@ a second instance starts.
   `docs/ai-build-log.md`: what was done, what was blocked, decisions made, and the next task.
 - Unattended sessions run on a separate branch or in a container, with only the permissions
   the session needs. Their output is reviewed by a human before merge.
+- **Explicit system names**: every reference to an account or its identifier MUST name the
+  system it belongs to, for example "AWS account ID", "HCP Terraform organization", "GitHub
+  account", or "NameCheap account". A bare "account" is not allowed.
+  - This applies everywhere the project controls the wording: documentation, CLI flags and
+    switches, placeholders, comments, variable and parameter names, configuration keys, log and
+    error messages, and task and spec text. Examples: `--aws-account`, not `--account`;
+    `<aws-account-id>`, not `<account>`; `aws_account_id`, not `account`.
+  - The only exception is a name the project does not control, such as the `Account` field
+    returned by `aws sts get-caller-identity`. Where such a name is used, the surrounding text
+    or variable name MUST still say which system it belongs to.
+  - **Rationale**: the project spans several systems that each have accounts (AWS, HCP
+    Terraform, GitHub, NameCheap, OpenObserve). An operator who has to guess which one a value
+    belongs to can enter it in the wrong place, and in a bootstrap step that mistake can grant
+    access to the wrong system.
 
 ## Governance
 
@@ -227,4 +274,4 @@ a second instance starts.
   every PR review MUST verify compliance with these principles. Any unjustified violation
   blocks the merge.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-20
+**Version**: 1.3.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-25

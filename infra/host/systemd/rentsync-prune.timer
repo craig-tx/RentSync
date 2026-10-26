@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly image prune (FR-012)
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

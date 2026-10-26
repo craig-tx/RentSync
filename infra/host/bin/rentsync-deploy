@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Deploys a mock PMS image on an environment host and proves it healthy, or puts the previous
+# image back (feature 002 research R9; contracts/host-interface.md §rentsync-deploy).
+#
+#   rentsync-deploy <ref>         deploy <sha>@sha256:<digest> (releases always pin the digest,
+#                                 so the host pulls exactly the image CI built), or a bare <sha>
+#   rentsync-deploy --rollback    deploy previous_image_tag
+#   rentsync-deploy --reload      re-render secrets and restart image_tag (boot, secret rotation);
+#                                 with no image deployed yet, starts only Caddy
+#
+# Exit codes: 0 deployed (or already running), 1 failed and rolled back, 2 failed and the
+# rollback failed too, 3 deployed and serving but SSM could not record it (set the two
+# parameters by hand; the message names them), 64 bad usage, 75 another deploy holds the lock.
+# Never prints a secret, and never runs with xtrace.
+#
+# Test overrides: RENTSYNC_ETC, RENTSYNC_RUN, RENTSYNC_RENDER, RENTSYNC_HEALTH_TRIES,
+# RENTSYNC_HEALTH_INTERVAL_S, RENTSYNC_PUT_BACKOFF_S (infra/host/test/deploy_test.sh).
+set -euo pipefail
+set +x
+
+etc="${RENTSYNC_ETC:-/etc/rentsync}"
+run_dir="${RENTSYNC_RUN:-/run/rentsync}"
+render="${RENTSYNC_RENDER:-/usr/local/bin/rentsync-render-env}"
+health_tries="${RENTSYNC_HEALTH_TRIES:-40}"
+health_interval="${RENTSYNC_HEALTH_INTERVAL_S:-3}"
+# shellcheck source=/dev/null
+. "$etc/host.env"
+
+usage() { echo "usage: rentsync-deploy <40-char git sha>[@sha256:<64 hex>] | --rollback | --reload" >&2; exit 64; }
+[ $# -eq 1 ] || usage
+case "$1" in
+  --rollback | --reload) mode="$1" ;;
+  *) [[ "$1" =~ ^[0-9a-f]{40}(@sha256:[0-9a-f]{64})?$ ]] || usage; mode=deploy ;;
+esac
+
+mkdir -p "$run_dir"
+exec 9> "$run_dir/deploy.lock"
+flock -w 600 9 || { echo "rentsync-deploy: another deploy has held the lock for 10 minutes" >&2; exit 75; }
+
+ssm_prefix="${SSM_READ_PATHS%% *}" # this deployment's own path comes first
+env_file="$run_dir/env"
+
+compose() {
+  docker compose -p "rentsync-$DEPLOYMENT_ID" --project-directory /opt/rentsync \
+    -f /opt/rentsync/compose.yaml --env-file "$env_file" "$@"
+}
+env_value() { sed -n "s/^$1='\(.*\)'$/\1/p" "$env_file"; } # values are single-quoted
+# Retries, because a throttled write after a healthy start must not leave SSM pointing at the
+# old image: the next reboot or --reload would quietly bring it back.
+put_param() {
+  local i
+  for i in 1 2 3 4 5; do
+    aws ssm put-parameter --region "$AWS_REGION" --name "$ssm_prefix/$1" --value "$2" \
+      --type String --overwrite > /dev/null && return 0
+    sleep $((i * ${RENTSYNC_PUT_BACKOFF_S:-2}))
+  done
+  return 1
+}
+
+# Prints "status version deployment_id" from the running web container, or nothing.
+health() {
+  compose exec -T mock_pms curl -sS --max-time 5 http://localhost:4001/healthz 2> /dev/null \
+    | jq -r '"\(.status) \(.version) \(.deployment_id)"' 2> /dev/null || true
+}
+
+healthy_as() {
+  local tag="$1" i
+  for ((i = 1; i <= health_tries; i++)); do
+    [ "$(health)" = "ok ${tag%%@*} $DEPLOYMENT_ID" ] && return 0 # the version is the SHA part
+    sleep "$health_interval"
+  done
+  echo "rentsync-deploy: /healthz did not report ok for $tag within $((health_tries * health_interval)) s: $(health)"
+  return 1
+}
+
+# Pulls, migrates and starts one tag, then waits for it to report healthy.
+start() {
+  local tag="$1"
+  export MOCK_PMS_IMAGE="$ECR_REPOSITORY_URL:$tag"
+  aws ecr get-login-password --region "$AWS_REGION" \
+    | docker login --username AWS --password-stdin "${ECR_REPOSITORY_URL%%/*}" > /dev/null
+  compose pull --quiet || return 1
+  compose run --rm mock_pms bundle exec bin/setup --deploy || return 1
+  compose up -d --remove-orphans || return 1
+  healthy_as "$tag"
+}
+
+"$render"
+current="$(env_value IMAGE_TAG)"
+previous="$(env_value PREVIOUS_IMAGE_TAG)"
+
+case "$mode" in
+  --reload)
+    if [ "$current" = "none" ]; then
+      compose up -d caddy # certificates can be issued before the first deploy
+      echo "no image deployed yet"
+      exit 0
+    fi
+    target="$current"
+    ;;
+  --rollback)
+    [ "$previous" != "none" ] || { echo "rentsync-deploy: no previous image to roll back to" >&2; exit 1; }
+    target="$previous"
+    ;;
+  deploy)
+    target="$1"
+    if [ "$target" = "$current" ] && [ "$(health)" = "ok ${target%%@*} $DEPLOYMENT_ID" ]; then
+      echo "already running $target"
+      exit 0
+    fi
+    ;;
+esac
+
+if start "$target"; then
+  # image_tag first: if only it is written, a later --reload still runs what is serving.
+  if [ "$target" != "$current" ]; then
+    if ! put_param image_tag "$target" || ! put_param previous_image_tag "$current"; then
+      echo "rentsync-deploy: $target is serving, but SSM could not record it; set $ssm_prefix/image_tag=$target and previous_image_tag=$current by hand"
+      exit 3
+    fi
+  fi
+  echo "deployed $target"
+  exit 0
+fi
+
+echo "rentsync-deploy: $target failed its health check"
+if [ "$current" != "none" ] && [ "$current" != "$target" ] && start "$current"; then
+  echo "rolled back to $current"
+  exit 1
+fi
+echo "FAILED: environment unhealthy"
+exit 2

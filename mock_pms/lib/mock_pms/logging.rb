@@ -58,6 +58,7 @@ module MockPms
           "service.name" => service_name,
           "service.version" => Settings.service_version,
           "deployment.environment" => Settings.deployment_environment,
+          "deployment.id" => Settings.deployment_id,
           "service.instance.id" => Settings.service_instance_id,
           "code.function.name" => function,
           "code.file.path" => location&.path,

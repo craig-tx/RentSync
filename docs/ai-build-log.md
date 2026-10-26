@@ -89,3 +89,263 @@ The constitution's Development Workflow section requires an entry at the end of 
 **Blocked:** nothing.
 
 **Next task:** open a pull request for `001-mock-pms`, merge once CI is green, then `/speckit-specify` the Terraform Cloud and AWS deployment as feature 002 (see the project memory).
+
+### 2026-10-21 — interactive (operator remote): feature 002 (AWS deployment), spec through `/speckit-implement` T001–T052
+
+**Done:**
+- **Constitution v1.2.0:** a MINOR amendment adds DeploymentId and `deployment.id` to Principle VI. Every deployment-owned name, path, database and AWS tag derives from it, so deployments can run side by side in one account. The Sync Impact Report stays until merge (T090).
+- **Spec:** clarified with DeploymentIds `prod-us`, `dev-staging` and `shared-us` (FR-038–FR-042, SC-011). ElastiCache was rejected on cost.
+- **Planning:** plan, research (R1–R17), data model, contracts, quickstart and tasks (92 tasks). `/speckit-analyze` findings were all resolved (2 CRITICAL, 3 HIGH, 6 MEDIUM, 5 LOW).
+- **Phase 1 (T001–T007):**
+  - provider pins: aws 6.69.1, random 3.9.1, with lock files for linux, windows and darwin;
+  - an `infra` CI job;
+  - `.terraformignore`;
+  - runbook and production-differences skeletons.
+- **Phase 2, mock PMS (T008–T022), test-first:**
+  - `Settings.deployment_id`, validated, fails fast at boot;
+  - `deployment.id` on logs and on `target_info`;
+  - `/healthz` and `/healthz/live` report `version` and `deployment_id`;
+  - `bin/setup --deploy` never reseeds a database that has data;
+  - the Collector endpoint comes from configuration, and a `resource/deployment` processor puts the deployment attributes on the Collector's own metrics;
+  - local and CI databases now follow the DeploymentId (`mock_pms_local_dev`, `mock_pms_ci_gh`; CI uses DeploymentId `ci-gh`, because `ci` is shorter than the 3-character minimum).
+
+  Verified: 172 examples, 0 failures; RuboCop clean; `bin/telemetry_smoke` live, including the Collector self-metric with `deployment.id=local-dev`.
+- **Phase 2 and US1 infrastructure (T023–T049):** the host module, the shared and environment roots, the host scripts and the systemd units. Verified locally:
+  - `terraform test`: shared 5/5, environment 9/9, module 2/2, with mock AWS and the real random provider;
+  - the static checks (prevent_destroy, root-volume tags, no SecureString `value`, no `key_name`), each shown to catch a planted violation;
+  - shellcheck 0.10.0 clean;
+  - the loop-device boot test on `amazonlinux:2023`, which formats once and never again.
+- **US1 documents (T050–T052):** IAM policy JSON in `docs/deploy/iam/`, and runbook §Bootstrap and §DNS.
+
+**Developer action:** re-copy `.env` from `.env.example`, or add `DEPLOYMENT_ID=local-dev` and `OPENOBSERVE_OTLP_ENDPOINT` and rename the databases to `mock_pms_local_dev`/`_test`. The old `mock_pms` database is simply left unused. This session did that edit on the operator's `.env`; a backup is in the session scratchpad.
+
+**Blocked (operator needed):**
+- T053, the bootstrap (AWS OIDC providers and roles, HCP project, variable set, workspaces, remote state sharing, variables, GitHub variables and Environments). Follow runbook §Bootstrap.
+- T054, the first applies and DNS. T055 then verifies against live infrastructure.
+
+**Decisions and deviations from tasks.md:**
+- The host module takes `files` and `host_env` instead of a pre-rendered `user_data`, because the template needs the data volume's ID. It also adds the base host files itself (boot and render scripts, units, `daemon.json`), so the roots don't duplicate them.
+- `daemon.json` is written by cloud-init directly instead of being installed by `rentsync-boot`. A Docker systemd drop-in (`RequiresMountsFor=/srv/data`) stops restart-policy containers from starting before the data volume mounts on reboot. This is an addition to research R6.
+- The loop-device test image is 512 MiB (sparse), because XFS refuses filesystems under 300 MB.
+- Host-level assertions (IMDSv2, encryption, root tags, fixed IP) live in `modules/host/tests/`, because a root's tests can't see resources inside a module. CI runs the module tests too.
+- Tests use the **real** random provider, because mocked providers can't serve ephemeral resources (Terraform 1.16.6). It runs locally and needs no network after init.
+- ECR pull permission is optional in the module, so the telemetry host gets none.
+- `rentsync-start` exits cleanly when a host has no stack yet. This happens between US1 and US2/US3 applies.
+- The release role's ECR resource is `repository/*/mock_pms`, so a future shared deployment needs no IAM change (contract updated).
+- Docker Compose is pinned to v5.6.0 (released 2026-10-02) rather than v5.6.1 (released the same day as this session), with sha256 checksums from its release.
+
+**Review fixes before push:**
+- CI's DeploymentId `ci` failed the 3-character minimum, so every CI example would have failed at boot. Local runs all used `local-dev`, so nothing caught it. It is now `ci-gh`, verified by running the suite with that value injected.
+- `rentsync-render-env` checked required parameters inside `"$(...)"`, which `set -e` ignores. A missing `admin_token` would have rendered `ADMIN_TOKEN=` and exited 0. All required keys are now checked in the main shell first. A new stub-`aws` test (`render_env_test.sh`, also run in CI) proves the failure path.
+- The instance now `depends_on` the EIP association, so cloud-init always has internet on first boot.
+- CI runs `apt-get update` before installing xfsprogs.
+
+**Test corrections (no assertion weakened):**
+- `setup_deploy_spec` used the wrong migration table name. Sequel's is `schema_info`.
+- The `ops_spec` `target_info` regex now also requires `deployment_id`, which makes it stricter.
+
+**Mistake caught:** this session overwrote the existing `.gitattributes` (`* text=auto eol=lf`) without reading it first. It was restored before commit. The original already covers LF for all host files.
+
+**Next task:** the operator performs T053 (runbook §Bootstrap), then T054. Meanwhile, the remaining code tasks can proceed without cloud access: US2 T056–T063, US3 T066–T069, US4 T072–T073, US5 T076–T081, Polish T084–T088.
+
+### 2026-10-21 (continued) — interactive (operator remote): feature 002 code tasks past the operator gate
+
+**Done:**
+- **PR #3** opened as a draft, so CI runs on the branch. The first CI run passed all three jobs: `test`, `infra` (its first Linux run) and `telemetry-smoke`.
+- **US2 (T056–T063):**
+  - the environment Compose stack, where each container gets only the variables it needs;
+  - `Caddyfile.env`;
+  - `rentsync-deploy`, plus `deploy_test.sh` with stub `docker` and `aws`. It covers deploy, no-op, self-rollback, manual rollback, reload with nothing deployed, and bad input;
+  - the user-data wiring, plus a test that keeps the gzipped user data under EC2's 16 KB limit (11.6 KB today);
+  - the workflows `build-image.yml`, `deploy-to.yml` and `deploy.yml` (actionlint clean);
+  - runbook §First deploy and §Replaying webhooks.
+- **US3 (T066–T069):**
+  - the telemetry Compose stack and Caddyfile. OpenObserve v1.0.4 was verified locally against a Postgres metadata store (107 tables, `/healthz` 200);
+  - telemetry-role coverage in `render_env_test.sh`.
+
+  All pinned images publish arm64, so the R4 `t3.small` fallback is not needed.
+- **US4 (T072–T073):** `release.yml` (dev-staging, then an approved prod-us with the same SHA), and runbook §Release, §Rollback.
+- **US5 (T076–T081):**
+  - the DLM daily snapshot policy, test-first;
+  - the CI guards removed;
+  - runbook §Host replacement, §Backup restore, §Secret rotation, §Adding a side-by-side deployment and §Teardown.
+- **Polish (T084–T088):** `production-differences.md`, ADRs 0005–0007, and the README deployment section.
+
+**Decisions and deviations:**
+- **Reload action:** `deploy.yml` and `deploy-to.yml` gained a `reload` option, because re-deploying the running SHA is a no-op. A rotated secret would otherwise never reach the containers.
+- **Restore and teardown** release the protected data volume with `terraform state rm`, not the `removed` block the tasks describe. Terraform rejects a `removed` block for a resource the module still declares. The restore rehearsal on `dev-staging` (T083) will confirm the procedure.
+- **Release guard:** `release.yml` skips when `ECR_REPOSITORY_URL` is unset, so merging before the bootstrap produces no red runs.
+- **Least privilege per container:** containers receive only the variables they use, rather than the whole rendered env file. Caddy never sees the admin token.
+
+**Blocked (operator):**
+- T053 (bootstrap) and T054 (first applies and DNS);
+- T064, T070 and T082 (applies, deploys and approvals);
+- T074 (the prod-us reviewer);
+- the live verifications T055, T065, T071, T075, T083 and T089;
+- T090–T091 (merge-time: remove the Sync Impact Report, mark the PR ready);
+- T092 (the 30-day check).
+
+**Next task:** the operator performs runbook §Bootstrap (T053). Everything after it needs live infrastructure.
+
+**Final review fixes (same session):**
+- **Certificate switch before the first deploy:** the Deploy workflow's external check verifies the certificate, and a Let's Encrypt staging certificate fails it. T064 and runbook §First deploy now have the switch to the production CA happen before the first deploy. That is also free then, because no host holds data yet.
+- **`rentsync.service` retries:** a one-shot with no retry would have left a host stopped after one transient first-boot failure (US5 AC5). It now has `Restart=on-failure`, `RestartSec=30` and `StartLimitIntervalSec=0`. The instance also depends on its IAM policy and the SSM-core attachment.
+- **Restore and teardown docs:** research R14, quickstart §8 and §10, and the T079/T081 notes now match the runbook's `terraform state rm` procedure.
+- **OpenObserve password validation:** it now requires upper, lower, digit and special characters, matching OpenObserve v1.0.4's own rule, with a test.
+- **ECR retention:** raised from 20 to 100 images, so prod-us's image and its rollback target can't expire while many merges wait for approval.
+- **Verified:** EC2 never deletes an existing network interface attached at launch (`DeleteOnTermination` can be true only for interfaces created at launch). So host replacement keeps the fixed private IP and the Elastic IP.
+
+**Pre-live review (same session, at the operator's request):**
+- **Rendered user data:** rendered through Terraform from the real files, and validated with `cloud-init schema` on cloud-init 22.2.2, the version on Amazon Linux 2023. All 14 files decode with the right paths and permissions.
+- **Host rehearsal** (`infra/host/test/rehearse/`, new): the real scripts and Compose stacks ran inside a privileged docker:dind "host", with fake SSM, a local registry and a loop-device volume. **The first full run passed**: first boot, first deploy with seeding, Caddy, a second deploy without a reseed, the no-op, the automatic rollback, telemetry with `deployment.id`, `--rollback`, host replacement, and no secrets in logs. A second run, strengthened with a special-character password and a `/metrics.json` check, was **stopped by Claude Code because the machine ran low on memory**. That is not a test failure. It still needs a rerun, when memory allows.
+- **`/code-review high`:** 10 findings, all fixed.
+  1. **Secrets mangled:** secrets were written unquoted to the Compose env file. Verified: `Pa$sw0rd! #x` reached the container as `Pa!`. Values are now single-quoted, and a value containing a quote or newline is refused. Terraform also rejects such passwords at plan time.
+  2. **Stalled releases:** the workflow-level `release` concurrency group would hold dev-staging behind a pending prod approval. Removed; serialization is now per deployment.
+  3. **Approval enforced only by the workflow:** one GitHub role could run commands on production from any Environment. Production hosts are now tagged `rentsync:deployable=protected`, and a new `rentsync-github-actions-prod` role, trusted only for `environment:prod-us`, is the only role IAM lets touch them. The prod-us Environment overrides `AWS_ROLE_ARN`.
+  4. **`/metrics.json` was public:** Caddy now answers `/metrics*` with 404.
+  5. **Telemetry ingest reachable from the internet:** Caddy now refuses OpenObserve's ingestion paths on the public hostname.
+  6. **SSM write failure after a healthy deploy:** `rentsync-deploy` now retries, then exits 3 with instructions. Previously it failed with an AWS CLI code and SSM kept the old tag.
+  7. **Boot failures never retried:** `rentsync-boot` is now `rentsync.service`'s `ExecStartPre`, covered by its retries. The separate unit was removed, and cloud-init starts the service with `--no-block`.
+  8. **Old `.env` broke the local Collector:** its settings now have defaults, so an old `.env` still works.
+  9. **Misplaced specs:** `ops_spec` heartbeat examples moved back under `GET /healthz`.
+  10. **Unjustified dependencies:** justifications for the rehearsal images added to plan.md.
+
+**`/security-review` (same session):**
+- **Two candidate findings, each checked separately for false positives.**
+  - **Rejected (2/10): HCP role escalation.** The HCP Terraform role can attach any policy to a `rentsync-*` role. No untrusted party can trigger a run: HCP doesn't run speculative plans for fork PRs, and only the owner can push. It is a documented demo trade-off and missing hardening, not a vulnerability. Hardening ideas are recorded in production-differences (separate plan and apply roles, permission boundaries).
+  - **Confirmed (8/10, MEDIUM): image poisoning past the prod gate.** The release role trusted `environment:*`. GitHub auto-creates unprotected Environments, so any branch job naming a new Environment could assume the role. It could then push an image under an upcoming `main` commit's tag before CI finished. `build-image.yml` skipped the build because the tag existed, ECR tags are immutable, and hosts pulled by tag. The poisoned image would reach dev-staging and then prod-us past the reviewer.
+- **Fixed, as the operator accepted:**
+  1. **Exact trust only.** No wildcards: `rentsync-github-actions` trusts only `environment:dev-staging`, and the prod role only `environment:prod-us`.
+  2. **Builds separated.** The new `rentsync-github-build` role trusts only `ref:refs/heads/main` and is the only role that can push images. The deploy role lost ECR push.
+  3. **Deploys pinned by digest.** `build-image.yml` outputs the digest, both deploys pass `<sha>@sha256:<digest>`, `rentsync-deploy` accepts and records that ref, and `/healthz` is checked against the SHA part. `deploy_test.sh` adds a digest-pinned deploy and a malformed digest.
+- **Bootstrap now has four roles.** A new GitHub variable `AWS_BUILD_ROLE_ARN` holds the build role. The Environments' "restrict to main" setting is now required. Adding a side-by-side deployment adds one exact subject to the release role's trust. That is a deliberate exception to "no shared change", documented in R17 and the runbook.
+- **Strengthened rehearsal rerun: PASSED** at `ea0e377`, run in the foreground with 12 GB free.
+  - OpenObserve's password `Re$hearsal #0nly-Pw1` survived end to end: OpenObserve started with it, and the Collector authenticated with it. Telemetry, including the Collector's self-metric, arrived with `deployment.id=pr-42`.
+  - `/metrics.json` answers 404 through Caddy.
+  - All earlier steps pass again: first boot, the first and second deploys, the no-op, the self-rollback, `--rollback`, host replacement (no reformat, data and certificates kept), and no secrets in logs.
+  - Not covered: the rehearsal deploys bare tags. Digest-pinned refs are covered by `deploy_test.sh`, and will be proven live on the first dev-staging deploy.
+
+**Next task:** the operator performs runbook §Bootstrap (T053), now with four IAM roles and `AWS_BUILD_ROLE_ARN`.
+
+### 2026-10-25 — interactive: scripted IAM bootstrap
+
+**Done:**
+- **Operator hit "The policy failed legacy parsing"** while pasting `hcp-terraform-policy.json`.
+  The JSON was valid, so the cause was a leftover `<account>` placeholder (that file has five).
+  The operator had also filled the real account ID into the tracked `iam/*.json` files and the
+  runbook's ARN table. **Decision:** keep placeholders in the public repo. The ARNs live in the
+  GitHub and HCP variables. The working-tree edits were verified byte-identical to the script's
+  render, then reverted. Nothing with the account ID was committed.
+- **`infra/bootstrap/bootstrap-iam.sh` (T052a):** runbook steps 1–2 as AWS CLI commands, for
+  CloudShell (console session, no access keys). It:
+  - reads the account from STS;
+  - renders into the gitignored `.bootstrap/iam/` and fails on any leftover `<…>` placeholder;
+  - validates every document with Access Analyzer (identity policies, and trust policies as
+    `AWS::IAM::AssumeRolePolicyDocument`), and stops on an ERROR or SECURITY_WARNING;
+  - prints the plan by default and changes things only with `--apply`;
+  - is idempotent: it skips existing providers and policies, refreshes an existing role's
+    trust policy, and prints, but never runs, `create-policy-version` for an existing policy
+    (the five-version limit);
+  - ends by printing the four role ARNs and where each goes.
+
+  `--render-only ACCOUNT` writes paste-ready files for the console path.
+- **Test:** `bootstrap_iam_test.sh` uses a stub `aws` and covers the render, a bad account,
+  a leftover placeholder, a plan with no mutations, apply on an empty account, apply on a
+  half-done account, and an Access Analyzer error that blocks every change. Mutation-checked:
+  it fails when plan mode makes a change. Added to CI's shellcheck and as its own step.
+- **Runbook §1–2:** CloudShell is now the recommended path; the console steps are the fallback.
+- **Suite:** rspec 172/0, rubocop clean, terraform fmt/validate/test pass,
+  check_prevent_destroy ok, shellcheck clean.
+  - `render_env_test`, `deploy_test` and `bootstrap_iam_test` pass on Linux.
+  - `deploy_test` needs `jq`, which CI's runner has.
+  - The host tests can't run under Windows Git Bash (file modes).
+
+**Not verified:** the live CloudShell run. It will confirm two things the stub can't:
+- `create-open-id-connect-provider` without `--thumbprint-list` (optional in current CLIs; the
+  local 2.9.17 still requires it);
+- the Access Analyzer flags.
+
+**Next task:** the operator runs `bootstrap-iam.sh` in CloudShell (plan, then `--apply`), and
+continues runbook §Bootstrap from step 3 (T053).
+
+**CloudShell plan run (same session):**
+- **Plan:** the operator had already created both providers and all four policies and roles in
+  the console. The plan was only the four trust refreshes and four idempotent attachments.
+- **Bug found before apply: immutable OIDC subjects.**
+  - The repository was created 2026-10-20, after GitHub's 2026-07-15 cutoff, so its tokens carry
+    `sub = repo:craig-tx@16706018/RentSync@1427164274:…`. Confirmed with
+    `gh api repos/craig-tx/RentSync/actions/oidc/customization/sub`.
+  - The three GitHub trusts expected `repo:craig-tx/RentSync:…`, so every Actions job would have
+    been refused by STS.
+  - Fixed in the trust files, contracts/bootstrap-iam.md (with a note on the format) and the
+    runbook's side-by-side example. `bootstrap_iam_test.sh` now fails on the old form
+    (mutation-checked).
+- **Access Analyzer findings, accepted:**
+  - `CONFIRM_AUDIENCE_CLAIM_TYPE` (SUGGESTION) on every trust is informational. `aud` already
+    uses a plain single-valued `StringEquals`.
+  - `SPECIFIC_GITHUB_REPO_AND_BRANCH_RECOMMENDED` (WARNING) on the two Environment trusts: the
+    subjects have no wildcard, but an Environment subject carries no branch. The branch rule is
+    the Environments' "restrict to main" setting, which the runbook requires. GitHub's AWS OIDC
+    guide documents only the `aud` and `sub` keys, so no untested `:ref` condition was added.
+
+**IAM bootstrap applied, GitHub configured, HCP bootstrap scripted (same session):**
+- **IAM:** the operator deleted the console-made policies and roles, and ran `bootstrap-iam.sh --apply` in
+  CloudShell: 12 changes (4 policies, 4 roles, 4 attachments), with the existing OIDC providers
+  reused. This is the first live run of the script.
+- **GitHub (runbook step 7), with `gh` at the operator's request:**
+  - repository variables `AWS_BUILD_ROLE_ARN`, `AWS_ROLE_ARN` and `AWS_REGION`;
+  - Environments `dev-staging` and `prod-us`, with custom deployment branches limited to `main`;
+  - `SITE_URL` for each, and the prod-us `AWS_ROLE_ARN` override. All verified.
+  - Left for the operator: secret scanning and push protection, both found **disabled** (step
+    7.3, SC-004).
+  - Left for later: `ECR_REPOSITORY_URL` (after the shared apply) and the prod-us reviewer (T074).
+- **`infra/bootstrap/bootstrap-hcp.rb` (T052b):** runbook steps 4–6 through the HCP Terraform
+  API, in Ruby with the standard library only (no `jq` on Windows, and no new dependency).
+  - **Secrets:** each `admin_token` is generated in the script, a different one per environment,
+    and never printed. The OpenObserve password is asked for twice without echo, and checked
+    against Terraform's rule before any change.
+  - **Reruns:** drifted workspace settings are restored; variables are create-only, and a
+    difference is reported but never changed.
+  - **Options:** `--branch` (default `main`) and `--health-assessments` (opt-in, Standard tier).
+  - **GitHub connection:** never guessed. It must be exactly one OAuth token or one GitHub App
+    installation for `craig-tx`, or a flag; otherwise the script fails with the HCP steps.
+  - **Test:** `bootstrap_hcp_test.rb`, against a fake API, 8 tests. Mutation-checked: plan-mode
+    writes, unreported differences, a late password prompt and prod auto-apply are each caught.
+    Passes on Ruby 3.3, CI's version. CI's `infra` job installs Ruby for it.
+- **Open question for the operator: which branch the workspaces track.**
+  - `main` has no Terraform yet (only `infra/otel`), so a VCS workspace on `main` has nothing to
+    plan until 002 merges.
+  - `rentsync-github-build` trusts only `refs/heads/main`, so the first image build also needs
+    002 on `main`.
+  - That conflicts with T090–T091 coming after the live checks. Nothing in the spec covered a
+    pre-merge apply.
+
+**Next task:** the operator decides the branch question. Then they run `terraform login` and
+`bootstrap-hcp.rb` (plan, then `--apply`) from PowerShell, and continue to runbook step 8 and
+T054.
+
+### 2026-10-25 (later): account naming, shellcheck, and the merge
+
+- **Flag rename:** `bootstrap-hcp.rb --account` became `--aws-account`. The operator had read it
+  as an HCP account; it is the AWS account ID used to build the `rentsync-hcp-terraform` role ARN.
+- **Constitution v1.3.0 (MINOR):** a new rule in Development Workflow & Quality Gates, "Explicit
+  system names". Every account reference (docs, flags, placeholders, comments, names, messages,
+  specs) must name its system. Only names the project does not control, such as STS's `Account`
+  field, are exempt. Feature 002 was brought into line: the IAM placeholder `<account>` became
+  `<aws-account-id>`, `bootstrap-iam.sh --render-only AWS_ACCOUNT_ID`, and AWS, HCP Terraform,
+  OpenObserve or Let's Encrypt is now named in the runbook, ADR 0005, spec, plan, research, data
+  model and tasks. Past build-log entries are left as written.
+- **Shellcheck SC2337:** shellcheck 0.11 flags `grep -q` at the end of a pipeline under
+  `pipefail`. CI's older shellcheck did not. The risk is real: an early grep exit can SIGPIPE
+  the writer and flip the result. `render_env_test.sh`'s "secret never printed" check could
+  pass falsely, and `bootstrap-iam.sh`'s provider checks could report "missing". All 15 sites
+  now use here-strings. Shellcheck 0.11 is clean, and the render-env, deploy, bootstrap-IAM and
+  prevent_destroy checks pass on Ubuntu 24.04.
+- **Decision: merge before the live checks.** The operator chose to merge 002 now, so the HCP
+  Terraform workspaces can track `main` and image builds (trusted for `main` only) can run.
+  T090 removed the Sync Impact Report. T091 is ticked with a note. The operator and live-check
+  tasks run against `main` afterwards, and T091a records their results. The release workflow
+  stays skipped until `ECR_REPOSITORY_URL` is set, so the merge deploys nothing.
+
+**Next task:** T053. The operator runs `bootstrap-hcp.rb` (plan, then `--apply`) on `main`, then
+runbook step 8 and T054.

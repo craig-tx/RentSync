@@ -28,8 +28,9 @@ jobs:
     # so these override the Compose hostnames in .env.example.
     env:
       RACK_ENV: test
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms
-      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_ci_gh
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mock_pms_ci_gh_test
+      DEPLOYMENT_ID: ci-gh
       REDIS_URL: redis://localhost:6379/0
       ADMIN_TOKEN: ci-admin-token
     defaults:
@@ -66,3 +67,41 @@ jobs:
       - name: Logs on failure
         if: failure()
         run: docker compose logs
+
+  # Feature 002: Terraform and host scripts (research R15). No cloud access needed.
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.6
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive infra/terraform
+      - name: Validate and test each root and the host module
+        run: |
+          for root in infra/terraform/shared infra/terraform/environment infra/terraform/modules/host; do
+            terraform -chdir=$root init -backend=false -input=false
+            terraform -chdir=$root validate
+            terraform -chdir=$root test
+          done
+      - name: Static checks
+        run: bash infra/terraform/check_prevent_destroy.sh
+      - name: Shellcheck
+        run: |
+          find infra/host/bin infra/host/test infra/terraform infra/bootstrap infra/bootstrap/test -maxdepth 1 -type f \( -path "infra/host/bin/*" -o -name "*.sh" \) -print0 | xargs -0 shellcheck
+      - name: Boot volume test (loop device)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xfsprogs
+          sudo bash infra/host/test/boot_volume_test.sh
+      - name: Render-env test (stub aws)
+        run: bash infra/host/test/render_env_test.sh
+      - name: Deploy-script test (stub docker and aws)
+        run: bash infra/host/test/deploy_test.sh
+      - name: Bootstrap-IAM test (stub aws)
+        run: bash infra/bootstrap/test/bootstrap_iam_test.sh
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Bootstrap-HCP test (fake API)
+        run: ruby infra/bootstrap/test/bootstrap_hcp_test.rb

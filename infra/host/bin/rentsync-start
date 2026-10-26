@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Started by rentsync.service on every boot (feature 002 research R6): brings the host's stack
+# up with no manual step (US5 AC5).
+set -euo pipefail
+
+# shellcheck source=/dev/null
+. /etc/rentsync/host.env
+
+# A host applied before its stack files exist (US1, ahead of US2/US3) has nothing to start.
+case "$HOST_ROLE" in
+  environment)
+    if [ ! -x /usr/local/bin/rentsync-deploy ]; then
+      echo "rentsync-start: no deploy script yet; nothing to start"
+      exit 0
+    fi
+    exec /usr/local/bin/rentsync-deploy --reload
+    ;;
+  telemetry)
+    if [ ! -f /opt/rentsync/compose.yaml ]; then
+      echo "rentsync-start: no stack file yet; nothing to start"
+      exit 0
+    fi
+    /usr/local/bin/rentsync-render-env
+    exec docker compose -p "rentsync-$DEPLOYMENT_ID" --project-directory /opt/rentsync \
+      -f /opt/rentsync/compose.yaml --env-file /run/rentsync/env up -d --remove-orphans
+    ;;
+  *)
+    echo "rentsync-start: unknown HOST_ROLE '$HOST_ROLE'" >&2
+    exit 1
+    ;;
+esac

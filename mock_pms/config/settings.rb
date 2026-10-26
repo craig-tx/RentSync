@@ -37,6 +37,17 @@ module MockPms
 
     def service_version = ENV.fetch("SERVICE_VERSION", "dev")
     def deployment_environment = ENV.fetch("DEPLOYMENT_ENVIRONMENT", "local")
+
+    # Constitution VI: one long-lived stack instance (e.g. prod-us), not a release.
+    DEPLOYMENT_ID_FORMAT = /\A[a-z][a-z0-9-]{1,14}[a-z0-9]\z/
+
+    def deployment_id
+      value = ENV.fetch("DEPLOYMENT_ID", "local-dev")
+      return value if DEPLOYMENT_ID_FORMAT.match?(value)
+
+      raise ArgumentError, "DEPLOYMENT_ID #{value.inspect} must match #{DEPLOYMENT_ID_FORMAT.source}"
+    end
+
     def service_instance_id = ENV["HOSTNAME"] || Socket.gethostname
   end
 end

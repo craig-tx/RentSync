@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Mounts the host's durable data volume at /srv/data (feature 002 research R6).
+#
+# Data-safety rule: a volume is formatted ONLY when it has no filesystem. A replacement host
+# attaches the existing volume, so it must never reformat it. infra/host/test/boot_volume_test.sh
+# proves this on a loop device.
+#
+# Test overrides: RENTSYNC_ETC, RENTSYNC_DATA_DEVICE, RENTSYNC_DATA_MOUNT, RENTSYNC_FSTAB.
+set -euo pipefail
+
+etc="${RENTSYNC_ETC:-/etc/rentsync}"
+# shellcheck source=/dev/null
+. "$etc/host.env"
+
+mount_point="${RENTSYNC_DATA_MOUNT:-/srv/data}"
+fstab="${RENTSYNC_FSTAB:-/etc/fstab}"
+# Nitro instances expose EBS as NVMe; the by-id link carries the volume ID without its dash.
+device="${RENTSYNC_DATA_DEVICE:-/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${VOLUME_ID//-/}}"
+
+# The attachment can land after the instance boots: wait up to 5 minutes.
+for _ in $(seq 1 100); do
+  [ -b "$device" ] && break
+  sleep 3
+done
+[ -b "$device" ] || { echo "rentsync-boot: data volume $device not attached after 300 s" >&2; exit 1; }
+
+if blkid -o value -s TYPE "$device" >/dev/null 2>&1; then
+  echo "rentsync-boot: existing filesystem on $device; not formatting"
+else
+  echo "rentsync-boot: no filesystem on $device; formatting xfs"
+  mkfs.xfs -q "$device"
+fi
+
+uuid="$(blkid -o value -s UUID "$device")"
+touch "$fstab"
+if ! grep -q "^UUID=$uuid " "$fstab"; then
+  echo "UUID=$uuid $mount_point xfs defaults,nofail 0 2" >> "$fstab"
+fi
+
+mkdir -p "$mount_point"
+if ! mountpoint -q "$mount_point"; then
+  mount "$device" "$mount_point"
+fi
+
+for dir in postgres caddy receiver openobserve openobserve-db; do
+  mkdir -p "$mount_point/$dir"
+done
+
+echo "rentsync-boot: $device (UUID=$uuid) mounted at $mount_point"

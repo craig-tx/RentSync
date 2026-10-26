@@ -45,9 +45,10 @@ RSpec.describe MockPms::Logging do
     line = lines.last
     expect(line.keys).to include(
       "timestamp", "severity_text", "body", "service.name", "service.version",
-      "deployment.environment", "service.instance.id", "code.function.name",
+      "deployment.environment", "deployment.id", "service.instance.id", "code.function.name",
       "code.file.path", "code.line.number", "correlation_id"
     )
+    expect(line["deployment.id"]).to eq(MockPms::Settings.deployment_id)
     expect(line["timestamp"]).to match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z\z/)
     expect(line["severity_text"]).to eq("INFO")
     expect(line["body"]).to eq("from instance")
