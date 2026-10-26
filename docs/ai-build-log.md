@@ -699,3 +699,53 @@ No major-version port is outstanding beyond these. The next quarterly review cov
 - **Checked live:** all three hosts already serve trusted Let's Encrypt production certificates.
 
 **Next task:** merge #25, #26 and this; then §First deploy.
+### 2026-10-26: host memory measured; swap file on every host
+
+- **Done:** measured the environment stack on the local Compose stack with the production
+  `mock_pms` image, idle and under load (1,248 events, 599 webhook deliveries, 6,400 HTTP
+  requests from 8 clients, a first-deploy setup). Containers peak at ~500 MiB, so a host at
+  ~750–800 MiB with the OS; OpenObserve alone peaked at 949 MiB (research R4 table). Every
+  host now gets a 1 GiB swap file at first boot (`rentsync-swap`, `swap_mib`, swappiness 10).
+  Runbook §Changing a host's instance type covers trying `t4g.micro` on staging.
+- **Decisions:** `t4g.small` stays the default; `t4g.nano` is ruled out; the telemetry host
+  stays `t4g.small`. The swap change alters user data, so the next apply of each workspace
+  **replaces its host** (data, IP and certificates kept). Applied now, while no host holds
+  data, that costs nothing.
+- **Found:** the local `rentsync/mock_pms:dev` image predated the gem updates from PR #9, so
+  recreated containers failed with Bundler::GemNotFound. Rebuilt it. `mock_pms_b` still runs
+  the old image. The local database had no webhook client, so the first load run exercised no
+  deliveries; a `memory-load` client was registered for the second.
+- **Tests:** host module Terraform tests (5, including swap on, off and too large); every root's
+  tests; `swap_test.sh` in a privileged Linux container (it needs a real filesystem, not
+  overlayfs); a mutation of each new check failed as expected. Not measured: the OS overhead,
+  and Graviton rather than x86_64.
+
+**Next task:** first applies (§First apply), then a deploy and `free -m` on `dev-staging`.
+
+### 2026-10-26: first deploy failed on the SSM command comment
+
+- **Found (operator, first Deploy run):** `aws ssm send-command` rejected the comment
+  `rentsync-deploy <sha>@sha256:<digest>` (128 characters; SSM allows 100). The pinned-digest
+  argument (R9) made it too long; the command itself was fine. No test exercised the workflow
+  against the real API, so this first showed on a live run.
+- **Done:** the comment is now `rentsync-deploy <deployment_id> <sha>`, at most 73 characters.
+  The command still pins `<sha>@sha256:<digest>`.
+
+**Next task:** rerun Deploy for `dev-staging` once merged.
+
+### 2026-10-26: HCP Terraform never queued a run from GitHub
+
+- **Found:** every run in the three workspaces was started in the UI. HCP Terraform received
+  each push and pull request (it posted a "Success" status on every commit) but matched no
+  workspace. The workspaces' trigger pattern was `infra/**`; every documented pattern is anchored
+  with a leading slash (`/module/**/*`). This is the cause of the earlier "vacuous green"
+  speculative plans and of merges not starting runs.
+- **Done:** `bootstrap-hcp.rb` sets `/infra/**`. Rerunning step 2 with `--apply` updates existing
+  workspaces (it restores drifted settings). Test: the pattern, and its restoration on a
+  workspace that still has the old one; the old pattern fails the test.
+- **Docs:** `jq` was used by the runbook but never listed. It is now in the tools for macOS
+  (brew) and Windows (a winget line covering every tool; package IDs verified).
+- **Not yet verified:** that a push touching `infra/` now queues runs. The first merge after the
+  operator reruns step 2 shows it; until then this is the documented format, not observed.
+
+**Next task:** operator reruns bootstrap step 2 with `--apply`; watch the next `infra/` merge.

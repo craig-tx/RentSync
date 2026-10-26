@@ -60,7 +60,7 @@ outputs (data-model §DNS record). Switch `acme_ca` to production and apply.
 **Expected**:
 
 - Three instances exist, each with an Elastic IP that matches its output.
-- `dig +short "pms-staging.$RENTSYNC_DOMAIN"` returns the staging IP, and likewise for the other two
+- The DNS check in runbook §DNS shows the staging IP for `pms-staging`, and likewise for the other two
   records.
 - The HCP run logs mask every sensitive value. Searching the state files (download through the
   HCP UI) for the admin token finds nothing.

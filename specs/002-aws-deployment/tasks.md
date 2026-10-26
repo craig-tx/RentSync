@@ -617,6 +617,11 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   - **Docs:** runbook §Monthly OS patching and §Audit logs; production-differences adds a
     security section (CSPM such as Orca, GuardDuty, Security Hub, Config, log archive, egress,
     patching, scanning).
+- [X] T052j [US1] Host memory: measure the stack (research R4 table), and give every host a
+  1 GiB swap file at first boot (`infra/host/bin/rentsync-swap`, module variable `swap_mib`,
+  `vm.swappiness = 10`). Tests: `infra/host/test/swap_test.sh` (root, in CI) and the host
+  module's Terraform tests. Runbook §Changing a host's instance type describes trying
+  `t4g.micro` on staging.
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the
@@ -627,7 +632,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 
 - [ ] T053 [US1] **🧑 OPERATOR**: perform runbook §Bootstrap. Record the elapsed time in
   `docs/ai-build-log.md`, against FR-006's one-hour limit.
-- [ ] T054 [US1] **🧑 OPERATOR**: apply `rentsync-shared-us` (confirm), then
+- [ ] T054 [US1] **🧑 OPERATOR** (runbook §First apply): apply `rentsync-shared-us` (confirm), then
   `rentsync-dev-staging`, then `rentsync-prod-us` (confirm), with `acme_ca` set to the Let's
   Encrypt staging endpoint. Then rerun `bootstrap-github.sh` with `--ecr-repository-url` (runbook §Bootstrap step 3), and add the A records (runbook §DNS; the workspace outputs
   are the record of the IPs). Record the elapsed time from the first apply to three hosts
@@ -654,7 +659,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 (`dev-staging`) and `pms.rentsync.org` (`prod-us`), deployed by `rentsync-deploy`.
 
 **Independent Test**: [quickstart.md](quickstart.md) §4. The feature 001 quickstart §3–§9 pass
-on both deployments: the public checks from a laptop, the on-host checks in an SSM session. One
+on both deployments: the public checks from the operator's machine, the on-host checks in an SSM session. One
 public webhook verifies, and a client from one deployment doesn't exist on the other.
 
 ### Implementation for User Story 2

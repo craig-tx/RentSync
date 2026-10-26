@@ -62,6 +62,17 @@ variable "data_volume_gib" {
   default = 10
 }
 
+variable "swap_mib" {
+  type        = number
+  default     = 1024
+  description = "Swap file on the root disk, created at first boot by rentsync-swap; 0 for none (research R4)."
+
+  validation {
+    condition     = var.swap_mib >= 0 && floor(var.swap_mib) == var.swap_mib && var.swap_mib < var.root_volume_gib * 1024 / 4
+    error_message = "swap_mib must be a whole number of MiB, under a quarter of the root disk."
+  }
+}
+
 variable "data_snapshot_id" {
   type        = string
   default     = null
