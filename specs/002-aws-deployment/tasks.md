@@ -591,6 +591,11 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   holds other workspaces. GitHub: the variables and Environments. Secret scanning, adopted
   providers, the HCP Terraform GitHub connection and the settings file are kept and reported.
   Runbook §Bootstrap teardown. Tests drive the shell confirmations through script(1).
+- [X] T052g [US1] Make runbook §Bootstrap work the same on macOS and Windows: OS-neutral steps
+  and commands, a macOS setup (`brew install bash ruby gh hashicorp/tap/terraform`) and one
+  Windows note (Git Bash, not WSL; PowerShell for `bootstrap-hcp.rb`). Require bash 4.4+ and
+  Ruby 3+. The bash scripts refuse older bash (macOS ships 3.2) with the fix, checked in CI
+  under bash 3.2, 4.3 and 4.4.
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the

@@ -504,3 +504,30 @@ Then, for the blank slate:
 2. Optionally delete the two adopted OIDC providers.
 3. Rerun §Bootstrap from step 0.
 4. Run the CLI speculative plan check, then continue with T054.
+
+### 2026-10-25: macOS-friendly runbook (T052g)
+
+- **Why:** the operator noted that the runbook read as Windows-only, while the evaluators use
+  Macs.
+- **Two blockers on a stock Mac:**
+  - bash 3.2, where `set -u` treats an empty array as unbound, so the teardowns would crash;
+  - Ruby 2.6, which can't parse `bootstrap-hcp.rb`'s endless methods.
+- **Decision (operator):** require bash 4.4+ and Ruby 3+, both from Homebrew, rather than support
+  the old versions.
+- **Runbook:**
+  - steps and commands are OS-neutral;
+  - a macOS setup block (`brew install bash ruby gh hashicorp/tap/terraform`, plus a PATH line
+    for Homebrew's keg-only Ruby);
+  - one Windows note collects the Git Bash/WSL paths and the PowerShell requirement for the
+    hidden password prompt.
+- **Scripts:**
+  - `settings.sh` refuses bash older than 4.4 with the fix. The check is written to stay valid
+    in bash 3.2, so it runs before anything else can fail;
+  - script messages no longer assume Windows.
+- **CI:** a new step runs the three bash scripts under `bash:3.2` and `bash:4.3`, which must
+  refuse, and `bash:4.4`, which must pass the check. Verified locally with the same images.
+- **Not tested:** nothing ran on a real Mac. The containers cover the bash risk; the Ruby
+  requirement is documented, not checked by the script.
+
+**Next task:** unchanged. The operator runs the blank-slate teardown and re-bootstrap from
+`main`, then T054.

@@ -60,7 +60,7 @@ module HcpBootstrap
     require "io/console"
     console = IO.console
     unless console && $stdin.tty?
-      raise Abort, "no console for the hidden password prompt; run --apply from PowerShell or Windows Terminal"
+      raise Abort, "no console for the hidden password prompt; run --apply from a real terminal (on Windows, PowerShell or Windows Terminal)"
     end
 
     first = console.getpass("OpenObserve root password (not shown): ")
@@ -100,7 +100,7 @@ module HcpBootstrap
   end
 
   def self.load_settings(file = settings_file)
-    raise Abort, "no settings at #{file}; run infra/bootstrap/bootstrap-init.sh first (from Git Bash)" unless File.exist?(file)
+    raise Abort, "no settings at #{file}; run infra/bootstrap/bootstrap-init.sh first" unless File.exist?(file)
 
     File.readlines(file, chomp: true).each_with_object({}) do |line, opts| # chomp drops CRLF too
       next if line.empty? || line.start_with?("#")

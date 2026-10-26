@@ -33,11 +33,11 @@ Afterwards, every change goes through HCP Terraform runs. Every step can be reve
 
 | Step | What | Where it runs | When |
 |---|---|---|---|
-| 0 | `bootstrap-init.sh`: asks for your settings and saves them | Git Bash, your machine | first |
+| 0 | `bootstrap-init.sh`: asks for your settings and saves them | your machine | first |
 | 1 | `bootstrap-iam.sh`: AWS OIDC providers and roles | AWS CloudShell | after step 0 |
 | 2 | AWS CLI: look up the AMI | AWS CloudShell | after step 1 |
-| 3 | `bootstrap-hcp.rb`: HCP Terraform project, workspaces and variables | PowerShell, your machine | after step 2 |
-| 4 | `bootstrap-github.sh`: GitHub variables, Environments and secret scanning | Git Bash, your machine | after step 1; rerun after T054 and at T074 |
+| 3 | `bootstrap-hcp.rb`: HCP Terraform project, workspaces and variables | your machine | after step 2 |
+| 4 | `bootstrap-github.sh`: GitHub variables, Environments and secret scanning | your machine | after step 1; rerun after T054 and at T074 |
 | 5 | AWS CLI: activate the `DeploymentId` cost allocation tag | AWS CloudShell | about a day after the first apply |
 
 You need:
@@ -45,12 +45,30 @@ You need:
 - an HCP Terraform organization you own;
 - admin access to your copy of this repository on GitHub;
 - a domain, and access to its DNS records;
-- on your machine: Git Bash, Ruby, Terraform and the `gh` CLI.
+- on your machine: bash 4.4 or later, Ruby 3 or later, Terraform, and the `gh` CLI (setup below).
 
-**Git Bash, not WSL.** On Windows, a bare `bash` typed in PowerShell or Command Prompt starts WSL,
-which can't see the Windows `gh`. Open a Git Bash window, or call it by path: in Command Prompt,
-`"C:\Program Files\Git\bin\bash.exe" infra/bootstrap/<script> …`, and in PowerShell, prefix that
-with `&`.
+**On macOS**, Apple's built-in bash (3.2) and Ruby (2.6) are too old. Install current ones with
+[Homebrew](https://brew.sh), then open a new Terminal so `bash` and `ruby` resolve to them:
+
+```bash
+brew install bash ruby gh hashicorp/tap/terraform
+bash --version   # 5.x
+ruby --version   # 3.x
+```
+
+Homebrew's Ruby is keg-only: if `ruby --version` still says 2.6, add
+`export PATH="$(brew --prefix ruby)/bin:$PATH"` to `~/.zshrc` and open a new Terminal. The bash
+scripts check their bash version and stop with this advice if it is too old. Every command below
+runs in Terminal.
+
+**On Windows**, install Git for Windows (for Git Bash), Ruby, Terraform and `gh`. Two things
+differ from macOS:
+- **Use Git Bash, not WSL, for the bash scripts.** A bare `bash` typed in PowerShell or Command
+  Prompt starts WSL, which can't see the Windows `gh`. Open a Git Bash window, or call it by path:
+  in Command Prompt, `"C:\Program Files\Git\bin\bash.exe" infra/bootstrap/<script> …`, and in
+  PowerShell, prefix that with `&`.
+- **Use PowerShell or Windows Terminal for `bootstrap-hcp.rb`.** Git Bash's terminal can't hide
+  its password prompt.
 
 ### 0. Your settings
 
@@ -68,7 +86,7 @@ need. It asks for nothing secret: step 3 handles the password and tokens. Rerun 
 keeps each current value.
 
 1. Sign in to GitHub once, if you haven't: `gh auth login`.
-2. From the repository root, in Git Bash:
+2. From the repository root:
 
    ```bash
    bash infra/bootstrap/bootstrap-init.sh
@@ -135,7 +153,7 @@ HCP Terraform API:
 - every workspace variable in contracts/workspace-variables.md, including the AWS region, the
   zone and the hostnames from your settings.
 
-It needs only Ruby, with no gems.
+It needs only Ruby 3 or later, with no gems. On Windows, run it in PowerShell (see above).
 - **Secrets:** each `admin_token` is generated inside the script, a different one per
   environment, and sent straight to HCP Terraform as a sensitive variable. The OpenObserve root
   password is asked for twice, without echo, and checked against Terraform's rule before anything
@@ -144,18 +162,16 @@ It needs only Ruby, with no gems.
   It never changes a variable that exists; it only reports one whose value differs, because you
   change those on purpose later (`acme_ca`, `ami_id`, rotations).
 
-Run it in PowerShell or Windows Terminal. Git Bash's terminal can't hide the password prompt.
-
 1. Sign in to HCP Terraform once. `terraform login` opens the browser and saves a token in your
    user profile, where the script reads it. The token is never printed:
 
-   ```powershell
+   ```bash
    terraform login
    ```
 
 2. Print the plan:
 
-   ```powershell
+   ```bash
    ruby infra/bootstrap/bootstrap-hcp.rb
    ```
 
@@ -188,7 +204,7 @@ You run it three times. Each later run adds one flag:
 | After the first `rentsync-shared-us` apply (T054) | `--ecr-repository-url <URL>` | `ECR_REPOSITORY_URL`, from that workspace's `ecr_repository_url` output (HCP Terraform → `rentsync-shared-us` → **Outputs**). Releases are skipped until it is set. |
 | Task T074 | `--prod-reviewer <your GitHub username>` | you, as the `prod-us` required reviewer |
 
-1. In Git Bash, print the plan:
+1. Print the plan:
 
    ```bash
    bash infra/bootstrap/bootstrap-github.sh
@@ -230,7 +246,10 @@ Cost Explorer can group spend by deployment (constitution VI).
   workspace, and rerun the script.
 - **Step 3 reports a variable whose value differs:** that's expected after a deliberate change,
   such as the switch to production certificates. To change a variable, edit it in the workspace.
-- **A script says `gh` was not found:** you're in WSL. Use Git Bash (see above).
+- **A script says `gh` was not found:** install it (see above). On Windows, you're probably in
+  WSL; use Git Bash.
+- **A script says it needs bash 4.4 or later:** on macOS, `brew install bash` and open a new
+  Terminal (see above).
 
 ### Where each setting ends up
 
@@ -671,7 +690,7 @@ runs in two places, because AWS is only reachable from CloudShell.
 Teardown refuses while infrastructure still exists, so do §Teardown first if anything was ever
 applied. Then, in this order:
 
-1. **GitHub**, in Git Bash on your machine:
+1. **GitHub**, on your machine:
 
    ```bash
    bash infra/bootstrap/bootstrap-github.sh --teardown
@@ -679,9 +698,9 @@ applied. Then, in this order:
 
    It deletes the repository variables and both Environments, with their variables, branch
    policies and reviewers.
-2. **HCP Terraform**, in PowerShell or Windows Terminal on your machine:
+2. **HCP Terraform**, on your machine (PowerShell on Windows):
 
-   ```powershell
+   ```bash
    ruby infra/bootstrap/bootstrap-hcp.rb --teardown
    ```
 

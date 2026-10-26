@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runbook §Bootstrap step 0 (feature 002): asks for every deployment setting and writes them to
 # .bootstrap/settings.env (gitignored, or $RENTSYNC_SETTINGS), which the other bootstrap scripts
-# read. Run it on your machine from Git Bash; it needs the gh CLI to read the repository's OIDC
-# subject format.
+# read. Run it on your machine (Terminal on macOS, Git Bash on Windows). It needs the gh CLI, to
+# read the repository's OIDC subject format.
 #
 #   bootstrap-init.sh
 #
@@ -58,7 +58,7 @@ ask RENTSYNC_AMI_ID "Amazon Linux 2023 arm64 AMI ID (blank for now: runbook step
 
 # GitHub Actions tokens carry this prefix in their sub claim. The IAM trust policies match it
 # exactly, so it is read from GitHub, never assumed (contracts/bootstrap-iam.md).
-command -v gh > /dev/null || die "gh not found on this bash's PATH. On Windows, run this from Git Bash, not WSL"
+command -v gh > /dev/null || die "gh not found on this bash's PATH. Install it (macOS: brew install gh); on Windows, run this from Git Bash, not WSL"
 oidc="$(gh api "repos/$RENTSYNC_GITHUB_REPO/actions/oidc/customization/sub" \
   --jq '"\(.use_default) \(.sub_claim_prefix // "")"')" \
   || die "could not read $RENTSYNC_GITHUB_REPO's OIDC subject format; check the name and run gh auth login"
