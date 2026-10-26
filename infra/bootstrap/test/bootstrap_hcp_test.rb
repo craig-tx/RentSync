@@ -195,7 +195,7 @@ class BootstrapHcpTest < Minitest::Test
       assert_equal dir, ws[:attrs]["working-directory"], name
       assert_equal auto, ws[:attrs]["auto-apply"], name
       assert_equal "1.16.6", ws[:attrs]["terraform-version"]
-      assert_equal ["infra/**"], ws[:attrs]["trigger-patterns"]
+      assert_equal ["/infra/**"], ws[:attrs]["trigger-patterns"]
       assert ws[:attrs]["file-triggers-enabled"]
       assert_equal({ "identifier" => "example-owner/example-app", "branch" => "main", "oauth-token-id" => "ot-github" }, ws[:attrs]["vcs-repo"])
       refute ws[:attrs].key?("assessments-enabled"), "assessments are opt-in"
@@ -255,13 +255,18 @@ class BootstrapHcpTest < Minitest::Test
     @hcp.var("rentsync-prod-us", "acme_ca")["attributes"]["value"] = production_ca
     @hcp.var("rentsync-shared-us", "ami_id")["attributes"]["value"] = "ami-0fedcba9876543210"
 
+    # Workspaces made before the pattern was anchored get it on the next run.
+    @hcp.ws("rentsync-prod-us")[:attrs]["trigger-patterns"] = ["infra/**"]
+
     out = run_bootstrap(apply: true)
     assert_equal true, @hcp.ws("rentsync-dev-staging")[:attrs]["auto-apply"]
     assert_match(/^\+ update workspace rentsync-dev-staging: auto-apply$/, out)
+    assert_equal ["/infra/**"], @hcp.ws("rentsync-prod-us")[:attrs]["trigger-patterns"]
+    assert_match(/^\+ update workspace rentsync-prod-us: trigger-patterns$/, out)
     assert_equal production_ca, @hcp.var("rentsync-prod-us", "acme_ca")["attributes"]["value"]
     assert_equal "ami-0fedcba9876543210", @hcp.var("rentsync-shared-us", "ami_id")["attributes"]["value"]
     assert_match(/rentsync-prod-us acme_ca is .*; not changed/, out)
-    assert_match(/^1 change\(s\) applied\.$/, out)
+    assert_match(/^2 change\(s\) applied\.$/, out)
   end
 
   def test_weak_password_changes_nothing

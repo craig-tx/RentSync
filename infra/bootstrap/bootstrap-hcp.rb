@@ -33,7 +33,10 @@ module HcpBootstrap
   PROJECT = "RentSync"
   VARSET = "rentsync-aws"
   TERRAFORM_VERSION = "1.16.6"
-  TRIGGER_PATTERNS = ["infra/**"].freeze
+  # Anchored at the repository root with a leading slash, as in HCP Terraform's documented
+  # examples. Without it ("infra/**"), no push or pull request ever matched: HCP Terraform
+  # reported success on each commit and queued no run.
+  TRIGGER_PATTERNS = ["/infra/**"].freeze
   LE_STAGING = "https://acme-staging-v02.api.letsencrypt.org/directory"
   SHARED = "rentsync-shared-us"
   WORKSPACES = [
