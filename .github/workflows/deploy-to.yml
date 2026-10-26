@@ -73,11 +73,14 @@ jobs:
           arg="$IMAGE_TAG@$IMAGE_DIGEST" # pinned: the host pulls exactly the image the build produced
           [ "$ROLLBACK" = "true" ] && arg="--rollback"
           [ "$RELOAD" = "true" ] && arg="--reload"
+          # SSM caps a comment at 100 characters; the pinned argument alone is 112. The comment
+          # names the deployment and the commit, without the digest.
+          comment="rentsync-deploy $DEPLOYMENT_ID ${arg%%@*}"
           command_id="$(aws ssm send-command \
             --document-name AWS-RunShellScript \
             --targets "Key=tag:DeploymentId,Values=$DEPLOYMENT_ID" "Key=tag:rentsync:deployable,Values=true,protected" \
             --parameters "commands=[\"/usr/local/bin/rentsync-deploy $arg\"]" \
-            --timeout-seconds 900 --comment "rentsync-deploy $arg" \
+            --timeout-seconds 900 --comment "$comment" \
             --query Command.CommandId --output text)"
           echo "SSM command $command_id"
           for _ in $(seq 1 180); do
