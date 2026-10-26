@@ -20,7 +20,7 @@ Terraform, so the value never reaches state or plan files.
 |---|---|---|---|---|
 | `deployment_id` | string (validated, constitution VI) | — | no | `shared-us` |
 | `region` | string | — | no | AWS region, from the deployment settings |
-| `telemetry_private_ip` | string | — | no | `10.40.1.10`. Configuration, not hard-coded |
+| `telemetry_private_ip` | string | — | no | `10.40.1.10`, in the shared VPC (`10.40.0.0/16`). Configuration, not hard-coded |
 | `vpc_cidr`, `subnet_cidr` | string | — | no | `10.40.0.0/16`, `10.40.1.0/24` |
 | `availability_zone` | string | — | no | All hosts and volumes live here; from the settings |
 | `ami_id` | string | — | no | Pinned Amazon Linux 2023 arm64 AMI |
@@ -39,7 +39,7 @@ Terraform, so the value never reaches state or plan files.
 
 | Output | Used by |
 |---|---|
-| `vpc_id`, `subnet_id`, `otlp_client_security_group_id` | environment root, via `terraform_remote_state`. Environment hosts attach the OTLP client group, which the telemetry group admits on 5080, so adding a deployment never edits shared rules |
+| `vpc_id`, `vpc_cidr`, `route_table_id`, `telemetry_security_group_id` | environment root, via `terraform_remote_state`. Each environment peers its own VPC with `vpc_id`, routes to `vpc_cidr`, adds its return route to `route_table_id`, and admits its subnet to the telemetry group on 5080, all from its own state, so adding a deployment never edits shared code (ADR-0008) |
 | `availability_zone`, `ami_id` | environment root (one place to pin them) |
 | `ecr_repository_url` | environment root (host env), release workflow (repository variable) |
 | `otlp_endpoint` (`http://10.40.1.10:5080/api/default`) | environment root |
@@ -55,7 +55,9 @@ Terraform, so the value never reaches state or plan files.
 | `hcp_organization` | string | `<hcp-organization>` | `<hcp-organization>` | no |
 | `region` | string | the AWS region from the settings | the same | no |
 | `hostname` | string | `pms-staging.<domain>` | `pms.<domain>` | no |
-| `private_ip` | string | `10.40.1.20` | `10.40.1.30` | no |
+| `vpc_cidr` | string | `10.41.0.0/16` | `10.42.0.0/16` | no |
+| `subnet_cidr` | string | `10.41.1.0/24` | `10.42.1.0/24` | no |
+| `private_ip` | string | `10.41.1.20` | `10.42.1.30` | no |
 | `instance_type` | string | `t4g.small` | `t4g.small` | no |
 | `acme_email`, `acme_ca` | string | as for shared | as for shared | no |
 | `admin_token` | string (validated: ≥ 32 characters, not `change-me-admin-token`) | random, per environment | different random | **yes** |

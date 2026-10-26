@@ -12,15 +12,16 @@ override_data {
   target = data.terraform_remote_state.shared
   values = {
     outputs = {
-      vpc_id                        = "vpc-0123456789abcdef0"
-      subnet_id                     = "subnet-0123456789abcdef0"
-      otlp_client_security_group_id = "sg-0123456789abcdef0"
-      availability_zone             = "us-east-1a"
-      ami_id                        = "ami-0123456789abcdef0"
-      ecr_repository_url            = "123456789012.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_pms"
-      ecr_repository_arn            = "arn:aws:ecr:us-east-1:123456789012:repository/shared-us/mock_pms"
-      otlp_endpoint                 = "http://10.40.1.10:5080/api/default"
-      ingest_ssm_path               = "/rentsync/shared-us/openobserve/ingest"
+      vpc_id                      = "vpc-0123456789abcdef0"
+      vpc_cidr                    = "10.40.0.0/16"
+      route_table_id              = "rtb-0123456789abcdef0"
+      telemetry_security_group_id = "sg-0123456789abcdef0"
+      availability_zone           = "us-east-1a"
+      ami_id                      = "ami-0123456789abcdef0"
+      ecr_repository_url          = "123456789012.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_pms"
+      ecr_repository_arn          = "arn:aws:ecr:us-east-1:123456789012:repository/shared-us/mock_pms"
+      otlp_endpoint               = "http://10.40.1.10:5080/api/default"
+      ingest_ssm_path             = "/rentsync/shared-us/openobserve/ingest"
     }
   }
 }
@@ -31,7 +32,9 @@ variables {
   deployment_id    = "pr-42"
   environment      = "staging"
   hostname         = "pms-pr-42.example.com"
-  private_ip       = "10.40.1.42"
+  vpc_cidr         = "10.43.0.0/16"
+  subnet_cidr      = "10.43.1.0/24"
+  private_ip       = "10.43.1.42"
   acme_email       = "ops@example.test"
   admin_token      = "0123456789abcdef0123456789abcdef"
 }
@@ -83,7 +86,9 @@ run "prod" {
     deployment_id = "prod-us"
     environment   = "production"
     hostname      = "pms.example.com"
-    private_ip    = "10.40.1.30"
+    vpc_cidr      = "10.42.0.0/16"
+    subnet_cidr   = "10.42.1.0/24"
+    private_ip    = "10.42.1.30"
   }
 }
 
@@ -93,7 +98,9 @@ run "staging" {
   variables {
     deployment_id = "dev-staging"
     hostname      = "pms-staging.example.com"
-    private_ip    = "10.40.1.20"
+    vpc_cidr      = "10.41.0.0/16"
+    subnet_cidr   = "10.41.1.0/24"
+    private_ip    = "10.41.1.20"
   }
 }
 

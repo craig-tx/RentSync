@@ -38,6 +38,7 @@ Its users are:
 ### Session 2026-10-25
 
 - Q: Is the deployment tied to one operator's domain and accounts? → A: No. The domain, DNS provider, AWS account, AWS region and zone, HCP Terraform organization, GitHub repository and contact emails are per-operator **deployment settings**. `bootstrap-init.sh` asks for them and writes them to a gitignored file that the other bootstrap scripts read; the repository holds only placeholders. Input (4) describes the reference deployment: `rentsync.org`, with DNS at NameCheap.
+- Q: Should staging and production share one VPC, as input (1) asks? → A: No. Every deployment owns its VPC: `shared-us`, `dev-staging` and `prod-us` each have one, and each environment VPC is peered only with the shared telemetry VPC, so staging and production have no route to each other (ADR-0008). Telemetry crosses the peering connections on the private AWS network. This supersedes input (1). For this portfolio demo we choose VPC isolation; a true production environment would use the gold standard, the **Multi-Account Strategy via AWS Organizations**, with a separate AWS account per environment.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -162,11 +163,11 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 
 **Network and hosts**
 
-- **FR-007**: There MUST be exactly one virtual network (VPC) holding all hosts. Its documentation MUST state that real production would use separate networks, and normally separate accounts, for each environment.
+- **FR-007**: Each deployment MUST have its own virtual network (VPC). Each environment's VPC MUST be connected only to the shared deployment's VPC, never to another environment's, so staging and production have no network path to each other. The documentation MUST state that real production would use the Multi-Account Strategy via AWS Organizations, with a separate AWS account per environment (Session 2026-10-25).
 - **FR-008**: The three initial deployments MUST have exactly three hosts: staging (`dev-staging`), production (`prod-us`), and shared telemetry (`shared-us`). Side-by-side deployments (FR-042) add their own. Each MUST have a fixed public IP address (Elastic IP) that survives the host being replaced.
 - **FR-009**: Inbound access from the internet MUST be limited to TCP 80 and 443 on every host. No SSH or other administrative port may be open to the internet.
 - **FR-010**: Operators MUST have a documented administrative shell path to each host that needs no inbound port.
-- **FR-011**: The telemetry ingestion port MUST accept connections only from the environment hosts inside the network. It MUST NOT be reachable from the internet.
+- **FR-011**: The telemetry ingestion port MUST accept connections only from the environment hosts, over the private AWS network. It MUST NOT be reachable from the internet.
 - **FR-012**: Hosts MUST keep accurate time, start every service automatically on boot, rotate logs, and prune unused container images, so they stay healthy without operator attention.
 
 **Services on each environment host**
@@ -216,7 +217,7 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 
 - **FR-035**: The deployment MUST include a monthly budget with alerts to the operator. It MUST send a warning at 80% and an alert at 100%.
 - **FR-036**: The documentation MUST include a "real production would differ" section comparing each demo choice with its production equivalent:
-  - one VPC, compared with separate VPCs and accounts;
+  - VPC isolation in one account, compared with separate accounts per environment (Multi-Account Strategy via AWS Organizations);
   - a single EC2 host per environment, compared with ECS Fargate across availability zones;
   - containerized Postgres and Redis, compared with RDS and ElastiCache;
   - a Caddy proxy on the host, compared with a load balancer with managed certificates;

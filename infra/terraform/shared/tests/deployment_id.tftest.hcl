@@ -34,14 +34,10 @@ run "invalid_id" {
 run "names_derive" {
   command = plan
 
+  # The VPC, subnet, gateway and route table are named from this prefix (modules/network tests).
   assert {
-    condition     = aws_vpc.this.tags["Name"] == "rentsync-shared-us-vpc"
-    error_message = "The VPC Name must be rentsync-<deployment_id>-vpc."
-  }
-
-  assert {
-    condition     = aws_subnet.public.tags["Name"] == "rentsync-shared-us-subnet"
-    error_message = "The subnet Name must be rentsync-<deployment_id>-subnet."
+    condition     = module.network.vpc_cidr == "10.40.0.0/16" && module.network.subnet_cidr == "10.40.1.0/24"
+    error_message = "The shared deployment must own its network, from vpc_cidr and subnet_cidr."
   }
 
   assert {

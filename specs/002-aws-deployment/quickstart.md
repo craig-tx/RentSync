@@ -80,6 +80,16 @@ aws ssm start-session --target <staging_instance_id>
 
 **Expected**: a shell, with port 22 still closed.
 
+Check network isolation (FR-007, ADR-0008). In that staging session:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 5 http://10.40.1.10:5080/healthz   # telemetry, over peering
+curl -s -o /dev/null --max-time 5 http://10.42.1.30/ || echo "no route to prod-us"     # production's private IP
+```
+
+**Expected**: the first prints `200`; the second prints `no route to prod-us`. Repeat from a
+`prod-us` session against `10.41.1.20`.
+
 ## 3. First release (US4)
 
 Push or merge a change to `main`. The `CI` workflow goes green, and then `release.yml` builds
@@ -216,7 +226,8 @@ curl -s "https://pms.$RENTSYNC_DOMAIN/healthz" | jq -r .deployment_id     # prod
 Side-by-side check, with no apply needed:
 
 1. Create a throwaway workspace `rentsync-pr-42` on `infra/terraform/environment`, with
-   `deployment_id=pr-42`, `private_ip=10.40.1.42`, a dummy hostname and token.
+   `deployment_id=pr-42`, `vpc_cidr=10.43.0.0/16`, `subnet_cidr=10.43.1.0/24`,
+   `private_ip=10.43.1.42`, a dummy hostname and token.
 2. Run a speculative plan.
 
 **Expected**: every resource is a create, named `rentsync-pr-42-*` under `/rentsync/pr-42/`, and

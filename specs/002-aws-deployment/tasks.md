@@ -596,6 +596,13 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   Windows note (Git Bash, not WSL; PowerShell for `bootstrap-hcp.rb`). Require bash 4.4+ and
   Ruby 3+. The bash scripts refuse older bash (macOS ships 3.2) with the fix, checked in CI
   under bash 3.2, 4.3 and 4.4.
+- [X] T052h [US1] One VPC per deployment (spec Session 2026-10-25, FR-007, FR-011; ADR-0008).
+  `modules/network` gives each deployment its VPC, subnet, gateway and route table, with standalone
+  routes only. Each environment peers only with the shared VPC, adds its return route and its OTLP
+  rule (5080 from its subnet) from its own state, and stays in the shared zone. The `otlp-client`
+  group is gone. Ranges: shared `10.40.0.0/16`, staging `10.41.0.0/16`, prod `10.42.0.0/16`.
+  `check_prevent_destroy.sh` forbids inline route, ingress and egress blocks. Docs name the
+  production gold standard: the Multi-Account Strategy via AWS Organizations.
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the

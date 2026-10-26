@@ -76,7 +76,7 @@ gains both fields).
 | environment | 443 | everything else | proxied to `mock_pms:4001`, with headers passed through |
 | telemetry | 80 | any | `308` to HTTPS |
 | telemetry | 443 | any | proxied to `openobserve:5080`; OpenObserve's own sign-in page |
-| telemetry | 5080 | `/api/default/v1/{logs,metrics}` | OTLP/HTTP; reachable only from members of `rentsync-shared-us-otlp-client`, a security group every environment host attaches |
+| telemetry | 5080 | `/api/default/v1/{logs,metrics}` | OTLP/HTTP; reachable only from each environment's subnet, over its peering connection (ADR-0008) |
 
 ## SSM targeting
 

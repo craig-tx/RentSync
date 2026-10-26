@@ -29,7 +29,7 @@ The URLs below are the reference deployment, at `rentsync.org`. To deploy your o
 
 The URLs go live once the one-time bootstrap in the runbook is done. Merging to `main` releases to `dev-staging` automatically. The same image goes to `prod-us` only after an approval.
 
-This is a **cost-conscious demo** (about $55 a month) and is not production-ready: one VPC, one EC2 host per deployment, and Postgres and Redis in containers. [`docs/deploy/production-differences.md`](docs/deploy/production-differences.md) compares each of those choices with what production would use, and why.
+This is a **cost-conscious demo** (about $55 a month) and is not production-ready: VPC isolation inside one AWS account (each deployment has its own VPC; production would use the Multi-Account Strategy via AWS Organizations, with a separate account per environment), one EC2 host per deployment, and Postgres and Redis in containers. [`docs/deploy/production-differences.md`](docs/deploy/production-differences.md) compares each of those choices with what production would use, and why.
 
 - Operator runbook (bootstrap, DNS, release, rollback, recovery, rotation, teardown): [`docs/deploy/runbook.md`](docs/deploy/runbook.md)
 - Decisions: [ADR-0005 topology](docs/adr/0005-demo-aws-topology.md), [ADR-0006 releases](docs/adr/0006-releases-via-ssm.md), [ADR-0007 secrets](docs/adr/0007-secrets-ssm-write-only.md)
