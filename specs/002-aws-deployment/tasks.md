@@ -659,7 +659,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 (`dev-staging`) and `pms.rentsync.org` (`prod-us`), deployed by `rentsync-deploy`.
 
 **Independent Test**: [quickstart.md](quickstart.md) §4. The feature 001 quickstart §3–§9 pass
-on both deployments: the public checks from a laptop, the on-host checks in an SSM session. One
+on both deployments: the public checks from the operator's machine, the on-host checks in an SSM session. One
 public webhook verifies, and a client from one deployment doesn't exist on the other.
 
 ### Implementation for User Story 2

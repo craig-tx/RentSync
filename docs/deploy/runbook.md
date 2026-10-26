@@ -45,13 +45,14 @@ You need:
 - an HCP Terraform organization you own;
 - admin access to your copy of this repository on GitHub;
 - a domain, and access to its DNS records;
-- on your machine: bash 4.4 or later, Ruby 3 or later, Terraform, and the `gh` CLI (setup below).
+- on your machine: bash 4.4 or later, Ruby 3 or later, Terraform, the `gh` CLI, and `jq`, which
+  formats JSON in the checks after bootstrap (setup below).
 
 **On macOS**, Apple's built-in bash (3.2) and Ruby (2.6) are too old. Install current ones with
 [Homebrew](https://brew.sh), then open a new Terminal so `bash` and `ruby` resolve to them:
 
 ```bash
-brew install bash ruby gh hashicorp/tap/terraform
+brew install bash ruby gh jq hashicorp/tap/terraform
 bash --version   # 5.x
 ruby --version   # 3.x
 ```
@@ -61,8 +62,14 @@ Homebrew's Ruby is keg-only: if `ruby --version` still says 2.6, add
 scripts check their bash version and stop with this advice if it is too old. Every command below
 runs in Terminal.
 
-**On Windows**, install Git for Windows (for Git Bash), Ruby, Terraform and `gh`. Two things
-differ from macOS:
+**On Windows**, install Git for Windows (for Git Bash), Ruby, Terraform, `gh` and `jq`, for
+example with winget in PowerShell, then open a new Git Bash window so it finds them:
+
+```powershell
+winget install Git.Git RubyInstallerTeam.Ruby.3.3 Hashicorp.Terraform GitHub.cli jqlang.jq
+```
+
+Two things differ from macOS:
 - **Use Git Bash, not WSL, for the bash scripts.** A bare `bash` typed in PowerShell or Command
   Prompt starts WSL, which can't see the Windows `gh`. Open a Git Bash window, or call it by path:
   in Command Prompt, `"C:\Program Files\Git\bin\bash.exe" infra/bootstrap/<script> …`, and in

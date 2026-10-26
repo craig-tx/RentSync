@@ -718,3 +718,20 @@ No major-version port is outstanding beyond these. The next quarterly review cov
   The command still pins `<sha>@sha256:<digest>`.
 
 **Next task:** rerun Deploy for `dev-staging` once merged.
+
+### 2026-10-26: HCP Terraform never queued a run from GitHub
+
+- **Found:** every run in the three workspaces was started in the UI. HCP Terraform received
+  each push and pull request (it posted a "Success" status on every commit) but matched no
+  workspace. The workspaces' trigger pattern was `infra/**`; every documented pattern is anchored
+  with a leading slash (`/module/**/*`). This is the cause of the earlier "vacuous green"
+  speculative plans and of merges not starting runs.
+- **Done:** `bootstrap-hcp.rb` sets `/infra/**`. Rerunning step 2 with `--apply` updates existing
+  workspaces (it restores drifted settings). Test: the pattern, and its restoration on a
+  workspace that still has the old one; the old pattern fails the test.
+- **Docs:** `jq` was used by the runbook but never listed. It is now in the tools for macOS
+  (brew) and Windows (a winget line covering every tool; package IDs verified).
+- **Not yet verified:** that a push touching `infra/` now queues runs. The first merge after the
+  operator reruns step 2 shows it; until then this is the documented format, not observed.
+
+**Next task:** operator reruns bootstrap step 2 with `--apply`; watch the next `infra/` merge.
