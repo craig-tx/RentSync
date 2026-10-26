@@ -323,3 +323,29 @@ continues runbook §Bootstrap from step 3 (T053).
 **Next task:** the operator decides the branch question. Then they run `terraform login` and
 `bootstrap-hcp.rb` (plan, then `--apply`) from PowerShell, and continue to runbook step 8 and
 T054.
+
+### 2026-10-25 (later): account naming, shellcheck, and the merge
+
+- **Flag rename:** `bootstrap-hcp.rb --account` became `--aws-account`. The operator had read it
+  as an HCP account; it is the AWS account ID used to build the `rentsync-hcp-terraform` role ARN.
+- **Constitution v1.3.0 (MINOR):** a new rule in Development Workflow & Quality Gates, "Explicit
+  system names". Every account reference (docs, flags, placeholders, comments, names, messages,
+  specs) must name its system. Only names the project does not control, such as STS's `Account`
+  field, are exempt. Feature 002 was brought into line: the IAM placeholder `<account>` became
+  `<aws-account-id>`, `bootstrap-iam.sh --render-only AWS_ACCOUNT_ID`, and AWS, HCP Terraform,
+  OpenObserve or Let's Encrypt is now named in the runbook, ADR 0005, spec, plan, research, data
+  model and tasks. Past build-log entries are left as written.
+- **Shellcheck SC2337:** shellcheck 0.11 flags `grep -q` at the end of a pipeline under
+  `pipefail`. CI's older shellcheck did not. The risk is real: an early grep exit can SIGPIPE
+  the writer and flip the result. `render_env_test.sh`'s "secret never printed" check could
+  pass falsely, and `bootstrap-iam.sh`'s provider checks could report "missing". All 15 sites
+  now use here-strings. Shellcheck 0.11 is clean, and the render-env, deploy, bootstrap-IAM and
+  prevent_destroy checks pass on Ubuntu 24.04.
+- **Decision: merge before the live checks.** The operator chose to merge 002 now, so the HCP
+  Terraform workspaces can track `main` and image builds (trusted for `main` only) can run.
+  T090 removed the Sync Impact Report. T091 is ticked with a note. The operator and live-check
+  tasks run against `main` afterwards, and T091a records their results. The release workflow
+  stays skipped until `ECR_REPOSITORY_URL` is set, so the merge deploys nothing.
+
+**Next task:** T053. The operator runs `bootstrap-hcp.rb` (plan, then `--apply`) on `main`, then
+runbook step 8 and T054.

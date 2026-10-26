@@ -564,6 +564,14 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   prompts for the OpenObserve password without echo, prints a plan unless `--apply` is given,
   restores drifted workspace settings, and never changes a variable that exists. Test against a
   fake API: `infra/bootstrap/test/bootstrap_hcp_test.rb`, run in CI.
+
+> **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
+> the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the
+> `rentsync-github-build` role trusts only `refs/heads/main`, so nothing can be applied or built
+> from the feature branch. The operator and live-check tasks below (T053–T055, T064–T065,
+> T070–T071, T074–T075, T082–T083, T089) run against `main` after the merge. Any fixes they
+> need go in follow-up PRs, and their results go in `docs/ai-build-log.md` (T091a).
+
 - [ ] T053 [US1] **🧑 OPERATOR**: perform runbook §Bootstrap. Record the elapsed time in
   `docs/ai-build-log.md`, against FR-006's one-hour limit.
 - [ ] T054 [US1] **🧑 OPERATOR**: apply `rentsync-shared-us` (confirm), then
@@ -924,12 +932,15 @@ Ingest stays inside the VPC.
     Delete that workspace afterwards.
 
   Record the results in `docs/ai-build-log.md`.
-- [ ] T090 Remove the Sync Impact Report HTML comment from the top of
+- [X] T090 Remove the Sync Impact Report HTML comment from the top of
   `.specify/memory/constitution.md`, as governance requires before merge.
-- [ ] T091 Run the full suite (rspec, rubocop, terraform fmt, validate, and test, shellcheck),
+- [X] T091 Run the full suite (rspec, rubocop, terraform fmt, validate, and test, shellcheck),
   then append the session entry to `docs/ai-build-log.md`. Open a PR from `002-aws-deployment`
   to `main`, with the quickstart results summarized. Merge only when CI is green and the
-  operator has reviewed it.
+  operator has reviewed it. *Merged before the quickstart, by operator decision (see the note
+  before T053); the results come in T091a.*
+- [ ] T091a After the live-check tasks, summarize the quickstart results in
+  `docs/ai-build-log.md`, and land any fixes they needed through PRs to `main`.
 - [ ] T092 **🧑 OPERATOR**, starting after the merge: after 30 days of unattended running,
   check SC-009 (Cost Explorer under $60, per-`DeploymentId` breakdown) and SC-010 (certificates
   renewed, `df -h /` and `/srv/data` below 80%). Record the results in `docs/ai-build-log.md`.
