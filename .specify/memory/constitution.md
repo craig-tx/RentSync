@@ -1,18 +1,3 @@
-<!--
-Sync Impact Report (remove before merge)
-- Version change: 1.4.0 → 1.5.0 (MINOR: new rule added to a section)
-- Modified principles: none
-- Added: "Dependency maintenance" rule in Development Workflow & Quality Gates. A fixed
-  schedule, automated or not, covers Ruby and gems, container images, GitHub Actions, the
-  Terraform CLI and providers, and the host AMI: monthly review of every pending update (plus
-  AMI patching), high or critical advisories within 7 days, and a quarterly major-version and
-  end-of-life review. No component may run past end-of-life without a recorded decision.
-  Updates pass normal CI without weakening tests, and each review is recorded in the build log.
-- Removed sections: none
-- Templates: .specify/templates/* read the constitution at runtime; no edits needed
-- Follow-up TODOs: none. Dependabot (weekly PRs) and runbook §Monthly OS patching already
-  support the monthly pass.
--->
 # RentSync Constitution
 
 ## Core Principles
