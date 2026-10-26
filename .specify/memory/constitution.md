@@ -1,20 +1,3 @@
-<!--
-Sync Impact Report (remove before merge)
-- Version change: 1.3.0 → 1.4.0 (MINOR: new rule added to a section)
-- Modified principles: none
-- Added: "Reversible bootstrap" rule in Development Workflow & Quality Gates. Everything the
-  bootstrap provisions MUST be removable by a teardown command that lists what it deletes, warns
-  that the deletion is permanent, and requires a correct answer to a simple arithmetic question.
-  Every bootstrap step ships with its teardown. The teardown refuses while infrastructure still
-  depends on what it would delete, removes only what the bootstrap created, and leaves security
-  protections on.
-- Removed sections: none
-- Templates: .specify/templates/* read the constitution at runtime; no edits needed
-- Follow-up TODOs (feature 002, before merge of the branch carrying this amendment):
-  - teardown modes for bootstrap-iam.sh, bootstrap-hcp.rb and bootstrap-github.sh, with tests
-    and a runbook section; bootstrap-iam.sh must tag the OIDC providers it creates, so teardown
-    can tell them from adopted ones
--->
 # RentSync Constitution
 
 ## Core Principles
