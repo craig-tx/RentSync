@@ -204,7 +204,7 @@ You run it three times. Each later run adds one flag:
 | When | Flags | What the run adds |
 |---|---|---|
 | Now | none | everything in the list above |
-| After the first `rentsync-shared-us` apply (T054) | `--ecr-repository-url <URL>` | `ECR_REPOSITORY_URL`, from that workspace's `ecr_repository_url` output (HCP Terraform → `rentsync-shared-us` → **Outputs**). Releases are skipped until it is set. |
+| After the first `rentsync-shared-us` apply (§First apply, step 2) | `--ecr-repository-url <URL>` | `ECR_REPOSITORY_URL`, from that workspace's `ecr_repository_url` output (HCP Terraform → `rentsync-shared-us` → **Outputs**). Releases are skipped until it is set. |
 | Task T074 | `--prod-reviewer <your GitHub username>` | you, as the `prod-us` required reviewer |
 
 1. Print the plan:
@@ -218,7 +218,7 @@ You run it three times. Each later run adds one flag:
 ### 4. AWS: activate the cost allocation tag
 
 AWS can only activate a tag after its billing data has seen it, which happens about a day after
-the first apply. Then, in CloudShell, from the repository directory:
+the first apply (§First apply). Then, in CloudShell, from the repository directory:
 
 ```bash
 source .bootstrap/settings.env
@@ -277,9 +277,57 @@ gitignored, and the places in the last column are the record.
 `cloud` blocks don't name it. The code blocks that run them set `TF_CLOUD_ORGANIZATION` from
 the settings.
 
+Next: §First apply.
+
+## First apply
+
+This creates the AWS resources: the three VPCs and their peering, the three hosts with their
+Elastic IPs and data volumes, the image registry, the audit trail and log bucket, backups and the
+budget. AWS charges start here, at about $55 a month (README). Bootstrap only created the
+workspaces; none of them has run yet.
+
+Apply in this order, because each environment reads `rentsync-shared-us`'s outputs (its VPC,
+AMI and telemetry endpoint) and peers with its VPC. An environment planned before the shared
+apply fails, because those outputs don't exist yet. The hosts come up with Let's Encrypt's
+**staging** certificates (`acme_ca`, set by bootstrap step 2), which avoids its rate limits
+while DNS is new; §DNS switches them to production afterwards.
+
+Note the time when you start the first apply; T054 records how long the three hosts take to
+serve HTTPS (SC-001: 60 minutes, not counting DNS propagation).
+
+1. **`rentsync-shared-us`** (HCP Terraform → project `RentSync` → the workspace → **New run** →
+   **Plan and apply** → **Start**). Review the plan: every resource is a create, every name
+   carries `shared-us`, and the host uses the AMI ID from your settings. Then **Confirm &
+   apply**.
+2. **Give GitHub the image registry.** In the workspace's **Outputs**, copy
+   `ecr_repository_url`, and on your machine run:
+
+   ```bash
+   bash infra/bootstrap/bootstrap-github.sh --ecr-repository-url <ecr_repository_url>
+   bash infra/bootstrap/bootstrap-github.sh --ecr-repository-url <ecr_repository_url> --apply
+   ```
+
+3. **`rentsync-dev-staging`**: start a run the same way. This workspace applies automatically,
+   so review the plan as it goes; there is no confirm step.
+4. **`rentsync-prod-us`**: start a run, review the plan, and **Confirm & apply**.
+
+Each host boots with Caddy only, and answers `no image deployed yet` until §First deploy. Each
+workspace's **Outputs** now show the addresses §DNS needs.
+
+**If a run fails:**
+- **The plan can't assume the AWS role:** the `rentsync-aws` variable set must be attached to
+  the project (bootstrap step 2), and the `rentsync-hcp-terraform` role must exist (step 1).
+  Rerun those steps' plans; they report what is missing.
+- **An environment can't read the shared state:** `rentsync-shared-us` hasn't been applied, or
+  isn't sharing its state with that workspace. Rerun bootstrap step 2's plan.
+- **An apply stops partway:** start another run. Terraform keeps what was created and plans only
+  the rest.
+
+Next: §DNS, then §First deploy.
+
 ## DNS
 
-Terraform does not manage DNS (FR-021). After the first applies, create three A records for
+Terraform does not manage DNS (FR-021). After §First apply, create three A records for
 `<domain>` at your DNS provider:
 
 | Type | Host | Value (workspace output) | TTL |
@@ -291,12 +339,22 @@ Terraform does not manage DNS (FR-021). After the first applies, create three A 
 The workspace outputs are the record of each address; don't copy them into this file. They never
 change, because the Elastic IPs survive host replacement.
 
-Check that each record resolves:
+Check that each record resolves, on your machine (Git Bash on Windows, Terminal on macOS) from
+the repository root. CloudShell's copy of the settings has no domain. The check asks Google's
+public DNS over HTTPS, with `curl`, because public DNS is what Let's Encrypt and visitors see;
+your local network's resolver may cache old answers or add its own search domain:
 
 ```bash
 source .bootstrap/settings.env
-for h in telemetry pms-staging pms; do echo "$h -> $(dig +short "$h.$RENTSYNC_DOMAIN")"; done
+for h in telemetry pms-staging pms; do
+  ip="$(curl -s "https://dns.google/resolve?name=$h.$RENTSYNC_DOMAIN&type=A" |
+    grep -o '"type":1,"TTL":[0-9]*,"data":"[^"]*"' | cut -d'"' -f8 | tr '\n' ' ')"
+  echo "$h.$RENTSYNC_DOMAIN -> ${ip:-not resolving yet}"
+done
 ```
+
+Each line should show the IP from the matching workspace output. `not resolving yet` means the
+record is missing or hasn't propagated; new records usually appear within minutes.
 
 **Switching to production certificates**: hosts first come up with `acme_ca` pointing at the
 Let's Encrypt staging endpoint. That avoids rate limits while DNS propagates, but its
@@ -315,8 +373,9 @@ the Elastic IPs survive host replacement.
 
 ## First deploy
 
-This assumes Bootstrap and DNS are done, **including the switch to Let's Encrypt production
-certificates** (§DNS), so every workspace has been applied with the production `acme_ca`. The
+This assumes Bootstrap, First apply and DNS are done, **including the switch to Let's Encrypt
+production certificates** (§DNS), so every workspace has been applied with the production
+`acme_ca`. The
 Deploy workflow's final check verifies the certificate from the internet, and a staging-CA
 certificate fails it. Switching before the first deploy is also free, because the hosts it
 replaces hold no data yet.

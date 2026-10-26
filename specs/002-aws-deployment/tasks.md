@@ -632,7 +632,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 
 - [ ] T053 [US1] **🧑 OPERATOR**: perform runbook §Bootstrap. Record the elapsed time in
   `docs/ai-build-log.md`, against FR-006's one-hour limit.
-- [ ] T054 [US1] **🧑 OPERATOR**: apply `rentsync-shared-us` (confirm), then
+- [ ] T054 [US1] **🧑 OPERATOR** (runbook §First apply): apply `rentsync-shared-us` (confirm), then
   `rentsync-dev-staging`, then `rentsync-prod-us` (confirm), with `acme_ca` set to the Let's
   Encrypt staging endpoint. Then rerun `bootstrap-github.sh` with `--ecr-repository-url` (runbook §Bootstrap step 3), and add the A records (runbook §DNS; the workspace outputs
   are the record of the IPs). Record the elapsed time from the first apply to three hosts
