@@ -2,8 +2,8 @@
 
 **Feature**: `002-aws-deployment`
 
-This guide proves the feature end to end. The step-by-step operator procedures, with click
-paths, live in `docs/deploy/runbook.md`, written during implementation. This guide lists what
+This guide proves the feature end to end. The step-by-step operator procedures, run as plan-by-default bootstrap
+scripts, live in `docs/deploy/runbook.md`, written during implementation. This guide lists what
 to run and what to expect, and points to the contracts for details.
 
 ## Prerequisites
@@ -39,8 +39,8 @@ Follow runbook §Bootstrap:
 2. Create the HCP project, the variable set and the three workspaces, with remote state sharing
    from `rentsync-shared-us` to the two environment workspaces.
 3. Enter the variables from
-   [contracts/workspace-variables.md](contracts/workspace-variables.md). Generate `admin_token`
-   per environment with `openssl rand -hex 32`.
+   [contracts/workspace-variables.md](contracts/workspace-variables.md). The script generates
+   `admin_token` per environment.
 4. Create the GitHub variables and the `dev-staging` and `prod-us` Environments (named by DeploymentId).
 5. Activate `DeploymentId` as a cost allocation tag in Billing (it becomes selectable about a day after the first apply).
 

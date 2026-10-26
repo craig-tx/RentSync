@@ -349,3 +349,40 @@ T054.
 
 **Next task:** T053. The operator runs `bootstrap-hcp.rb` (plan, then `--apply`) on `main`, then
 runbook step 8 and T054.
+
+### 2026-10-25 (later still): GitHub bootstrap script, script-only runbook
+
+- **`infra/bootstrap/bootstrap-github.sh` (T052c):** the GitHub part of the bootstrap, through
+  `gh api`. It sets:
+  - the repository variables;
+  - both Environments, restricted to `main`;
+  - each Environment's `SITE_URL`, and the prod-us `AWS_ROLE_ARN` override;
+  - secret scanning and push protection.
+
+  It also has `--ecr-repository-url` (after T054) and `--prod-reviewer` (T074). It plans by
+  default and builds the role ARNs from `--aws-account`.
+  - **Reruns:** a differing value is set again, and an extra deployment branch is removed.
+  - **Reviewers:** an existing reviewer is carried into every Environment update, so a rerun
+    never removes one.
+  - **Test:** `bootstrap_github_test.sh`. A stub `gh` serves JSON files through real `jq`, so the
+    script's `--jq` expressions are exercised. Mutation-checked: plan-mode writes, dropped
+    reviewers, and an unremoved extra branch are each caught.
+  - **Live check:** a read-only plan against the real repository listed exactly the six
+    variables and nothing else. The operator had asked for those six (set by hand earlier with
+    `gh`) to be deleted so the script could set them; they were deleted with `gh variable delete`.
+- **Script-only runbook (T052d):** at the operator's request, §Bootstrap no longer has console
+  click paths. It has five steps: `bootstrap-iam.sh` (CloudShell), the AMI lookup (AWS CLI),
+  `bootstrap-hcp.rb` (PowerShell), `bootstrap-github.sh` (Git Bash), and the cost allocation tag
+  (`aws ce update-cost-allocation-tags-status`, about a day after the first apply). Known
+  failures are in "If a step fails". The workspace-variable tables now live only in
+  contracts/workspace-variables.md.
+  - `bootstrap-iam.sh --render-only` existed only for the console path and was removed. Its tests
+    now run through plan mode, with the AWS account ID coming from a stubbed STS.
+  - spec.md (Bootstrap), contracts/bootstrap-iam.md and quickstart §1 no longer describe a
+    click-through console runbook. T054 and T074 now point at the GitHub script.
+
+**Next task:** T053. The operator runs, from `main`:
+- `bootstrap-hcp.rb` (plan, then `--apply`);
+- `bootstrap-github.sh --aws-account … --apply`;
+
+then T054.

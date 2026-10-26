@@ -288,7 +288,7 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 - **Host sizing:** small general-purpose instances are enough for the mock PMS at demo volumes. The exact instance types are a plan decision, within the SC-009 cost ceiling.
 - **Managed cache rejected:** ElastiCache (about $6–9.50 per environment per month) was considered as the one managed service and rejected on cost. Redis stays a container on each environment host and is listed under FR-036.
 - **Public subnet:** hosts sit in a public subnet with public addresses, so no NAT gateway is needed. That is deliberate and documented under FR-036.
-- **Bootstrap (FR-006):** a **short console runbook**, clicked through by the operator in the AWS console and the HCP Terraform UI. It creates:
+- **Bootstrap (FR-006):** a **scripted, plan-by-default bootstrap** that the operator runs (AWS CloudShell for AWS, their own machine for HCP Terraform and GitHub); each script prints a plan and changes nothing until rerun with `--apply`. It creates:
   - the OIDC trust between HCP Terraform and AWS, with its IAM role;
   - the GitHub Actions role for pushing images;
   - the workspaces;

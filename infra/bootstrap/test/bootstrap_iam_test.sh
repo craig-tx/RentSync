@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Test for bootstrap-iam.sh (runbook §Bootstrap). A stub `aws` on PATH simulates IAM, STS and
 # Access Analyzer and logs every call, so no cloud access is needed. Proves:
-#   1. --render-only fills every <aws-account-id> placeholder and makes no AWS call;
+#   1. the render fills every <aws-account-id> placeholder with the AWS account ID from STS;
 #      every GitHub trust uses the repository's immutable subject format;
-#   2. a bad AWS account ID, or a placeholder left in a source file, fails the render;
+#   2. a bad AWS account ID, or a placeholder left in a source file, fails before any change;
 #   3. the default (plan) mode makes no mutating call;
 #   4. --apply on an empty AWS account creates both providers and all four policies and roles;
 #   5. --apply on a half-done AWS account skips what exists and never re-creates it;
@@ -19,13 +19,14 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 mkdir -p "$work/bin"
 # Stub state: $EXISTING lists "oidc:<host>", "policy:<name>" and "role:<name>" entries;
 # $FINDING names a rendered file on which validate-policy reports an ERROR.
+# $STS_ACCOUNT overrides the AWS account ID that STS reports.
 cat > "$work/bin/aws" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >> "$AWS_LOG"
 has() { case " ${EXISTING:-} " in *" $1 "*) return 0 ;; esac; return 1; }
 arg() { local want="$1"; shift; while [ $# -gt 1 ]; do [ "$1" = "$want" ] && { echo "$2"; return; }; shift; done; }
 case "$1 $2" in
-  "sts get-caller-identity") echo 123456789012 ;;
+  "sts get-caller-identity") echo "${STS_ACCOUNT:-123456789012}" ;;
   "accessanalyzer validate-policy")
     if [ -n "${FINDING:-}" ] && [[ "$(arg --policy-document "$@")" == *"/$FINDING" ]]; then
       printf 'ERROR\tMALFORMED_ARN\tThe ARN is malformed.\n'
@@ -53,13 +54,12 @@ run() { : > "$AWS_LOG"; PATH="$work/bin:$PATH" RENTSYNC_IAM_OUT="$work/out" bash
 mutations() { grep -cE '^iam (create|update|attach|add)-' "$AWS_LOG" || true; }
 calls() { grep -c "^iam $1 " "$AWS_LOG" || true; }
 
-# 1. Render only.
-run --render-only 123456789012 > /dev/null || fail "--render-only failed"
+# 1. The render, with the AWS account ID read from STS.
+EXISTING="" run > /dev/null || fail "plan failed"
 [ "$(find "$work/out" -name '*.json' | wc -l)" -eq 8 ] || fail "expected 8 rendered files"
 if grep -l '<aws-account-id>' "$work/out"/*.json; then fail "a placeholder survived the render"; fi
 grep -q 'arn:aws:iam::123456789012:oidc-provider/app.terraform.io' "$work/out/hcp-terraform-trust.json" \
   || fail "trust policy lacks the AWS account ID"
-[ ! -s "$AWS_LOG" ] || fail "--render-only called aws"
 # The repository's tokens carry immutable subjects (contracts/bootstrap-iam.md); a trust in the
 # older repo:craig-tx/RentSync: form would never match.
 for f in "$work/out"/github-*-trust.json; do
@@ -68,13 +68,15 @@ for f in "$work/out"/github-*-trust.json; do
 done
 
 # 2. Bad input.
-if run --render-only 12345 > /dev/null 2>&1; then fail "accepted a short AWS account ID"; fi
+if STS_ACCOUNT=12345 run > /dev/null 2>&1; then fail "accepted a short AWS account ID"; fi
+if run --render-only 123456789012 > /dev/null 2>&1; then fail "accepted the removed --render-only"; fi
 mkdir -p "$work/src"
 cp "$here/../../../docs/deploy/iam"/*.json "$work/src/"
 sed -i 's/us-east-1/<region>/' "$work/src/hcp-terraform-policy.json"
-if RENTSYNC_IAM_SRC="$work/src" run --render-only 123456789012 > /dev/null 2>&1; then
+if RENTSYNC_IAM_SRC="$work/src" run --apply > /dev/null 2>&1; then
   fail "a leftover <region> placeholder did not fail the render"
 fi
+[ "$(mutations)" -eq 0 ] || fail "a failed render still made changes"
 
 # 3. Plan on an empty AWS account: lists every change, makes none.
 plan="$(EXISTING="" run)" || fail "plan failed"
