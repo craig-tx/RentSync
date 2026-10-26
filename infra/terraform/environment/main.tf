@@ -31,7 +31,7 @@ data "terraform_remote_state" "shared" {
   backend = "remote"
 
   config = {
-    organization = "craig-personal"
+    organization = var.hcp_organization
     workspaces = {
       name = var.shared_workspace
     }

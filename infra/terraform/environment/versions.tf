@@ -14,9 +14,10 @@ terraform {
     }
   }
 
+  # The organization comes from TF_CLOUD_ORGANIZATION: the rentsync-aws variable set provides it
+  # to every run (bootstrap-hcp.rb), and you export it for local commands. A cloud block can't
+  # read Terraform variables.
   cloud {
-    organization = "craig-personal"
-
     workspaces {
       project = "RentSync"
       tags    = ["rentsync-environment"]

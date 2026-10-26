@@ -14,7 +14,7 @@
         "ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart",
         "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage", "ecr:DescribeImages"
       ],
-      "Resource": "arn:aws:ecr:us-east-1:<aws-account-id>:repository/*/mock_pms"
+      "Resource": "arn:aws:ecr:<aws-region>:<aws-account-id>:repository/*/mock_pms"
     }
   ]
 }

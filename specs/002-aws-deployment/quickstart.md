@@ -9,9 +9,10 @@ to run and what to expect, and points to the contracts for details.
 ## Prerequisites
 
 - Feature 001 merged on `main`, with CI green.
-- An AWS account (`us-east-1`) and HCP Terraform organization `craig-personal`, both owned by
-  the operator.
-- Control of `rentsync.org` DNS at NameCheap.
+- An AWS account and an HCP Terraform organization, both owned by the operator, and a domain
+  whose DNS the operator controls. Their values are the deployment settings
+  (`.bootstrap/settings.env`, written by `bootstrap-init.sh`); `<domain>` below is that domain,
+  and commands assume `source .bootstrap/settings.env`.
 - Locally: `terraform` ≥ 1.11 (the repository uses 1.16.x), the AWS CLI v2 with the Session
   Manager plugin, `curl`, `jq` and `nmap`. AWS CLI access uses the operator's own console
   sign-in (`aws login` or SSO). No access keys.
@@ -34,6 +35,7 @@ docker compose exec mock_pms bundle exec rspec        # includes the /healthz ve
 
 Follow runbook §Bootstrap:
 
+0. Save the deployment settings with `bootstrap-init.sh`.
 1. Create the OIDC providers and the roles from
    [contracts/bootstrap-iam.md](contracts/bootstrap-iam.md).
 2. Create the HCP project, the variable set and the three workspaces, with remote state sharing
@@ -57,7 +59,7 @@ outputs (data-model §DNS record). Switch `acme_ca` to production and apply.
 **Expected**:
 
 - Three instances exist, each with an Elastic IP that matches its output.
-- `dig +short pms-staging.rentsync.org` returns the staging IP, and likewise for the other two
+- `dig +short "pms-staging.$RENTSYNC_DOMAIN"` returns the staging IP, and likewise for the other two
   records.
 - The HCP run logs mask every sensitive value. Searching the state files (download through the
   HCP UI) for the admin token finds nothing.
@@ -84,9 +86,9 @@ Push or merge a change to `main`. The `CI` workflow goes green, and then `releas
 and deploys to staging. On the first deploy, `bin/setup --deploy` seeds the database.
 
 ```bash
-curl -s https://pms-staging.rentsync.org/healthz | jq
-curl -sI http://pms-staging.rentsync.org/ | head -1         # 308 to https
-curl -s -o /dev/null -w '%{http_code}\n' https://pms-staging.rentsync.org/metrics   # 404
+curl -s "https://pms-staging.$RENTSYNC_DOMAIN/healthz" | jq
+curl -sI "http://pms-staging.$RENTSYNC_DOMAIN/" | head -1         # 308 to https
+curl -s -o /dev/null -w '%{http_code}\n' "https://pms-staging.$RENTSYNC_DOMAIN/metrics"   # 404
 ```
 
 **Expected**:
@@ -97,12 +99,12 @@ curl -s -o /dev/null -w '%{http_code}\n' https://pms-staging.rentsync.org/metric
 
 Approve the `deploy-prod-us` job in GitHub. **Expected**:
 
-- `https://pms.rentsync.org/healthz` reports the same SHA within 10 minutes.
+- `https://pms.<domain>/healthz` reports the same SHA within 10 minutes.
 - The build job ran once. Nothing was rebuilt.
 
 ## 4. Feature 001 checks on each environment (US2, SC-002)
 
-Run these once with `BASE=https://pms-staging.rentsync.org` and the staging `ADMIN_TOKEN`, then
+Run these once with `BASE="https://pms-staging.$RENTSYNC_DOMAIN"` and the staging `ADMIN_TOKEN`, then
 again for production.
 
 - **Public checks.** Run the 001 quickstart §3, §4, §8 (replay and idempotent scenarios) and
@@ -133,7 +135,7 @@ After the chaos checks, set every chaos rate back to 0 on both environments.
 
 ## 5. Telemetry (US3, SC-008)
 
-Open `https://telemetry.rentsync.org`. **Expected**: the OpenObserve sign-in page, over HTTPS,
+Open `https://telemetry.<domain>`. **Expected**: the OpenObserve sign-in page, over HTTPS,
 with no data visible before sign-in.
 
 Sign in, then run `tenant_move_out` on staging and on production.
@@ -204,11 +206,11 @@ gitleaks detect --source . --no-banner         # or GitHub secret scanning: zero
 ```bash
 # Every resource in the region, minus those tagged DeploymentId. Expect only AWS defaults
 # (the default VPC and its parts), and nothing named rentsync-*.
-aws resourcegroupstaggingapi get-resources --region us-east-1 \
+aws resourcegroupstaggingapi get-resources --region "$RENTSYNC_AWS_REGION" \
   --query 'ResourceTagMappingList[?!(Tags[?Key==`DeploymentId`])].ResourceARN'
 aws resourcegroupstaggingapi get-resources --tag-filters Key=DeploymentId,Values=prod-us \
   --query 'length(ResourceTagMappingList)'
-curl -s https://pms.rentsync.org/healthz | jq -r .deployment_id     # prod-us
+curl -s "https://pms.$RENTSYNC_DOMAIN/healthz" | jq -r .deployment_id     # prod-us
 ```
 
 Side-by-side check, with no apply needed:

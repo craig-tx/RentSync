@@ -7,6 +7,9 @@ mock_provider "aws" {
 }
 
 variables {
+  region                    = "us-east-1"
+  availability_zone         = "us-east-1a"
+  telemetry_hostname        = "telemetry.example.com"
   deployment_id             = "shared-us"
   ami_id                    = "ami-0123456789abcdef0"
   telemetry_private_ip      = "10.40.1.10"

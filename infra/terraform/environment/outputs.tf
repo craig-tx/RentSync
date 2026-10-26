@@ -1,5 +1,5 @@
 output "public_ip" {
-  description = "NameCheap A record for this deployment's hostname (runbook §DNS)."
+  description = "DNS A record for this deployment's hostname (runbook §DNS)."
   value       = module.host.public_ip
 }
 

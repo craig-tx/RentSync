@@ -9,7 +9,7 @@
       "Condition": {
         "StringEquals": { "app.terraform.io:aud": "aws.workload.identity" },
         "StringLike": {
-          "app.terraform.io:sub": "organization:craig-personal:project:RentSync:workspace:rentsync-*:run_phase:*"
+          "app.terraform.io:sub": "organization:<hcp-organization>:project:RentSync:workspace:rentsync-*:run_phase:*"
         }
       }
     }

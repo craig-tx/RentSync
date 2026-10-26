@@ -1,6 +1,8 @@
 # Contract: HCP Terraform workspace inputs and outputs
 
 All variables are workspace variables of category "terraform", unless they are marked env.
+Values in angle brackets come from the deployment settings (`bootstrap-init.sh`), and
+`bootstrap-hcp.rb` sets every variable that has no default.
 "Sensitive" means marked sensitive in HCP Terraform *and* declared `ephemeral = true` in
 Terraform, so the value never reaches state or plan files.
 
@@ -10,19 +12,20 @@ Terraform, so the value never reaches state or plan files.
 |---|---|---|---|
 | `TFC_AWS_PROVIDER_AUTH` | env | `true` | no |
 | `TFC_AWS_RUN_ROLE_ARN` | env | `arn:aws:iam::<aws-account-id>:role/rentsync-hcp-terraform` | no |
+| `TF_CLOUD_ORGANIZATION` | env | `<hcp-organization>`; the `cloud` blocks name no organization | no |
 
 ## `rentsync-shared-us` → `infra/terraform/shared`
 
 | Variable | Type | Default | Sensitive | Notes |
 |---|---|---|---|---|
 | `deployment_id` | string (validated, constitution VI) | — | no | `shared-us` |
-| `region` | string | `us-east-1` | no | |
+| `region` | string | — | no | AWS region, from the deployment settings |
 | `telemetry_private_ip` | string | — | no | `10.40.1.10`. Configuration, not hard-coded |
 | `vpc_cidr`, `subnet_cidr` | string | — | no | `10.40.0.0/16`, `10.40.1.0/24` |
-| `availability_zone` | string | `us-east-1a` | no | All hosts and volumes live here |
+| `availability_zone` | string | — | no | All hosts and volumes live here; from the settings |
 | `ami_id` | string | — | no | Pinned Amazon Linux 2023 arm64 AMI |
 | `telemetry_instance_type` | string | `t4g.small` | no | |
-| `telemetry_hostname` | string | `telemetry.rentsync.org` | no | |
+| `telemetry_hostname` | string | — | no | `telemetry.<domain>` |
 | `acme_email` | string | — | no | Let's Encrypt contact |
 | `acme_ca` | string | `https://acme-v02.api.letsencrypt.org/directory` | no | Set to the LE staging URL for first bring-up |
 | `openobserve_root_email` | string | — | no | UI sign-in user |
@@ -49,7 +52,9 @@ Terraform, so the value never reaches state or plan files.
 | `deployment_id` | string (validated, constitution VI) | `dev-staging` | `prod-us` | no |
 | `environment` | string (`staging`\|`production`) | `staging` | `production` | no |
 | `shared_workspace` | string | `rentsync-shared-us` | `rentsync-shared-us` | no |
-| `hostname` | string | `pms-staging.rentsync.org` | `pms.rentsync.org` | no |
+| `hcp_organization` | string | `<hcp-organization>` | `<hcp-organization>` | no |
+| `region` | string | the AWS region from the settings | the same | no |
+| `hostname` | string | `pms-staging.<domain>` | `pms.<domain>` | no |
 | `private_ip` | string | `10.40.1.20` | `10.40.1.30` | no |
 | `instance_type` | string | `t4g.small` | `t4g.small` | no |
 | `acme_email`, `acme_ca` | string | as for shared | as for shared | no |
@@ -72,9 +77,9 @@ deploy to it.
 | `AWS_BUILD_ROLE_ARN` | Actions variable | `arn:aws:iam::<aws-account-id>:role/rentsync-github-build` (the only role that can push images; trusted for `main` only) |
 | `AWS_ROLE_ARN` | Actions variable | `arn:aws:iam::<aws-account-id>:role/rentsync-github-actions` (non-production deploys; trusted for `environment:dev-staging` only) |
 | `ECR_REPOSITORY_URL` | Actions variable | shared output `ecr_repository_url` |
-| `AWS_REGION` | Actions variable | `us-east-1` |
-| `dev-staging` | Environment (named by DeploymentId) | no protection rules; branch `main` only; Environment variable `SITE_URL = https://pms-staging.rentsync.org` |
-| `prod-us` | Environment (named by DeploymentId) | required reviewer: the operator; branch `main` only; `SITE_URL = https://pms.rentsync.org`; `AWS_ROLE_ARN = arn:aws:iam::<aws-account-id>:role/rentsync-github-actions-prod` (overrides the repository variable) |
+| `AWS_REGION` | Actions variable | the AWS region from the settings |
+| `dev-staging` | Environment (named by DeploymentId) | no protection rules; branch `main` only; Environment variable `SITE_URL = https://pms-staging.<domain>` |
+| `prod-us` | Environment (named by DeploymentId) | required reviewer: the operator; branch `main` only; `SITE_URL = https://pms.<domain>`; `AWS_ROLE_ARN = arn:aws:iam::<aws-account-id>:role/rentsync-github-actions-prod` (overrides the repository variable) |
 
 None of these values are secrets. GitHub Actions authenticates to AWS through OIDC, so there is
 no access key anywhere.

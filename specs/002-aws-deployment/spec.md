@@ -35,6 +35,10 @@ Its users are:
 - Q: How is each standalone deployment identified, and what derives from that identifier? → A: Every deployment has a DeploymentId (constitution v1.2.0, Principle VI). Production is `prod-us`, staging is `dev-staging`, and the shared telemetry deployment is `shared-us`. Every name the deployment owns derives from it: AWS resource names, IAM roles, parameter paths and database names. It is also the `DeploymentId` tag on every AWS resource and the `deployment.id` attribute on all telemetry. Deployments must be able to run side by side in the same AWS account.
 - Q: Should the cache use a managed service (ElastiCache) instead of a container? → A: No. It is too expensive for the cost ceiling, so Redis stays a container on each environment host.
 
+### Session 2026-10-25
+
+- Q: Is the deployment tied to one operator's domain and accounts? → A: No. The domain, DNS provider, AWS account, AWS region and zone, HCP Terraform organization, GitHub repository and contact emails are per-operator **deployment settings**. `bootstrap-init.sh` asks for them and writes them to a gitignored file that the other bootstrap scripts read; the repository holds only placeholders. Input (4) describes the reference deployment: `rentsync.org`, with DNS at NameCheap.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Provision both environments and shared telemetry from code (Priority: P1)
@@ -57,7 +61,7 @@ The operator starts from an empty AWS account and an HCP Terraform organization.
 
 ### User Story 2 - The mock PMS works end to end on staging and production (Priority: P1)
 
-An integration client uses the deployed mock PMS just as it used the local one: it registers, completes the OAuth approval, pages through data, receives signed webhooks, hits the rate limit, and observes chaos when it is turned on. This works on both `https://pms-staging.rentsync.org` and `https://pms.rentsync.org`.
+An integration client uses the deployed mock PMS just as it used the local one: it registers, completes the OAuth approval, pages through data, receives signed webhooks, hits the rate limit, and observes chaos when it is turned on. This works on both `https://pms-staging.<domain>` and `https://pms.<domain>`.
 
 **Why this priority**: The whole point of this feature is a real, reachable PMS. Infrastructure without a working service delivers nothing.
 
@@ -75,7 +79,7 @@ An integration client uses the deployed mock PMS just as it used the local one: 
 
 ### User Story 3 - See both environments' telemetry in one place (Priority: P2)
 
-The operator opens `https://telemetry.rentsync.org`, signs in, and sees logs and metrics from both environments. Each record is labelled with its environment, so the operator can filter to one environment or follow one request across services by its correlation ID.
+The operator opens `https://telemetry.<domain>`, signs in, and sees logs and metrics from both environments. Each record is labelled with its environment, so the operator can filter to one environment or follow one request across services by its correlation ID.
 
 **Why this priority**: The constitution requires observability everywhere. A single shared backend keeps this affordable, and diagnosing anything on the deployed environments depends on it.
 
@@ -129,7 +133,7 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 
 ### Edge Cases
 
-- **DNS not yet pointed:** before the NameCheap records resolve to a host, that host cannot obtain a certificate. It must keep retrying without hitting the certificate authority's rate limits, and become healthy once DNS resolves.
+- **DNS not yet pointed:** before the DNS records resolve to a host, that host cannot obtain a certificate. It must keep retrying without hitting the certificate authority's rate limits, and become healthy once DNS resolves.
 - **Certificate renewal:** certificates renew automatically before they expire, with no operator action and no downtime.
 - **Secrets rotation:** after the operator changes a sensitive variable (for example the admin token), the next apply and release take the new value. The old value stops working, and no secret appears in plan or apply logs.
 - **Partial apply failure:** a failed run leaves the infrastructure in a state that a re-run converges, without duplicate resources or orphaned public addresses.
@@ -168,20 +172,20 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 **Services on each environment host**
 
 - **FR-013**: Each environment host MUST run the complete mock PMS stack from feature 001 as containers: the web service, the delivery worker, its database, its cache, and the telemetry collector. A TLS-terminating reverse proxy MUST sit in front of the web service.
-- **FR-014**: Each environment MUST be reachable at its own hostname under rentsync.org over HTTPS, with a publicly trusted certificate obtained and renewed automatically. Plain HTTP MUST redirect to HTTPS.
+- **FR-014**: Each environment MUST be reachable at its own hostname under the deployment's domain over HTTPS, with a publicly trusted certificate obtained and renewed automatically. Plain HTTP MUST redirect to HTTPS.
 - **FR-015**: Staging and production MUST share no application data. Each MUST have its own database, cache, clients, grants and secrets.
 - **FR-016**: Each environment's telemetry MUST carry `deployment.environment` set to `staging` or `production`, and `deployment.id` set to its DeploymentId (FR-038). It MUST be sent to the shared telemetry host. All of feature 001's telemetry requirements (Constitution VI) MUST continue to hold.
 - **FR-017**: Every feature 001 behavior MUST work identically on both environments. The feature 001 quickstart checks (§3–§9) are the acceptance test, run against the public URLs.
 
 **Shared telemetry host**
 
-- **FR-018**: The telemetry host MUST run the telemetry backend (OpenObserve) with its own metadata database, both as containers. A TLS-terminating reverse proxy MUST serve its UI at its own rentsync.org hostname.
+- **FR-018**: The telemetry host MUST run the telemetry backend (OpenObserve) with its own metadata database, both as containers. A TLS-terminating reverse proxy MUST serve its UI at its own hostname under the deployment's domain.
 - **FR-019**: The telemetry UI MUST require sign-in, and its credentials MUST come from the secret store.
 - **FR-020**: Telemetry data MUST be stored on durable storage that survives the host being replaced, as FR-031 specifies.
 
 **DNS**
 
-- **FR-021**: DNS records MUST NOT be managed by the infrastructure code. They are created by hand at NameCheap. The runbook MUST list the exact records (hostname to public IP), which the infrastructure code outputs after apply.
+- **FR-021**: DNS records MUST NOT be managed by the infrastructure code. They are created by hand at the operator's DNS provider. The runbook MUST list the exact records (hostname to public IP), which the infrastructure code outputs after apply.
 
 **Secrets**
 
@@ -258,7 +262,7 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 - **Secret**: a named sensitive value. It belongs to one environment or to the shared telemetry host, is stored encrypted, and is delivered to the host that needs it.
 - **Release**: an immutable image identified by its source commit. It records where it has been deployed and when, and whether it was promoted.
 - **Backup**: a point-in-time copy of an environment's or the telemetry host's durable data, with a creation time and an expiry.
-- **DNS record**: a hostname under rentsync.org mapped to a host's public address. It is created by hand at NameCheap from the infrastructure outputs.
+- **DNS record**: a hostname under the deployment's domain mapped to a host's public address. It is created by hand at the DNS provider from the infrastructure outputs.
 
 ## Success Criteria *(mandatory)*
 
@@ -279,12 +283,11 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 ## Assumptions
 
 - **Feature numbering:** this is feature 002. The kickoff roadmap's "connection and webhook ingestion" feature becomes 003, and later features shift by one. The kickoff's later infrastructure feature (formerly 007) extends this deployment to the other RentSync services.
-- **Hostnames**, each an A record at NameCheap pointing at that host's Elastic IP:
-  - staging: `pms-staging.rentsync.org`;
-  - production: `pms.rentsync.org`;
-  - telemetry: `telemetry.rentsync.org`.
-- **Region and account:** a single AWS account in `us-east-1` (the operator's choice). The region is a variable, set before the first apply.
-- **HCP Terraform organization:** `craig-personal`.
+- **Hostnames**, each an A record at the DNS provider pointing at that host's Elastic IP:
+  - staging: `pms-staging.<domain>`;
+  - production: `pms.<domain>`;
+  - telemetry: `telemetry.<domain>`.
+- **Deployment settings:** the domain, a single AWS account with its region and zone, the HCP Terraform organization and the GitHub repository are the operator's choice. They are set once in `.bootstrap/settings.env` (gitignored) and never committed (Session 2026-10-25). The reference deployment uses `rentsync.org` in `us-east-1`.
 - **Host sizing:** small general-purpose instances are enough for the mock PMS at demo volumes. The exact instance types are a plan decision, within the SC-009 cost ceiling.
 - **Managed cache rejected:** ElastiCache (about $6–9.50 per environment per month) was considered as the one managed service and rejected on cost. Redis stays a container on each environment host and is listed under FR-036.
 - **Public subnet:** hosts sit in a public subnet with public addresses, so no NAT gateway is needed. That is deliberate and documented under FR-036.
@@ -312,4 +315,4 @@ A host is lost or must be replaced: it is terminated by accident, its disk image
 - **Dependencies:**
   - feature 001, merged on `main`: the mock PMS, its image, Compose stack, Collector config and quickstart;
   - an HCP Terraform organization and an AWS account owned by the operator;
-  - control of the rentsync.org DNS at NameCheap.
+  - a domain whose DNS the operator controls.

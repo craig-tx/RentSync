@@ -386,3 +386,121 @@ runbook step 8 and T054.
 - `bootstrap-github.sh --aws-account … --apply`;
 
 then T054.
+
+### 2026-10-25 (last): operator-neutral deployment (T052e)
+
+- **Operator's decisions:**
+  - make both the runbook and the code generic;
+  - include the AWS region;
+  - ship placeholders only;
+  - add an interactive first script that saves the settings to an uncommitted file the other
+    scripts read.
+
+  Spec Session 2026-10-25 records this. Input (4) now describes the reference deployment.
+- **`bootstrap-init.sh` (step 0):** asks for each setting and writes `.bootstrap/settings.env`
+  as `RENTSYNC_KEY='value'` lines.
+  - **Settings:** AWS account, region and zone; HCP Terraform organization; GitHub repository;
+    domain; the three emails; and the AMI, which can stay blank.
+  - **Validation:** every answer is checked by regex and asked again if wrong.
+  - **OIDC subject:** reads the repository's subject prefix from
+    `actions/oidc/customization/sub`, rather than assuming a format, and refuses custom
+    templates.
+  - **CloudShell:** prints a paste block that clones the repository and writes only the four
+    settings step 1 needs.
+  - **Loading:** `settings.sh` (bash) and `HcpBootstrap.load_settings` (Ruby) read the file as
+    data; neither executes it.
+- **Scripts:**
+  - **IAM:** fills `<aws-region>`, `<hcp-organization>` and `<github-subject>` too, and stops if
+    CloudShell is signed in to an AWS account other than the one the settings name.
+  - **HCP:** takes the organization, repository, domain, region and zone from settings. It adds
+    `TF_CLOUD_ORGANIZATION` to the variable set, `region`, `availability_zone` and
+    `telemetry_hostname` to shared-us, and `region` and `hcp_organization` to the environments.
+  - **GitHub:** takes the repository, region, domain and AWS account from settings.
+  - **Flags:** existing flags still override the settings.
+- **Terraform:**
+  - the `cloud` blocks no longer name an organization (`TF_CLOUD_ORGANIZATION`);
+  - the remote state uses `var.hcp_organization`;
+  - `region`, `availability_zone` and `telemetry_hostname` lose their defaults;
+  - the tests pass them explicitly.
+- **Docs:**
+  - the runbook, contracts and quickstart use `<domain>` and `$RENTSYNC_…`;
+  - the DNS section is provider-neutral, and the recorded-IP table is gone (the outputs are the
+    record);
+  - the Git Bash note covers both PowerShell and Command Prompt;
+  - the README keeps the reference URLs, labeled as such.
+
+  plan.md, research.md, data-model.md and completed task text keep the reference values as
+  design history.
+- **Reference deployment unchanged (merge gate):**
+  - **IAM:** the new templates, rendered with the reference values, are byte-identical to the
+    old render.
+  - **HCP:** a live read-only plan with those values listed exactly 8 additions, each equal to
+    the old default.
+  - **GitHub:** a live read-only plan showed no changes.
+- **Tests:**
+  - new `bootstrap_init_test.sh`, mutation-checked: a dropped validation and leaked CloudShell
+    keys are each caught;
+  - the IAM, GitHub and HCP tests now use a non-reference deployment (eu-west-2, example
+    org/repo/domain, classic subject format);
+  - HCP gained a settings-loader test and an upgrade test (only the new variables are added);
+  - HCP: 10 runs, 131 assertions; all shell tests pass; shellcheck 0.11 is clean; Terraform
+    7, 12 and 2 tests pass.
+
+**Next task:** before merging this PR, the operator runs `bootstrap-init.sh`, then
+`bootstrap-hcp.rb --apply`, which adds the 8 variables. The PR's HCP Terraform speculative plans
+must then pass with no changes, which also proves that a `cloud` block without `organization`
+works. Then merge, and continue T053/T054.
+
+### 2026-10-25 (closing): reversible bootstrap (constitution v1.4.0, T052f)
+
+- **Constitution v1.4.0 (MINOR):** new "Reversible bootstrap" rule in Development Workflow &
+  Quality Gates, at the operator's request so they can rerun the bootstrap from a blank slate.
+  - Everything the bootstrap provisions must be removable by a teardown, and every step ships
+    with its own.
+  - The teardown lists what it will delete, warns that the deletion is permanent, and deletes
+    only after a correct answer to a sum typed at an interactive terminal.
+  - It refuses while infrastructure depends on its targets. It removes only what the bootstrap
+    created, and leaves security protections on.
+
+  The Sync Impact Report is in the file for review and must be removed before merge.
+- **`--teardown` on all three scripts:**
+  - **Shared confirmation:** `confirm_teardown` (bash, in `settings.sh`) and
+    `HcpBootstrap.confirm_teardown` (Ruby). `RENTSYNC_TEARDOWN_NUMBERS` fixes the sum for tests;
+    the terminal check still applies.
+  - **IAM:**
+    - targets the four roles and policies by exact name. Terraform's own `rentsync-*` roles share
+      the prefix, so there is no glob;
+    - order: detach, delete inline policies, delete the role; then old policy versions, then the
+      policy;
+    - refuses if a policy is attached elsewhere, or if tagged instances or volumes exist (EC2 and
+      EBS, not the tagging API, which lags);
+    - deletes only providers tagged `rentsync:bootstrap=true`, which the bootstrap now adds on
+      create. The operator's current providers were adopted, so teardown keeps them and prints
+      the delete command;
+    - deactivates the cost allocation tag.
+  - **HCP Terraform:**
+    - refuses on any resource count or lock;
+    - deletes workspaces through safe-delete, then the variable set, then the project, unless the
+      project holds other workspaces.
+  - **GitHub:** deletes the variables and Environments, and keeps secret scanning.
+- **Tests:**
+  - the shell tests drive the confirmation through `script -qec`, so the terminal path really
+    runs;
+  - the no-terminal case pipes the *correct* answer, so only the terminal check can refuse it;
+  - mutation-checked: dropping the terminal check fails both shell tests, and skipping the
+    confirmation fails the HCP Terraform test. The first version of the GitHub test missed the
+    terminal mutation, which is why the no-terminal case was strengthened;
+  - HCP Terraform: 15 runs, 170 assertions.
+- **Live, read-only:** the GitHub and HCP Terraform teardowns, run without a terminal, listed
+  exactly the live variables, Environments, workspaces, variable set and project, then refused.
+- **Also:** the CloudShell settings block now works on an existing clone; it had failed on the
+  operator's CloudShell. HCP Terraform ran no speculative plans for PR #5 (no runs on any
+  workspace), so its green check proved nothing. The `cloud` block without `organization` will be
+  proven by a CLI-driven speculative plan after the re-bootstrap.
+
+**Next task:** the operator reviews PR #5. Before merge: remove the v1.4.0 Sync Impact Report.
+Then, for the blank slate:
+1. Teardown in order: GitHub, HCP Terraform, then IAM in CloudShell.
+2. Optionally delete the two adopted OIDC providers.
+3. Rerun §Bootstrap from step 0.
+4. Run the CLI speculative plan check, then continue with T054.

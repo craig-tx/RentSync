@@ -6,7 +6,7 @@
       "Effect": "Allow",
       "Action": "ec2:*",
       "Resource": "*",
-      "Condition": { "StringEquals": { "aws:RequestedRegion": "us-east-1" } }
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "<aws-region>" } }
     },
     {
       "Sid": "RentSyncRolesAndProfiles",
@@ -39,7 +39,7 @@
         "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters", "ssm:DeleteParameter", "ssm:DeleteParameters",
         "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:ListTagsForResource"
       ],
-      "Resource": "arn:aws:ssm:us-east-1:<aws-account-id>:parameter/rentsync/*"
+      "Resource": "arn:aws:ssm:<aws-region>:<aws-account-id>:parameter/rentsync/*"
     },
     {
       "Sid": "DescribeParameters",
@@ -51,7 +51,7 @@
       "Sid": "Repositories",
       "Effect": "Allow",
       "Action": "ecr:*",
-      "Resource": "arn:aws:ecr:us-east-1:<aws-account-id>:repository/*"
+      "Resource": "arn:aws:ecr:<aws-region>:<aws-account-id>:repository/*"
     },
     {
       "Sid": "RegistryAuth",

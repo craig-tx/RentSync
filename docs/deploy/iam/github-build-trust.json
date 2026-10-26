@@ -9,7 +9,7 @@
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:craig-tx@16706018/RentSync@1427164274:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub": "<github-subject>:ref:refs/heads/main"
         }
       }
     }

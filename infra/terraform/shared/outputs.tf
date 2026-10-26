@@ -38,7 +38,7 @@ output "ingest_ssm_path" {
 }
 
 output "telemetry_public_ip" {
-  description = "NameCheap A record for the telemetry hostname (runbook §DNS)."
+  description = "DNS A record for the telemetry hostname (runbook §DNS)."
   value       = module.telemetry_host.public_ip
 }
 

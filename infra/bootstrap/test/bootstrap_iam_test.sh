@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Test for bootstrap-iam.sh (runbook §Bootstrap). A stub `aws` on PATH simulates IAM, STS and
 # Access Analyzer and logs every call, so no cloud access is needed. Proves:
-#   1. the render fills every <aws-account-id> placeholder with the AWS account ID from STS;
-#      every GitHub trust uses the repository's immutable subject format;
-#   2. a bad AWS account ID, or a placeholder left in a source file, fails before any change;
+#   1. the render fills every placeholder from the settings file, for any deployment;
+#      every GitHub trust uses the subject prefix GitHub reported, whatever its format;
+#   2. a bad or mismatched AWS account ID, a missing settings file, or a placeholder left in a
+#      source file, fails before any change;
 #   3. the default (plan) mode makes no mutating call;
 #   4. --apply on an empty AWS account creates both providers and all four policies and roles;
 #   5. --apply on a half-done AWS account skips what exists and never re-creates it;
-#   6. an Access Analyzer ERROR stops the run before any change.
+#   6. an Access Analyzer ERROR stops the run before any change;
+#   7. --teardown (at a terminal, after the sum) deletes exactly the bootstrap's roles, policies
+#      and tagged providers, keeps adopted ones, and refuses on a wrong answer, no terminal,
+#      live infrastructure or a shared policy.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -44,37 +48,64 @@ case "$1 $2" in
     has "policy:$(arg --policy-arn "$@" | sed 's|.*/||')" || { echo "An error occurred (NoSuchEntity)" >&2; exit 254; } ;;
   "iam get-role")
     has "role:$(arg --role-name "$@")" || { echo "An error occurred (NoSuchEntity)" >&2; exit 254; } ;;
+  # Teardown reads. A role has its own policy attached plus one inline policy; a policy has one
+  # old version; $SHARED_POLICY attaches rentsync-github-build to a user as well.
+  "iam list-attached-role-policies") echo "arn:aws:iam::123456789012:policy/$(arg --role-name "$@")" ;;
+  "iam list-role-policies") echo "inline-extra" ;;
+  "iam list-entities-for-policy")
+    name="$(arg --policy-arn "$@" | sed 's|.*/||')"
+    printf '%s' "$name"; [ -n "${SHARED_POLICY:-}" ] && [ "$name" = rentsync-github-build ] && printf '\tsomeone'; echo ;;
+  "iam list-policy-versions") echo v1 ;;
+  "iam list-open-id-connect-provider-tags")
+    case " ${TAGGED:-} " in *" $(arg --open-id-connect-provider-arn "$@" | sed 's|.*/||') "*) echo true ;; *) echo ;; esac ;;
+  "ec2 describe-instances") echo "${INSTANCES:-}" ;;
+  "ec2 describe-volumes") echo "${VOLUMES:-}" ;;
+  "ce list-cost-allocation-tags") echo "${COST_TAG:-None}" ;;
   *) ;;
 esac
 STUB
 chmod +x "$work/bin/aws"
 
-export AWS_LOG="$work/aws.log"
+# A deployment that is not the reference one, in a region other than us-east-1, with the
+# classic (mutable) GitHub subject format.
+SUBJECT="repo:example-owner/example-app"
+cat > "$work/settings.env" <<EOF
+RENTSYNC_AWS_ACCOUNT_ID='123456789012'
+RENTSYNC_AWS_REGION='eu-west-2'
+RENTSYNC_HCP_ORG='example-org'
+RENTSYNC_GITHUB_SUBJECT='$SUBJECT'
+EOF
+
+export AWS_LOG="$work/aws.log" RENTSYNC_SETTINGS="$work/settings.env"
 run() { : > "$AWS_LOG"; PATH="$work/bin:$PATH" RENTSYNC_IAM_OUT="$work/out" bash "$script" "$@"; }
 mutations() { grep -cE '^iam (create|update|attach|add)-' "$AWS_LOG" || true; }
 calls() { grep -c "^iam $1 " "$AWS_LOG" || true; }
 
-# 1. The render, with the AWS account ID read from STS.
+# 1. The render fills every placeholder from the settings.
 EXISTING="" run > /dev/null || fail "plan failed"
 [ "$(find "$work/out" -name '*.json' | wc -l)" -eq 8 ] || fail "expected 8 rendered files"
-if grep -l '<aws-account-id>' "$work/out"/*.json; then fail "a placeholder survived the render"; fi
+if grep -l '<[a-z-]*>' "$work/out"/*.json; then fail "a placeholder survived the render"; fi
 grep -q 'arn:aws:iam::123456789012:oidc-provider/app.terraform.io' "$work/out/hcp-terraform-trust.json" \
   || fail "trust policy lacks the AWS account ID"
-# The repository's tokens carry immutable subjects (contracts/bootstrap-iam.md); a trust in the
-# older repo:craig-tx/RentSync: form would never match.
+grep -q '"aws:RequestedRegion": "eu-west-2"' "$work/out/hcp-terraform-policy.json" || fail "region not filled in"
+grep -q '"organization:example-org:project:RentSync:' "$work/out/hcp-terraform-trust.json" || fail "HCP Terraform organization not filled in"
+# Each GitHub trust matches the subject prefix GitHub reported (contracts/bootstrap-iam.md).
 for f in "$work/out"/github-*-trust.json; do
-  grep -q '"repo:craig-tx@16706018/RentSync@1427164274:' "$f" || fail "$(basename "$f") lacks the immutable subject"
-  if grep -q 'repo:craig-tx/RentSync:' "$f"; then fail "$(basename "$f") uses the old subject format"; fi
+  grep -q "\"$SUBJECT:" "$f" || fail "$(basename "$f") lacks the settings' GitHub subject"
 done
+if grep -rqE 'craig|us-east-1' "$work/out"; then fail "a reference-deployment value is hard-coded in a template"; fi
 
 # 2. Bad input.
 if STS_ACCOUNT=12345 run > /dev/null 2>&1; then fail "accepted a short AWS account ID"; fi
+if STS_ACCOUNT=999999999999 run > /dev/null 2>&1; then fail "ran against an AWS account the settings don't name"; fi
+if RENTSYNC_SETTINGS="$work/missing.env" run > "$work/err" 2>&1; then fail "ran without a settings file"; fi
+grep -q 'bootstrap-init.sh' "$work/err" || fail "a missing settings file did not point at bootstrap-init.sh"
 if run --render-only 123456789012 > /dev/null 2>&1; then fail "accepted the removed --render-only"; fi
 mkdir -p "$work/src"
 cp "$here/../../../docs/deploy/iam"/*.json "$work/src/"
-sed -i 's/us-east-1/<region>/' "$work/src/hcp-terraform-policy.json"
+sed -i 's/RentSync/<project>/' "$work/src/hcp-terraform-trust.json"
 if RENTSYNC_IAM_SRC="$work/src" run --apply > /dev/null 2>&1; then
-  fail "a leftover <region> placeholder did not fail the render"
+  fail "a leftover <project> placeholder did not fail the render"
 fi
 [ "$(mutations)" -eq 0 ] || fail "a failed render still made changes"
 
@@ -113,5 +144,54 @@ if FINDING=hcp-terraform-policy.json EXISTING="" run --apply > "$work/err.out" 2
 fi
 grep -q MALFORMED_ARN "$work/err.out" || fail "the finding was not shown"
 [ "$(mutations)" -eq 0 ] || fail "a change was made despite an Access Analyzer ERROR"
+
+# 7. Providers the bootstrap creates are tagged, so teardown can tell them from adopted ones.
+EXISTING="" run --apply > /dev/null || fail "apply failed"
+[ "$(grep -c 'create-open-id-connect-provider .*--tags Key=rentsync:bootstrap,Value=true' "$AWS_LOG")" -eq 2 ] \
+  || fail "created providers are not tagged"
+
+# 8. Teardown. The answer goes through a real terminal (script(1)); the numbers are fixed at 3 + 4.
+deletes() { grep -cE '^(iam (delete|detach)-|ce update-)' "$AWS_LOG" || true; }
+teardown() { # answer; runs --teardown at a terminal
+  : > "$AWS_LOG"
+  printf '%s\n' "$1" | PATH="$work/bin:$PATH" RENTSYNC_IAM_OUT="$work/out" RENTSYNC_TEARDOWN_NUMBERS="3 4" \
+    script -qec "bash $script --teardown" /dev/null
+}
+all="oidc:app.terraform.io oidc:token.actions.githubusercontent.com"
+for s in hcp-terraform github-build github-actions github-actions-prod; do all="$all policy:rentsync-$s role:rentsync-$s"; done
+
+out="$(EXISTING="$all" TAGGED="app.terraform.io" COST_TAG=Active teardown 6 2>&1)" && fail "a wrong answer succeeded"
+[ "$(deletes)" -eq 0 ] || fail "a wrong answer deleted something"
+grep -q 'delete role rentsync-github-actions-prod' <<< "$out" || fail "the plan does not list the roles"
+grep -q 'permanently deletes' <<< "$out" || fail "no warning before the question"
+# The right answer arrives, but not from a terminal, so it must still be refused.
+if printf '7\n' | EXISTING="$all" RENTSYNC_TEARDOWN_NUMBERS="3 4" run --teardown > "$work/err" 2>&1; then fail "teardown without a terminal succeeded"; fi
+grep -q 'No interactive terminal' "$work/err" || fail "no-terminal refusal not explained"
+[ "$(deletes)" -eq 0 ] || fail "teardown without a terminal deleted something"
+
+out="$(EXISTING="$all" TAGGED="app.terraform.io" COST_TAG=Active teardown 7 2>&1)" || fail "teardown failed: $out"
+for s in hcp-terraform github-build github-actions github-actions-prod; do
+  grep -q "^iam detach-role-policy --role-name rentsync-$s " "$AWS_LOG" || fail "rentsync-$s not detached"
+  grep -q "^iam delete-role-policy --role-name rentsync-$s --policy-name inline-extra" "$AWS_LOG" || fail "rentsync-$s inline policy kept"
+  grep -q "^iam delete-role --role-name rentsync-$s$" "$AWS_LOG" || fail "role rentsync-$s not deleted"
+  grep -q "^iam delete-policy-version --policy-arn arn:aws:iam::123456789012:policy/rentsync-$s --version-id v1" "$AWS_LOG" \
+    || fail "old version of rentsync-$s not deleted"
+  grep -q "^iam delete-policy --policy-arn arn:aws:iam::123456789012:policy/rentsync-$s$" "$AWS_LOG" || fail "policy rentsync-$s not deleted"
+done
+# Roles go before their policies, and nothing but exact bootstrap names is touched.
+[ "$(grep -n '^iam delete-role --role-name rentsync-hcp-terraform' "$AWS_LOG" | cut -d: -f1)" -lt \
+  "$(grep -n '^iam delete-policy --policy-arn .*rentsync-hcp-terraform' "$AWS_LOG" | cut -d: -f1)" ] || fail "a policy was deleted before its role"
+grep -q 'delete-open-id-connect-provider --open-id-connect-provider-arn .*app.terraform.io' "$AWS_LOG" || fail "tagged provider kept"
+if grep -q 'delete-open-id-connect-provider .*token.actions' "$AWS_LOG"; then fail "an adopted provider was deleted"; fi
+grep -q 'kept: OIDC provider token.actions.githubusercontent.com' <<< "$out" || fail "the adopted provider was not reported"
+grep -q 'TagKey=DeploymentId,Status=Inactive' "$AWS_LOG" || fail "the cost allocation tag was not deactivated"
+[ "$(deletes)" -eq 22 ] || fail "expected 22 changes (4 roles x 3, 4 policies x 2, 1 provider, 1 tag), got $(deletes)"
+
+# Refusals: running infrastructure, a policy shared with something else, and nothing left.
+if INSTANCES="i-0abc" EXISTING="$all" teardown 7 > "$work/err" 2>&1; then fail "teardown ran with live instances"; fi
+grep -q 'Destroy it first' "$work/err" || fail "the live-infrastructure refusal was not explained"
+if SHARED_POLICY=1 EXISTING="$all" teardown 7 > "$work/err" 2>&1; then fail "teardown ran with a shared policy"; fi
+[ "$(deletes)" -eq 0 ] || fail "a refused teardown deleted something"
+grep -q 'Nothing to delete' <<< "$(EXISTING="" teardown 7 2>&1)" || fail "an empty AWS account was not reported as nothing to delete"
 
 echo "PASS: bootstrap-iam"

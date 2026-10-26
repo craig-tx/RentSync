@@ -26,12 +26,14 @@ override_data {
 }
 
 variables {
-  deployment_id = "pr-42"
-  environment   = "staging"
-  hostname      = "pms-pr-42.rentsync.org"
-  private_ip    = "10.40.1.42"
-  acme_email    = "ops@example.test"
-  admin_token   = "0123456789abcdef0123456789abcdef"
+  region           = "us-east-1"
+  hcp_organization = "example-org"
+  deployment_id    = "pr-42"
+  environment      = "staging"
+  hostname         = "pms-pr-42.example.com"
+  private_ip       = "10.40.1.42"
+  acme_email       = "ops@example.test"
+  admin_token      = "0123456789abcdef0123456789abcdef"
 }
 
 run "invalid_id" {
@@ -80,7 +82,7 @@ run "prod" {
   variables {
     deployment_id = "prod-us"
     environment   = "production"
-    hostname      = "pms.rentsync.org"
+    hostname      = "pms.example.com"
     private_ip    = "10.40.1.30"
   }
 }
@@ -90,7 +92,7 @@ run "staging" {
 
   variables {
     deployment_id = "dev-staging"
-    hostname      = "pms-staging.rentsync.org"
+    hostname      = "pms-staging.example.com"
     private_ip    = "10.40.1.20"
   }
 }
