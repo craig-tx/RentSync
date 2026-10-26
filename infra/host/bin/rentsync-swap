@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Adds a swap file on the root disk, once, at first boot (feature 002 research R4). It lets a
+# host ride out a short memory peak, such as an image pull during a deploy, instead of the
+# kernel killing a container. vm.swappiness is 10 (/etc/sysctl.d/90-rentsync.conf), so swap is
+# used only under memory pressure. The root disk goes with the host, so a replacement host
+# starts a fresh swap file; the data volume is never touched.
+#
+#   rentsync-swap <MiB>
+#
+# Safe to rerun: an existing file is kept, an active one stays on, and fstab gets one line.
+# Test overrides: RENTSYNC_SWAPFILE, RENTSYNC_FSTAB.
+set -euo pipefail
+
+size_mib="${1:?usage: rentsync-swap <MiB>}"
+[[ "$size_mib" =~ ^[1-9][0-9]*$ ]] || { echo "rentsync-swap: size must be a whole number of MiB, got '$size_mib'" >&2; exit 1; }
+file="${RENTSYNC_SWAPFILE:-/swapfile}"
+fstab="${RENTSYNC_FSTAB:-/etc/fstab}"
+
+if [ ! -f "$file" ]; then
+  # dd, not fallocate: swapon refuses a file with holes on some filesystems.
+  dd if=/dev/zero of="$file" bs=1M count="$size_mib" status=none
+  chmod 600 "$file"
+  mkswap "$file" > /dev/null
+  echo "rentsync-swap: created $file ($size_mib MiB)"
+fi
+if ! swapon --show=NAME --noheadings | grep -qxF "$file"; then
+  swapon "$file"
+fi
+touch "$fstab"
+grep -q "^$file " "$fstab" || echo "$file none swap defaults,nofail 0 0" >> "$fstab"
+echo "rentsync-swap: $file active"

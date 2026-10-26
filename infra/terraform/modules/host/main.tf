@@ -10,6 +10,8 @@ locals {
     "/usr/local/bin/rentsync-boot"                       = { content = file("${local.host_dir}/bin/rentsync-boot"), permissions = "0755" }
     "/usr/local/bin/rentsync-render-env"                 = { content = file("${local.host_dir}/bin/rentsync-render-env"), permissions = "0755" }
     "/usr/local/bin/rentsync-start"                      = { content = file("${local.host_dir}/bin/rentsync-start"), permissions = "0755" }
+    "/usr/local/bin/rentsync-swap"                       = { content = file("${local.host_dir}/bin/rentsync-swap"), permissions = "0755" }
+    "/etc/sysctl.d/90-rentsync.conf"                     = { content = file("${local.host_dir}/sysctl-rentsync.conf"), permissions = "0644" }
     "/etc/systemd/system/rentsync.service"               = { content = file("${local.host_dir}/systemd/rentsync.service"), permissions = "0644" }
     "/etc/systemd/system/rentsync-prune.service"         = { content = file("${local.host_dir}/systemd/rentsync-prune.service"), permissions = "0644" }
     "/etc/systemd/system/rentsync-prune.timer"           = { content = file("${local.host_dir}/systemd/rentsync-prune.timer"), permissions = "0644" }
@@ -23,6 +25,7 @@ locals {
     compose_version = var.compose_version
     compose_arch    = local.arch
     compose_sha256  = var.compose_sha256[local.arch]
+    swap_mib        = var.swap_mib
   })
 }
 

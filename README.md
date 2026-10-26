@@ -28,9 +28,10 @@ terraform -chdir=infra/terraform/shared test         # likewise environment, mod
 ```
 
 `infra/test/run.sh` runs the shell tests inside a container because they exercise scripts that run
-on Linux (the EC2 hosts and AWS CloudShell). Two checks run only in CI:
-`infra/host/test/boot_volume_test.sh`, which needs a Linux host with root and loop devices, and the
-check that the bootstrap scripts refuse bash 3.2 and 4.3, which is a step in `ci.yml`.
+on Linux (the EC2 hosts and AWS CloudShell). Three checks run only in CI:
+`infra/host/test/boot_volume_test.sh` and `infra/host/test/swap_test.sh`, which need a Linux
+host with root, and the check that the bootstrap scripts refuse bash 3.2 and 4.3, which is a step
+in `ci.yml`.
 
 See [`mock_pms/README.md`](mock_pms/README.md) for details and [`specs/001-mock-pms/quickstart.md`](specs/001-mock-pms/quickstart.md) for the full validation walkthrough.
 
