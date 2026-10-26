@@ -82,13 +82,15 @@ out="$(deploy --reload)" || fail "--reload with nothing deployed failed"
 [ "$(cat "$work/running")" = caddy ] || fail "--reload did not start caddy"
 
 # 1. First deploy.
-deploy "$A" | grep -qx "deployed $A" || fail "deploy A did not report deployed"
+out="$(deploy "$A")" || fail "deploy A failed: $out"
+grep -qx "deployed $A" <<< "$out" || fail "deploy A did not report deployed"
 [ "$(tags)" = "$A none" ] || fail "after deploy A, tags are $(tags)"
 grep -q "bin/setup --deploy" "$work/docker.log" || fail "deploy did not run bin/setup --deploy"
 
 # 2. Same tag again: no-op.
 : > "$work/docker.log"
-deploy "$A" | grep -qx "already running $A" || fail "redeploying A was not a no-op"
+out="$(deploy "$A")" || fail "redeploying A failed: $out"
+grep -qx "already running $A" <<< "$out" || fail "redeploying A was not a no-op"
 if grep -q " up " "$work/docker.log"; then fail "the no-op restarted containers"; fi
 
 # Second deploy.
@@ -101,19 +103,20 @@ out="$(deploy "$BAD")"
 code=$?
 set -e
 [ "$code" -eq 1 ] || fail "a bad deploy exited $code, expected 1"
-echo "$out" | grep -qx "rolled back to $B" || fail "a bad deploy printed: $out"
+grep -qx "rolled back to $B" <<< "$out" || fail "a bad deploy printed: $out"
 [ "$(tags)" = "$B $A" ] || fail "a failed deploy changed SSM: $(tags)"
 [ "$(cat "$work/running")" = "$B" ] || fail "B is not running after the rollback"
 
 # 4. --rollback swaps.
-deploy --rollback | grep -qx "deployed $A" || fail "--rollback did not deploy A"
+out="$(deploy --rollback)" || fail "--rollback failed: $out"
+grep -qx "deployed $A" <<< "$out" || fail "--rollback did not deploy A"
 [ "$(tags)" = "$A $B" ] || fail "after --rollback, tags are $(tags)"
 
 # 8. A digest-pinned ref deploys (the version check uses its SHA part) and is recorded whole,
 #    so reboots and rollbacks keep pulling exactly that image.
 D="$A@sha256:$(printf 'd%.0s' {1..64})"
 out="$(deploy "$D")" || fail "a digest-pinned deploy failed: $out"
-echo "$out" | grep -qx "deployed $D" || fail "a digest-pinned deploy printed: $out"
+grep -qx "deployed $D" <<< "$out" || fail "a digest-pinned deploy printed: $out"
 [ "$(cat "$work/running")" = "$A" ] || fail "the digest-pinned image is not running"
 [ "$(cat "$work/ssm/image_tag")" = "$D" ] || fail "SSM did not record the digest-pinned ref: $(cat "$work/ssm/image_tag")"
 set +e
@@ -128,7 +131,7 @@ out="$(FAIL_PUT=1 deploy "$B")"
 code=$?
 set -e
 [ "$code" -eq 3 ] || fail "an unrecordable deploy exited $code, expected 3"
-echo "$out" | grep -q "SSM could not record it" || fail "an unrecordable deploy printed: $out"
+grep -q "SSM could not record it" <<< "$out" || fail "an unrecordable deploy printed: $out"
 [ "$(cat "$work/running")" = "$B" ] || fail "B is not serving after an unrecordable deploy"
 
 # 6. Malformed tag.

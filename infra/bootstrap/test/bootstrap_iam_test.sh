@@ -80,9 +80,9 @@ fi
 plan="$(EXISTING="" run)" || fail "plan failed"
 [ "$(mutations)" -eq 0 ] || fail "plan mode made a mutating call"
 [ "$(echo "$plan" | grep -c '^+ aws iam create-policy ')" -eq 4 ] || fail "plan does not list 4 create-policy"
-echo "$plan" | grep -q '^+ aws iam create-open-id-connect-provider --url https://app.terraform.io' \
+grep -q '^+ aws iam create-open-id-connect-provider --url https://app.terraform.io' <<< "$plan" \
   || fail "plan does not list the HCP provider"
-echo "$plan" | grep -q 'arn:aws:iam::123456789012:role/rentsync-github-actions-prod' \
+grep -q 'arn:aws:iam::123456789012:role/rentsync-github-actions-prod' <<< "$plan" \
   || fail "plan does not print the role ARNs"
 
 # 4. Apply on an empty AWS account.
@@ -103,7 +103,7 @@ if grep -q 'create-role --role-name rentsync-hcp-terraform' "$AWS_LOG"; then fai
 grep -q 'update-assume-role-policy --role-name rentsync-hcp-terraform' "$AWS_LOG" \
   || fail "did not refresh the existing role's trust policy"
 [ "$(calls create-policy)" -eq 3 ] || fail "expected the other 3 policies created"
-echo "$out" | grep -q 'policy rentsync-hcp-terraform exists; not changed' || fail "existing policy not reported"
+grep -q 'policy rentsync-hcp-terraform exists; not changed' <<< "$out" || fail "existing policy not reported"
 
 # 6. An Access Analyzer ERROR blocks every change.
 if FINDING=hcp-terraform-policy.json EXISTING="" run --apply > "$work/err.out" 2>&1; then

@@ -51,7 +51,8 @@ for line in ADMIN_TOKEN=tok-123 POSTGRES_PASSWORD=pw-456 IMAGE_TAG=abc OPENOBSER
   grep -qxF "${line%%=*}='${line#*=}'" "$env_file" || fail "env file lacks $line"
 done
 if grep -q "SSM_READ_PATHS\|VOLUME_ID" "$env_file"; then fail "script-only keys leaked into the env file"; fi
-if render 2>&1 | grep -q "tok-123"; then fail "a secret value was printed"; fi
+out="$(render 2>&1 || true)"
+if grep -q "tok-123" <<< "$out"; then fail "a secret value was printed"; fi
 
 # 2. Missing required parameter.
 rm -f "$env_file"

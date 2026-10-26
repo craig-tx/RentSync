@@ -56,7 +56,7 @@ validate() { # file, then the validate-policy type arguments
   [ -z "$findings" ] && return 0
   echo "$(basename "$file"):"
   while IFS= read -r line; do echo "  $line"; done <<< "$findings"
-  if echo "$findings" | grep -qE '^(ERROR|SECURITY_WARNING)'; then blocked=1; fi
+  if grep -qE '^(ERROR|SECURITY_WARNING)' <<< "$findings"; then blocked=1; fi
 }
 for stem in $stems; do
   validate "$out/$stem-policy.json" --policy-type IDENTITY_POLICY
@@ -76,7 +76,7 @@ step() { # prints a change, and makes it under --apply
 exists() { # true if the read-only aws call succeeds; false only for NoSuchEntity
   local err
   if err="$(aws "$@" 2>&1 > /dev/null)"; then return 0; fi
-  if echo "$err" | grep -q NoSuchEntity; then return 1; fi
+  if grep -q NoSuchEntity <<< "$err"; then return 1; fi
   die "aws $1 $2 failed: $err"
 }
 
@@ -86,10 +86,10 @@ providers="$(aws iam list-open-id-connect-providers --query 'OpenIDConnectProvid
 for pair in app.terraform.io=aws.workload.identity token.actions.githubusercontent.com=sts.amazonaws.com; do
   host="${pair%%=*}" audience="${pair#*=}"
   arn="arn:aws:iam::$aws_account_id:oidc-provider/$host"
-  if ! echo "$providers" | tr '\t' '\n' | grep -qxF "$arn"; then
+  if ! grep -qxF "$arn" <<< "$(tr '\t' '\n' <<< "$providers")"; then
     step aws iam create-open-id-connect-provider --url "https://$host" --client-id-list "$audience"
-  elif ! aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$arn" \
-         --query ClientIDList --output text | tr '\t' '\n' | grep -qxF "$audience"; then
+  elif ! grep -qxF "$audience" <<< "$(aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$arn" \
+         --query ClientIDList --output text | tr '\t' '\n')"; then
     step aws iam add-client-id-to-open-id-connect-provider --open-id-connect-provider-arn "$arn" \
       --client-id "$audience"
   else

@@ -14,7 +14,7 @@ fail() { echo "FAIL: $*" >&2; status=1; }
 # Prints one resource block, from its header to the closing brace at column 0.
 block() { awk -v hdr="$2" 'index($0, hdr) == 1 { on = 1 } on { print } on && /^}/ { exit }' "$1"; }
 
-block "$host" 'resource "aws_ebs_volume" "data"' | grep -q 'prevent_destroy *= *true' \
+grep -q 'prevent_destroy *= *true' <<< "$(block "$host" 'resource "aws_ebs_volume" "data"')" \
   || fail "aws_ebs_volume.data in modules/host/main.tf must keep prevent_destroy = true"
 
 block "$host" 'resource "aws_instance" "this"' | awk '/root_block_device/ { on = 1 } on && /tags *= *\{/ { found = 1 } END { exit !found }' \
