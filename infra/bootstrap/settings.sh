@@ -22,6 +22,26 @@ load_settings() {
   done < "$settings_file"
 }
 
+# The teardown confirmation (constitution: Reversible bootstrap). Succeeds only when an operator
+# at an interactive terminal answers a small sum correctly; anything else deletes nothing.
+# RENTSYNC_TEARDOWN_NUMBERS="a b" fixes the numbers so tests can answer; the terminal check and
+# the question still apply.
+confirm_teardown() { # what is being deleted, for the warning
+  local a b answer
+  echo
+  echo "WARNING: this permanently deletes $1, everything listed above. It cannot be undone."
+  if [ ! -t 0 ]; then
+    echo "No interactive terminal to confirm at, so nothing was deleted." >&2
+    return 1
+  fi
+  read -r a b <<< "${RENTSYNC_TEARDOWN_NUMBERS:-$((RANDOM % 8 + 2)) $((RANDOM % 8 + 2))}"
+  read -r -p "If you are sure, type the answer to $a + $b: " answer || answer=""
+  if [ "${answer%$'\r'}" != "$((a + b))" ]; then
+    echo "That is not $((a + b)), so nothing was deleted." >&2
+    return 1
+  fi
+}
+
 require_settings() { # setting names
   local key
   for key in "$@"; do

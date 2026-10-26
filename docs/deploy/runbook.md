@@ -28,8 +28,8 @@ This one-time setup should take under an hour (FR-006). Four scripts and two AWS
 all of it, so you don't click through any console. Each script except step 0 prints a plan and
 changes nothing until you rerun it with `--apply`, and each is safe to rerun. The setup creates no
 AWS access keys, and no credential ever goes into chat, the repository, or a terminal history.
-Afterwards, every change goes through HCP Terraform runs. Note the start time; T053 records how
-long it took.
+Afterwards, every change goes through HCP Terraform runs. Every step can be reversed with
+§Bootstrap teardown. Note the start time; T053 records how long it took.
 
 | Step | What | Where it runs | When |
 |---|---|---|---|
@@ -655,7 +655,58 @@ then `shared-us`, because the environments depend on its network.
    ```
 
 6. Delete the A records at your DNS provider.
-7. If you're leaving for good, also delete the bootstrap roles, policies and OIDC providers
-   (§Bootstrap step 1), and the HCP workspaces.
+7. If you're leaving for good, or want to rerun the bootstrap from a blank slate, continue with
+   §Bootstrap teardown.
 
 Next day: Cost Explorer, grouped by `DeploymentId`, should show no new charges.
+
+## Bootstrap teardown
+
+This reverses §Bootstrap, so you can rerun the bootstrap from a blank slate or leave for good
+(constitution: Reversible bootstrap). Each bootstrap script has a `--teardown` mode. It lists
+exactly what it will delete, warns that the deletion is permanent, and asks you to type the answer
+to a small sum. A wrong answer, no answer, or no interactive terminal deletes nothing. It's three
+runs in two places, because AWS is only reachable from CloudShell.
+
+Teardown refuses while infrastructure still exists, so do §Teardown first if anything was ever
+applied. Then, in this order:
+
+1. **GitHub**, in Git Bash on your machine:
+
+   ```bash
+   bash infra/bootstrap/bootstrap-github.sh --teardown
+   ```
+
+   It deletes the repository variables and both Environments, with their variables, branch
+   policies and reviewers.
+2. **HCP Terraform**, in PowerShell or Windows Terminal on your machine:
+
+   ```powershell
+   ruby infra/bootstrap/bootstrap-hcp.rb --teardown
+   ```
+
+   It deletes the three workspaces, the `rentsync-aws` variable set and the `RentSync` project.
+   It uses HCP Terraform's safe delete, and refuses if a workspace still manages resources.
+3. **AWS**, in CloudShell from the repository directory, after `git pull`:
+
+   ```bash
+   bash infra/bootstrap/bootstrap-iam.sh --teardown
+   ```
+
+   It deletes the four bootstrap roles and their policies, by exact name; Terraform's own
+   `rentsync-*` host roles are not touched. It also deactivates the `DeploymentId` cost
+   allocation tag, and deletes the OIDC providers the bootstrap created. It refuses if any
+   instance or volume tagged `DeploymentId` still exists.
+
+**What stays, and why:**
+- **OIDC providers the bootstrap adopted rather than created**, because something else may use
+  them. Created ones carry the tag `rentsync:bootstrap=true`. The teardown prints the delete
+  command for each adopted provider. Before running it for the GitHub provider, check that no
+  other repository in the AWS account deploys through GitHub OIDC.
+- **Secret scanning and push protection**, which protect the repository either way.
+- **The HCP Terraform GitHub connection and your `terraform login` token**, which you created
+  yourself.
+- **`.bootstrap/settings.env`**, which the next bootstrap reads. Delete it yourself if you're
+  leaving for good.
+
+To start again, run §Bootstrap from step 0. Enter keeps each saved setting.

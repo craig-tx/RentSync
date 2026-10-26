@@ -8,7 +8,10 @@
 #   3. the default (plan) mode makes no mutating call;
 #   4. --apply on an empty AWS account creates both providers and all four policies and roles;
 #   5. --apply on a half-done AWS account skips what exists and never re-creates it;
-#   6. an Access Analyzer ERROR stops the run before any change.
+#   6. an Access Analyzer ERROR stops the run before any change;
+#   7. --teardown (at a terminal, after the sum) deletes exactly the bootstrap's roles, policies
+#      and tagged providers, keeps adopted ones, and refuses on a wrong answer, no terminal,
+#      live infrastructure or a shared policy.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -45,6 +48,19 @@ case "$1 $2" in
     has "policy:$(arg --policy-arn "$@" | sed 's|.*/||')" || { echo "An error occurred (NoSuchEntity)" >&2; exit 254; } ;;
   "iam get-role")
     has "role:$(arg --role-name "$@")" || { echo "An error occurred (NoSuchEntity)" >&2; exit 254; } ;;
+  # Teardown reads. A role has its own policy attached plus one inline policy; a policy has one
+  # old version; $SHARED_POLICY attaches rentsync-github-build to a user as well.
+  "iam list-attached-role-policies") echo "arn:aws:iam::123456789012:policy/$(arg --role-name "$@")" ;;
+  "iam list-role-policies") echo "inline-extra" ;;
+  "iam list-entities-for-policy")
+    name="$(arg --policy-arn "$@" | sed 's|.*/||')"
+    printf '%s' "$name"; [ -n "${SHARED_POLICY:-}" ] && [ "$name" = rentsync-github-build ] && printf '\tsomeone'; echo ;;
+  "iam list-policy-versions") echo v1 ;;
+  "iam list-open-id-connect-provider-tags")
+    case " ${TAGGED:-} " in *" $(arg --open-id-connect-provider-arn "$@" | sed 's|.*/||') "*) echo true ;; *) echo ;; esac ;;
+  "ec2 describe-instances") echo "${INSTANCES:-}" ;;
+  "ec2 describe-volumes") echo "${VOLUMES:-}" ;;
+  "ce list-cost-allocation-tags") echo "${COST_TAG:-None}" ;;
   *) ;;
 esac
 STUB
@@ -128,5 +144,54 @@ if FINDING=hcp-terraform-policy.json EXISTING="" run --apply > "$work/err.out" 2
 fi
 grep -q MALFORMED_ARN "$work/err.out" || fail "the finding was not shown"
 [ "$(mutations)" -eq 0 ] || fail "a change was made despite an Access Analyzer ERROR"
+
+# 7. Providers the bootstrap creates are tagged, so teardown can tell them from adopted ones.
+EXISTING="" run --apply > /dev/null || fail "apply failed"
+[ "$(grep -c 'create-open-id-connect-provider .*--tags Key=rentsync:bootstrap,Value=true' "$AWS_LOG")" -eq 2 ] \
+  || fail "created providers are not tagged"
+
+# 8. Teardown. The answer goes through a real terminal (script(1)); the numbers are fixed at 3 + 4.
+deletes() { grep -cE '^(iam (delete|detach)-|ce update-)' "$AWS_LOG" || true; }
+teardown() { # answer; runs --teardown at a terminal
+  : > "$AWS_LOG"
+  printf '%s\n' "$1" | PATH="$work/bin:$PATH" RENTSYNC_IAM_OUT="$work/out" RENTSYNC_TEARDOWN_NUMBERS="3 4" \
+    script -qec "bash $script --teardown" /dev/null
+}
+all="oidc:app.terraform.io oidc:token.actions.githubusercontent.com"
+for s in hcp-terraform github-build github-actions github-actions-prod; do all="$all policy:rentsync-$s role:rentsync-$s"; done
+
+out="$(EXISTING="$all" TAGGED="app.terraform.io" COST_TAG=Active teardown 6 2>&1)" && fail "a wrong answer succeeded"
+[ "$(deletes)" -eq 0 ] || fail "a wrong answer deleted something"
+grep -q 'delete role rentsync-github-actions-prod' <<< "$out" || fail "the plan does not list the roles"
+grep -q 'permanently deletes' <<< "$out" || fail "no warning before the question"
+# The right answer arrives, but not from a terminal, so it must still be refused.
+if printf '7\n' | EXISTING="$all" RENTSYNC_TEARDOWN_NUMBERS="3 4" run --teardown > "$work/err" 2>&1; then fail "teardown without a terminal succeeded"; fi
+grep -q 'No interactive terminal' "$work/err" || fail "no-terminal refusal not explained"
+[ "$(deletes)" -eq 0 ] || fail "teardown without a terminal deleted something"
+
+out="$(EXISTING="$all" TAGGED="app.terraform.io" COST_TAG=Active teardown 7 2>&1)" || fail "teardown failed: $out"
+for s in hcp-terraform github-build github-actions github-actions-prod; do
+  grep -q "^iam detach-role-policy --role-name rentsync-$s " "$AWS_LOG" || fail "rentsync-$s not detached"
+  grep -q "^iam delete-role-policy --role-name rentsync-$s --policy-name inline-extra" "$AWS_LOG" || fail "rentsync-$s inline policy kept"
+  grep -q "^iam delete-role --role-name rentsync-$s$" "$AWS_LOG" || fail "role rentsync-$s not deleted"
+  grep -q "^iam delete-policy-version --policy-arn arn:aws:iam::123456789012:policy/rentsync-$s --version-id v1" "$AWS_LOG" \
+    || fail "old version of rentsync-$s not deleted"
+  grep -q "^iam delete-policy --policy-arn arn:aws:iam::123456789012:policy/rentsync-$s$" "$AWS_LOG" || fail "policy rentsync-$s not deleted"
+done
+# Roles go before their policies, and nothing but exact bootstrap names is touched.
+[ "$(grep -n '^iam delete-role --role-name rentsync-hcp-terraform' "$AWS_LOG" | cut -d: -f1)" -lt \
+  "$(grep -n '^iam delete-policy --policy-arn .*rentsync-hcp-terraform' "$AWS_LOG" | cut -d: -f1)" ] || fail "a policy was deleted before its role"
+grep -q 'delete-open-id-connect-provider --open-id-connect-provider-arn .*app.terraform.io' "$AWS_LOG" || fail "tagged provider kept"
+if grep -q 'delete-open-id-connect-provider .*token.actions' "$AWS_LOG"; then fail "an adopted provider was deleted"; fi
+grep -q 'kept: OIDC provider token.actions.githubusercontent.com' <<< "$out" || fail "the adopted provider was not reported"
+grep -q 'TagKey=DeploymentId,Status=Inactive' "$AWS_LOG" || fail "the cost allocation tag was not deactivated"
+[ "$(deletes)" -eq 22 ] || fail "expected 22 changes (4 roles x 3, 4 policies x 2, 1 provider, 1 tag), got $(deletes)"
+
+# Refusals: running infrastructure, a policy shared with something else, and nothing left.
+if INSTANCES="i-0abc" EXISTING="$all" teardown 7 > "$work/err" 2>&1; then fail "teardown ran with live instances"; fi
+grep -q 'Destroy it first' "$work/err" || fail "the live-infrastructure refusal was not explained"
+if SHARED_POLICY=1 EXISTING="$all" teardown 7 > "$work/err" 2>&1; then fail "teardown ran with a shared policy"; fi
+[ "$(deletes)" -eq 0 ] || fail "a refused teardown deleted something"
+grep -q 'Nothing to delete' <<< "$(EXISTING="" teardown 7 2>&1)" || fail "an empty AWS account was not reported as nothing to delete"
 
 echo "PASS: bootstrap-iam"

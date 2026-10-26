@@ -5,9 +5,15 @@
 # variable set, the three workspaces, remote state sharing and every workspace variable, through
 # the HCP Terraform API (contracts/workspace-variables.md).
 #
-#   ruby infra/bootstrap/bootstrap-hcp.rb --aws-account ID --ami AMI --acme-email E \
-#     --openobserve-email E --budget-email E        print the plan; changes nothing
-#   ... --apply                                      make the changes
+#   ruby infra/bootstrap/bootstrap-hcp.rb [options]             print the plan; changes nothing
+#   ruby infra/bootstrap/bootstrap-hcp.rb [options] --apply     make the changes
+#   ruby infra/bootstrap/bootstrap-hcp.rb --teardown            list what the bootstrap created, then
+#                                                               delete it after a typed confirmation
+#                                                               (constitution: Reversible bootstrap)
+#
+# The deployment's settings (HCP Terraform organization, GitHub repository, AWS account and
+# region, domain, emails, AMI) come from .bootstrap/settings.env, written by bootstrap-init.sh.
+# --aws-account, --ami and the email flags override them.
 #
 # Sign in first with `terraform login`. The token is read from Terraform's credentials file (or
 # TF_TOKEN_app_terraform_io) and never printed. Under --apply, each admin_token is generated here
@@ -63,6 +69,24 @@ module HcpBootstrap
     first
   end
 
+  # The teardown confirmation (constitution: Reversible bootstrap): true only when an operator at
+  # an interactive terminal answers a small sum correctly.
+  def self.confirm_teardown(what, out: $stdout)
+    out.puts "", "WARNING: this permanently deletes #{what}, everything listed above. It cannot be undone."
+    unless $stdin.tty?
+      out.puts "No interactive terminal to confirm at, so nothing was deleted."
+      return false
+    end
+
+    a = rand(2..9)
+    b = rand(2..9)
+    out.print "If you are sure, type the answer to #{a} + #{b}: "
+    return true if $stdin.gets.to_s.strip == (a + b).to_s
+
+    out.puts "That is not #{a + b}, so nothing was deleted."
+    false
+  end
+
   # The settings bootstrap-init.sh writes: KEY='value' lines, read as data.
   SETTINGS = {
     "RENTSYNC_AWS_ACCOUNT_ID" => :aws_account, "RENTSYNC_AWS_REGION" => :region, "RENTSYNC_AWS_AZ" => :availability_zone,
@@ -109,6 +133,7 @@ module HcpBootstrap
     def get(path) = request(:get, path)
     def post(path, body) = request(:post, path, body)
     def patch(path, body) = request(:patch, path, body)
+    def delete(path) = request(:delete, path)
 
     # Every item of a list endpoint, following pagination; [] when the endpoint is absent.
     def list(path)
@@ -146,12 +171,13 @@ module HcpBootstrap
 
   class Bootstrap
     def initialize(api:, opts:, out: $stdout, password: -> { HcpBootstrap.ask_password },
-                   token: -> { SecureRandom.hex(32) })
+                   token: -> { SecureRandom.hex(32) }, confirm: ->(what) { HcpBootstrap.confirm_teardown(what, out: out) })
       @api = api
       @opts = opts
       @out = out
       @password_source = password
       @token_source = token
+      @confirm = confirm
       @apply = opts[:apply]
       @org = opts[:hcp_org]
       @changes = 0
@@ -170,6 +196,49 @@ module HcpBootstrap
       WORKSPACES.each { |ws| ensure_variables(ws, ids[ws[:name]]) }
       say ""
       say(@apply ? "#{@changes} change(s) applied." : "#{@changes} change(s) planned. Nothing was changed; rerun with --apply to make them.")
+    end
+
+    # Deletes the workspaces, the variable set and the project, by exact name. Refuses while a
+    # workspace still manages resources or is locked by a run: infrastructure is destroyed first
+    # (runbook §Teardown). Returns true when everything listed was deleted, or nothing was there.
+    def teardown
+      @api.get("/organizations/#{@org}") or raise Abort, "organization #{@org} not found, or the token can't see it"
+      todo = []
+      say "Teardown plan for HCP Terraform organization #{@org}:"
+      WORKSPACES.each do |ws|
+        found = @api.get("/organizations/#{@org}/workspaces/#{ws[:name]}") or next
+        attrs = found["data"]["attributes"]
+        if attrs["resource-count"].to_i.positive? || attrs["locked"]
+          raise Abort, "workspace #{ws[:name]} still manages #{attrs['resource-count']} resource(s) or is locked by a run. " \
+                       "Destroy its infrastructure first (runbook §Teardown); nothing was deleted"
+        end
+        todo << ["delete workspace #{ws[:name]}, with its variables and empty state",
+                 -> { @api.post("/workspaces/#{found['data']['id']}/actions/safe-delete", nil) }]
+      end
+      varset = @api.list("/organizations/#{@org}/varsets?q=#{VARSET}").find { |v| v.dig("attributes", "name") == VARSET }
+      todo << ["delete variable set #{VARSET}", -> { @api.delete("/varsets/#{varset['id']}") }] if varset
+      project = @api.list("/organizations/#{@org}/projects?filter%5Bnames%5D=#{PROJECT}")
+                    .find { |p| p.dig("attributes", "name") == PROJECT }
+      if project
+        others = @api.list("/organizations/#{@org}/workspaces?filter%5Bproject%5D%5Bid%5D=#{project['id']}")
+                     .map { |w| w.dig("attributes", "name") } - WORKSPACES.map { |w| w[:name] }
+        if others.empty?
+          todo << ["delete project #{PROJECT}", -> { @api.delete("/projects/#{project['id']}") }]
+        else
+          note "kept: project #{PROJECT}, which also holds #{others.join(', ')}"
+        end
+      end
+      todo.each { |desc, _| say "- #{desc}" }
+      note "kept: the GitHub connection, your terraform login token, and .bootstrap/settings.env."
+      if todo.empty?
+        say "Nothing to delete."
+        return true
+      end
+      return false unless @confirm.call("the bootstrap's HCP Terraform workspaces, variable set and project")
+
+      todo.each { |_, action| action.call }
+      say "Deleted. #{todo.size} HCP Terraform change(s) made."
+      true
     end
 
     private
@@ -410,7 +479,14 @@ module HcpBootstrap
       o.on("--github-app-installation-id ID", "GitHub App installation to use") { |v| opts[:github_app_installation_id] = v }
       o.on("--health-assessments", "turn on drift detection (needs a plan that includes it)") { opts[:health_assessments] = true }
       o.on("--apply", "make the changes") { opts[:apply] = true }
+      o.on("--teardown", "delete what the bootstrap created, after a typed confirmation") { opts[:teardown] = true }
     end.parse!(argv)
+    raise Abort, "use --apply or --teardown, not both" if opts[:apply] && opts[:teardown]
+    if opts[:teardown]
+      raise Abort, "setting hcp_org is missing or malformed; rerun bootstrap-init.sh" unless opts[:hcp_org].to_s.match?(/\A[A-Za-z0-9_-]+\z/)
+
+      return opts
+    end
     raise Abort, "the AWS account ID must be 12 digits" unless opts[:aws_account].to_s.match?(/\A\d{12}\z/)
     unless opts[:ami].to_s.match?(/\Aami-[0-9a-f]{8,17}\z/)
       raise Abort, "the AMI ID must look like ami-0123456789abcdef0; rerun bootstrap-init.sh or pass --ami"
@@ -435,7 +511,9 @@ end
 if $PROGRAM_NAME == __FILE__
   begin
     opts = HcpBootstrap.parse(ARGV)
-    HcpBootstrap::Bootstrap.new(api: HcpBootstrap::Api.new(HcpBootstrap.load_token), opts: opts).run
+    bootstrap = HcpBootstrap::Bootstrap.new(api: HcpBootstrap::Api.new(HcpBootstrap.load_token), opts: opts)
+    exit(bootstrap.teardown ? 0 : 1) if opts[:teardown]
+    bootstrap.run
   rescue HcpBootstrap::Abort => e
     warn "error: #{e.message}"
     exit 1

@@ -6,6 +6,8 @@
 #
 #   bootstrap-github.sh [options]          print the plan; changes nothing
 #   bootstrap-github.sh [options] --apply  the same, then make the changes
+#   bootstrap-github.sh --teardown         list what the bootstrap set, then delete it after a
+#                                          typed confirmation (constitution: Reversible bootstrap)
 #
 # Options:
 #   --aws-account ID          override the settings' AWS account ID
@@ -16,7 +18,7 @@
 # matches is left alone, a value that differs is set again, and an existing reviewer is kept.
 set -euo pipefail
 
-usage="usage: $0 [--aws-account AWS_ACCOUNT_ID] [--ecr-repository-url URL] [--prod-reviewer LOGIN] [--apply]"
+usage="usage: $0 [--aws-account AWS_ACCOUNT_ID] [--ecr-repository-url URL] [--prod-reviewer LOGIN] [--apply | --teardown]"
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -33,6 +35,7 @@ while [ $# -gt 0 ]; do
     --ecr-repository-url) ecr_url="${2:-}"; shift ;;
     --prod-reviewer) reviewer="${2:-}"; shift ;;
     --apply) mode="apply" ;;
+    --teardown) mode="teardown" ;;
     *) die "$usage" ;;
   esac
   shift
@@ -120,6 +123,35 @@ ensure_main_only() { # environment
       gh api -X POST "repos/$repo/environments/$env/deployment-branch-policies" -f name=main -f type=branch
   fi
 }
+
+# --- Teardown (constitution: Reversible bootstrap) -----------------------------------------
+# Deletes the variables and Environments this script sets; deleting an Environment also deletes
+# its variables, branch policies and reviewers. Secret scanning and push protection stay on.
+if [ "$mode" = "teardown" ]; then
+  todo=()
+  plan() { echo "- $1"; shift; todo+=("$(printf '%q ' "$@")"); }
+  echo "Teardown plan for $repo:"
+  for name in AWS_BUILD_ROLE_ARN AWS_ROLE_ARN AWS_REGION ECR_REPOSITORY_URL; do
+    found=""
+    api_get found "repos/$repo/actions/variables/$name" .name || continue
+    plan "delete repository variable $name" gh variable delete "$name" --repo "$repo"
+  done
+  for env in dev-staging prod-us; do
+    found=""
+    api_get found "repos/$repo/environments/$env" .name || continue
+    plan "delete Environment $env, with its variables, branch policies and reviewers" \
+      gh api -X DELETE "repos/$repo/environments/$env"
+  done
+  echo "  kept: secret scanning and push protection, which protect the repository either way."
+  if [ ${#todo[@]} -eq 0 ]; then
+    echo "Nothing to delete."
+    exit 0
+  fi
+  confirm_teardown "the bootstrap's GitHub variables and Environments" || exit 1
+  for cmd in "${todo[@]}"; do eval "$cmd" > /dev/null; done
+  echo "Deleted. ${#todo[@]} GitHub changes made."
+  exit 0
+fi
 
 echo "Plan ($mode) for $repo:"
 reviewer_id=""

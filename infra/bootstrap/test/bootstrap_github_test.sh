@@ -8,7 +8,9 @@
 #   4. a repository that already matches gets no changes;
 #   5. drift is corrected: a differing variable is set again, an extra deployment branch is
 #      removed, and adding a reviewer keeps the existing one;
-#   6. an API error other than 404 stops the run.
+#   6. an API error other than 404 stops the run;
+#   7. --teardown (at a terminal, after the sum) deletes the variables and Environments, keeps
+#      secret scanning, and deletes nothing on a wrong answer or without a terminal.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -131,5 +133,34 @@ matching
 echo "$R/environments/prod-us" > "$GH_STATE/FAIL"
 if run --apply > /dev/null 2> "$work/err"; then fail "a server error did not stop the run"; fi
 grep -q 'HTTP 500' "$work/err" || fail "the server error was not shown"
+
+# 7. Teardown, answered through a real terminal (script(1)) with the numbers fixed at 3 + 4.
+teardown() { # answer
+  : > "$GH_LOG"
+  printf '%s
+' "$1" | RENTSYNC_TEARDOWN_NUMBERS="3 4" script -qec "bash $script --teardown" /dev/null
+}
+matching
+out="$(teardown 8 2>&1)" && fail "a wrong answer succeeded"
+[ "$(writes)" -eq 0 ] || fail "a wrong answer deleted something"
+grep -q 'delete Environment prod-us' <<< "$out" || fail "the plan does not list the Environments"
+grep -q 'permanently deletes' <<< "$out" || fail "no warning before the question"
+# The right answer arrives, but not from a terminal, so it must still be refused.
+if printf '7\n' | RENTSYNC_TEARDOWN_NUMBERS="3 4" run --teardown > "$work/err" 2>&1; then fail "teardown without a terminal succeeded"; fi
+grep -q 'No interactive terminal' "$work/err" || fail "no-terminal refusal not explained"
+[ "$(writes)" -eq 0 ] || fail "teardown without a terminal deleted something"
+out="$(teardown 7 2>&1)" || fail "teardown failed: $out"
+for name in AWS_BUILD_ROLE_ARN AWS_ROLE_ARN AWS_REGION; do
+  grep -qx "variable delete $name --repo example-owner/example-app" "$GH_LOG" || fail "$name not deleted"
+done
+for env in dev-staging prod-us; do
+  grep -qx "api -X DELETE $R/environments/$env" "$GH_LOG" || fail "Environment $env not deleted"
+done
+[ "$(writes)" -eq 5 ] || fail "expected 5 deletions: $(cat "$GH_LOG")"
+if grep -q PATCH "$GH_LOG"; then fail "teardown touched secret scanning"; fi
+grep -q 'kept: secret scanning' <<< "$out" || fail "kept secret scanning not reported"
+reset
+put "$R" '{"security_and_analysis":{}}'
+grep -q 'Nothing to delete' <<< "$(teardown 7 2>&1)" || fail "an empty repository was not reported as nothing to delete"
 
 echo "PASS: bootstrap-github"
