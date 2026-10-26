@@ -14,6 +14,10 @@ write_files:
     content: ${base64encode(join("", [for k, v in host_env : "${k}=\"${v}\"\n"]))}
 
 runcmd:
+  - sysctl -p /etc/sysctl.d/90-rentsync.conf
+%{ if swap_mib > 0 ~}
+  - /usr/local/bin/rentsync-swap ${swap_mib}
+%{ endif ~}
   - dnf install -y docker jq
   - mkdir -p /usr/local/lib/docker/cli-plugins
   - curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-linux-${compose_arch}

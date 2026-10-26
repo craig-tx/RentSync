@@ -105,9 +105,38 @@ implementation.
   is a deliberate variable change, applied staging first. It replaces the host and goes through
   the host-replacement path (US5).
 - **Instance type**: `t4g.small` (2 vCPU burstable, 2 GiB) for all three hosts.
-  - An environment host runs Puma, the worker, Postgres, Redis, the Collector and Caddy. That
-    needs about 1–1.3 GiB at demo volumes, so 1 GiB (`t4g.micro`) is too tight.
+  - An environment host runs Puma, the worker, Postgres, Redis, the Collector, the test receiver
+    and Caddy. The original estimate was 1–1.3 GiB; the measurement below puts it at about
+    750–800 MiB.
   - OpenObserve plus its Postgres fits in 2 GiB at demo volumes.
+  - **Measured 2026-10-26** on the local Compose stack, with the production `mock_pms` image,
+    sampling `docker stats` every 2 s. Load: 1,248 events in 35 s, 599 webhook deliveries,
+    6,400 HTTP requests from 8 parallel clients, and a first-deploy `bin/setup --deploy`.
+
+    | Container | Idle (MiB) | Peak under load (MiB) |
+    |---|---|---|
+    | web (Puma) | 56 | 71 |
+    | worker | 44 | 48 |
+    | Postgres (4 databases locally; a host has 1) | 147 | 168 |
+    | Collector | 104 | 108 |
+    | test receiver | 49 | 55 |
+    | Redis | 9 | 14 |
+    | Caddy (not in the local stack; typical) | — | ~40 |
+    | **containers** | | **~500** |
+    | OpenObserve (telemetry host) | 653 | 949 |
+
+    Adding ~250–300 MiB for the OS, Docker and the SSM agent (estimated, not measured), an
+    environment host peaks at ~750–800 MiB. Caveats: Docker Desktop on x86_64, not Graviton.
+  - **What the measurement means**:
+    - `t4g.nano` (512 MiB) cannot hold the containers.
+    - `t4g.micro` (1 GiB, ~900 MiB usable) fits an environment host with ~100–150 MiB to spare.
+      That is too little for a deploy's brief peaks without swap.
+    - The telemetry host stays `t4g.small`: OpenObserve alone peaked at 949 MiB.
+  - **Swap**: every host gets a 1 GiB swap file on the root disk at first boot
+    (`rentsync-swap`, module variable `swap_mib`; 0 turns it off), with `vm.swappiness = 10`.
+    Swap is used only under memory pressure, so a brief peak slows the host down instead of
+    the kernel killing a container. It makes `t4g.micro` a reasonable trial for the
+    environment hosts (runbook §Changing a host's instance type); `t4g.small` stays the default.
   - The instance type is a variable. `t3.small` (amd64) is the fallback if an image lacks
     arm64.
 - **Image architecture**: the mock PMS image is built for `linux/arm64` on GitHub's native

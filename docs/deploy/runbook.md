@@ -452,6 +452,30 @@ recreates the instance, and the rest of the steps are the same.
 **Reboot or stop/start**: no action is needed (US5 AC5). systemd mounts the volume, Docker
 waits for it, and `rentsync.service` re-renders secrets and starts the stack.
 
+## Changing a host's instance type
+
+Every host is `t4g.small` (2 GiB). The environment hosts measured about 750–800 MiB at peak
+(research R4), so `t4g.micro` (1 GiB) is worth trying to save about $6 per host per month.
+Every host has a 1 GiB swap file for short peaks. Don't go below `t4g.micro`, and keep the
+telemetry host on `t4g.small`: OpenObserve alone peaked near 950 MiB.
+
+Try it on staging first, and only after §First deploy, so there is a real stack to measure:
+
+1. In `rentsync-dev-staging`, set the variable `instance_type` to `t4g.micro` and start a run.
+   It replaces the host as in §Host replacement; its address and data are kept.
+2. Deploy to it once (§Release and promotion) and check `/healthz`. A deploy is the busiest
+   moment for memory.
+3. In a session on the host (`aws ssm start-session --target <instance_id>`), check memory:
+
+   ```bash
+   free -m                          # "available" should stay above ~100 MiB
+   swapon --show                    # swap in use; a little after a deploy is normal
+   sudo docker stats --no-stream    # memory per container
+   ```
+
+4. If swap use keeps growing, or `/healthz` gets slow, set `instance_type` back to `t4g.small`.
+   Otherwise, after a few days and a few deploys, do the same for `rentsync-prod-us`.
+
 ## Monthly OS patching (AMI update)
 
 Hosts are immutable and the AMI is pinned (research R4), so a host gets no operating system

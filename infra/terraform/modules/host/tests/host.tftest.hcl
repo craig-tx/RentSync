@@ -69,3 +69,47 @@ run "x86_fallback_uses_x86_compose" {
     error_message = "Non-Graviton types must install the x86_64 Compose plugin."
   }
 }
+
+run "swap_file_at_first_boot" {
+  command = plan
+
+  override_resource {
+    target          = aws_ebs_volume.data
+    override_during = plan
+    values          = { id = "vol-0123456789abcdef0" }
+  }
+
+  assert {
+    condition     = strcontains(local.user_data, "/usr/local/bin/rentsync-swap 1024") && strcontains(local.user_data, "/etc/sysctl.d/90-rentsync.conf")
+    error_message = "Hosts must create a 1 GiB swap file and set vm.swappiness at first boot (research R4)."
+  }
+}
+
+run "swap_can_be_turned_off" {
+  command = plan
+
+  override_resource {
+    target          = aws_ebs_volume.data
+    override_during = plan
+    values          = { id = "vol-0123456789abcdef0" }
+  }
+
+  variables {
+    swap_mib = 0
+  }
+
+  assert {
+    condition     = !strcontains(local.user_data, "rentsync-swap 0") && !strcontains(local.user_data, "/usr/local/bin/rentsync-swap ")
+    error_message = "swap_mib = 0 must not create a swap file."
+  }
+}
+
+run "swap_must_fit_the_root_disk" {
+  command = plan
+
+  variables {
+    swap_mib = 8192
+  }
+
+  expect_failures = [var.swap_mib]
+}

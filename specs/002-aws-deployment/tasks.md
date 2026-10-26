@@ -617,6 +617,11 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   - **Docs:** runbook §Monthly OS patching and §Audit logs; production-differences adds a
     security section (CSPM such as Orca, GuardDuty, Security Hub, Config, log archive, egress,
     patching, scanning).
+- [X] T052j [US1] Host memory: measure the stack (research R4 table), and give every host a
+  1 GiB swap file at first boot (`infra/host/bin/rentsync-swap`, module variable `swap_mib`,
+  `vm.swappiness = 10`). Tests: `infra/host/test/swap_test.sh` (root, in CI) and the host
+  module's Terraform tests. Runbook §Changing a host's instance type describes trying
+  `t4g.micro` on staging.
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the

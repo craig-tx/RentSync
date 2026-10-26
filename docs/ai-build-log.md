@@ -685,6 +685,29 @@ No major-version port is outstanding beyond these. The next quarterly review cov
 
 **Next task:** the operator's blank-slate re-bootstrap with the new step 1, then T054.
 
+### 2026-10-26: host memory measured; swap file on every host
+
+- **Done:** measured the environment stack on the local Compose stack with the production
+  `mock_pms` image, idle and under load (1,248 events, 599 webhook deliveries, 6,400 HTTP
+  requests from 8 clients, a first-deploy setup). Containers peak at ~500 MiB, so a host at
+  ~750–800 MiB with the OS; OpenObserve alone peaked at 949 MiB (research R4 table). Every
+  host now gets a 1 GiB swap file at first boot (`rentsync-swap`, `swap_mib`, swappiness 10).
+  Runbook §Changing a host's instance type covers trying `t4g.micro` on staging.
+- **Decisions:** `t4g.small` stays the default; `t4g.nano` is ruled out; the telemetry host
+  stays `t4g.small`. The swap change alters user data, so the next apply of each workspace
+  **replaces its host** (data, IP and certificates kept). Applied now, while no host holds
+  data, that costs nothing.
+- **Found:** the local `rentsync/mock_pms:dev` image predated the gem updates from PR #9, so
+  recreated containers failed with Bundler::GemNotFound. Rebuilt it. `mock_pms_b` still runs
+  the old image. The local database had no webhook client, so the first load run exercised no
+  deliveries; a `memory-load` client was registered for the second.
+- **Tests:** host module Terraform tests (5, including swap on, off and too large); every root's
+  tests; `swap_test.sh` in a privileged Linux container (it needs a real filesystem, not
+  overlayfs); a mutation of each new check failed as expected. Not measured: the OS overhead,
+  and Graviton rather than x86_64.
+
+**Next task:** first applies (§First apply), then a deploy and `free -m` on `dev-staging`.
+
 ### 2026-10-26: first deploy failed on the SSM command comment
 
 - **Found (operator, first Deploy run):** `aws ssm send-command` rejected the comment
