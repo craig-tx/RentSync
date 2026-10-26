@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Runbook §Bootstrap steps 4–6 (feature 002): the HCP Terraform project, the rentsync-aws
+# Runbook §Bootstrap step 3 (feature 002): the HCP Terraform project, the rentsync-aws
 # variable set, the three workspaces, remote state sharing and every workspace variable, through
 # the HCP Terraform API (contracts/workspace-variables.md).
 #
@@ -301,7 +301,7 @@ module HcpBootstrap
       @api.post("/workspaces/#{id}/relationships/tags", { data: [{ type: "tags", attributes: { name: tag } }] })
     end
 
-    # Only the two environment workspaces may read the shared outputs (runbook step 5).
+    # Only the two environment workspaces may read the shared outputs (runbook §Bootstrap step 3).
     def ensure_remote_state(ids)
       shared = ids[SHARED]
       unless @workspace_attrs[SHARED]["global-remote-state"] == false
@@ -370,7 +370,7 @@ module HcpBootstrap
     OptionParser.new do |o|
       o.banner = "usage: bootstrap-hcp.rb --aws-account ID --ami AMI --acme-email E --openobserve-email E --budget-email E [options]"
       o.on("--aws-account ID", "AWS account ID (12 digits), not an HCP or GitHub one") { |v| opts[:aws_account] = v }
-      o.on("--ami AMI", "Amazon Linux 2023 arm64 AMI (runbook step 3)") { |v| opts[:ami] = v }
+      o.on("--ami AMI", "Amazon Linux 2023 arm64 AMI (runbook §Bootstrap step 2)") { |v| opts[:ami] = v }
       o.on("--acme-email EMAIL", "Let's Encrypt contact") { |v| opts[:acme_email] = v }
       o.on("--openobserve-email EMAIL", "OpenObserve sign-in user") { |v| opts[:openobserve_email] = v }
       o.on("--budget-email EMAIL", "AWS budget alert recipient") { |v| opts[:budget_email] = v }

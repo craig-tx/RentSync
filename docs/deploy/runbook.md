@@ -14,100 +14,60 @@ Deployments (constitution Principle VI, DeploymentId):
 
 ## Bootstrap
 
-This one-time setup, done by hand, should take under an hour (FR-006). It creates no AWS access
+This one-time setup should take under an hour (FR-006). Three scripts and two AWS CLI commands
+do all of it, so you don't click through any console. Each script prints a plan and changes
+nothing until you rerun it with `--apply`. Each is safe to rerun. The setup creates no AWS access
 keys, and no credential ever goes into chat, the repository, or a terminal history. Afterwards,
 every change goes through HCP Terraform runs. Note the start time; T053 records how long it took.
 
-You need an AWS account (region `us-east-1`), owner access to the HCP Terraform organization
-`craig-personal`, admin access to `craig-tx/RentSync` on GitHub, and the NameCheap account for
-`rentsync.org`.
+| Step | What | Where it runs | When |
+|---|---|---|---|
+| 1 | `bootstrap-iam.sh`: AWS OIDC providers and roles | AWS CloudShell | first |
+| 2 | AWS CLI: look up the AMI | AWS CloudShell | after step 1 |
+| 3 | `bootstrap-hcp.rb`: HCP Terraform project, workspaces and variables | PowerShell, your machine | after step 2 |
+| 4 | `bootstrap-github.sh`: GitHub variables, Environments and secret scanning | Git Bash, your machine | after step 1; rerun after T054 and at T074 |
+| 5 | AWS CLI: activate the `DeploymentId` cost allocation tag | AWS CloudShell | about a day after the first apply |
 
-### 1–2. AWS: OIDC providers and bootstrap roles, from CloudShell (recommended)
+You need an AWS account (AWS region `us-east-1`), owner access to the HCP Terraform
+organization `craig-personal`, admin access to `craig-tx/RentSync` on GitHub, and the NameCheap
+account for `rentsync.org`. On your machine, you need Ruby, Terraform and the `gh` CLI.
 
-[`infra/bootstrap/bootstrap-iam.sh`](../../infra/bootstrap/bootstrap-iam.sh) does steps 1 and 2
-with the AWS CLI. Run it in **AWS CloudShell**, which acts as your console session, so no access
-key is created. It reads the AWS account ID from that session, writes filled-in copies of the
-[`iam/`](iam/) files to the gitignored `.bootstrap/iam/`, and validates each one with IAM Access
-Analyzer. It is safe to rerun: it skips what exists, and refreshes the trust policy of a role
-that exists.
+### 1. AWS: OIDC providers and bootstrap roles
 
-1. Sign in as an administrator, switch to `us-east-1`, and open **CloudShell** from the top bar.
-2. Clone the repository. Before feature 002 merges, add `--branch 002-aws-deployment`:
+[`infra/bootstrap/bootstrap-iam.sh`](../../infra/bootstrap/bootstrap-iam.sh) creates the two OIDC
+providers and four roles, using the policy documents in [`iam/`](iam/)
+(contracts/bootstrap-iam.md). CloudShell acts as your console session, so no access key is
+created. The script reads the AWS account ID from that session, writes filled-in copies of the
+documents to the gitignored `.bootstrap/iam/`, and validates each one with IAM Access Analyzer.
+Any error or security warning stops it before it changes anything.
+
+1. Sign in to the AWS console as an administrator, switch to `us-east-1`, and open
+   **CloudShell** from the top bar.
+2. Clone the repository:
 
    ```bash
    git clone https://github.com/craig-tx/RentSync.git && cd RentSync
    ```
 
-3. Print the plan. It changes nothing; review the `+ aws …` lines it lists:
+3. Print the plan, and review the `+ aws …` lines:
 
    ```bash
    bash infra/bootstrap/bootstrap-iam.sh
    ```
 
-4. Make the changes. The script ends by printing the four role ARNs, each with the variable
-   it goes into (steps 4 and 7):
+4. Make the changes:
 
    ```bash
    bash infra/bootstrap/bootstrap-iam.sh --apply
    ```
 
-   An existing policy is never changed automatically. If the script reports one, compare it
-   with the rendered file and run the `create-policy-version` command it prints. If
-   `create-role` fails with "Invalid principal" right after the providers were created, IAM
-   hasn't caught up yet. Wait a few seconds and rerun.
+The script ends by printing the role ARNs. You don't need to copy them: steps 3 and 4 build them
+from the AWS account ID.
 
-The console steps below do the same by hand. Skip to step 3 if the script succeeded.
+### 2. AWS: look up the AMI
 
-### 1. AWS: OIDC identity providers (console)
-
-Open IAM → **Identity providers** → **Add provider**, choose **OpenID Connect**, and add these
-two providers:
-
-| Provider URL | Audience |
-|---|---|
-| `https://app.terraform.io` | `aws.workload.identity` |
-| `https://token.actions.githubusercontent.com` | `sts.amazonaws.com` |
-
-### 2. AWS: the bootstrap roles (console)
-
-Each policy file in [`iam/`](iam/) uses `<aws-account-id>` as a placeholder. Don't edit them in place.
-Write paste-ready copies to the gitignored `.bootstrap/iam/` and paste from there:
-
-```bash
-bash infra/bootstrap/bootstrap-iam.sh --render-only <your 12-digit AWS account ID>
-```
-
-A placeholder left in a pasted document makes IAM fail with "The policy failed legacy parsing".
-
-1. Open IAM → **Policies** → **Create policy** → **JSON**. Paste
-   [`iam/hcp-terraform-policy.json`](iam/hcp-terraform-policy.json) and name it
-   `rentsync-hcp-terraform`.
-2. Open IAM → **Roles** → **Create role** → **Custom trust policy**. Paste
-   [`iam/hcp-terraform-trust.json`](iam/hcp-terraform-trust.json), attach the
-   `rentsync-hcp-terraform` policy, and name the role `rentsync-hcp-terraform`.
-3. Create the policy `rentsync-github-build` from
-   [`iam/github-build-policy.json`](iam/github-build-policy.json), and the role
-   `rentsync-github-build` from [`iam/github-build-trust.json`](iam/github-build-trust.json).
-   It trusts only jobs on `main`, and it is the only role that can push images.
-4. Create the policy `rentsync-github-actions` from
-   [`iam/github-actions-policy.json`](iam/github-actions-policy.json), and the role
-   `rentsync-github-actions` from [`iam/github-actions-trust.json`](iam/github-actions-trust.json).
-   It trusts only the `dev-staging` Environment, deploys **non-production** hosts, and cannot
-   push images.
-5. Create the policy `rentsync-github-actions-prod` from
-   [`iam/github-actions-prod-policy.json`](iam/github-actions-prod-policy.json), and the role
-   `rentsync-github-actions-prod` from
-   [`iam/github-actions-prod-trust.json`](iam/github-actions-prod-trust.json). Its trust accepts
-   only the `prod-us` GitHub Environment, and it is the only role that can run commands on
-   production hosts. IAM, not just the workflow, enforces the approval gate.
-6. Note the four role ARNs for steps 4 and 7. The table at the end of this section says where
-   each one goes.
-7. As you paste each policy, open the policy editor's **Policy validation** panel (IAM Access
-   Analyzer) and resolve any error or security warning before saving.
-
-### 3. AWS: pick the AMI
-
-Find the current Amazon Linux 2023 arm64 AMI:
+In the same CloudShell session, print the current Amazon Linux 2023 arm64 AMI ID. Step 3 takes it
+as `--ami`:
 
 ```bash
 aws ssm get-parameter --region us-east-1 \
@@ -115,166 +75,125 @@ aws ssm get-parameter --region us-east-1 \
   --query Parameter.Value --output text
 ```
 
-Record the `ami-…` ID. It is pinned on purpose: changing it later replaces every host
-(research R4).
+The AMI is pinned on purpose: changing `ami_id` later replaces every host (research R4).
 
-### 4–6. HCP Terraform, from your machine (recommended)
+### 3. HCP Terraform: project, workspaces and variables
 
-[`infra/bootstrap/bootstrap-hcp.rb`](../../infra/bootstrap/bootstrap-hcp.rb) does steps 4 to 6
-through the HCP Terraform API: the project, the variable set, the three workspaces, remote
-state sharing, and every variable in the tables below. It needs only Ruby, with no gems.
-- **Secrets:** each `admin_token` is generated inside the script and sent straight to HCP as a
-  sensitive variable. The OpenObserve root password is asked for twice, without echo, and checked
-  against Terraform's rule before anything changes.
-- **Safe to rerun:** it restores workspace settings that drifted, but it never changes a variable
-  that exists. It only reports one whose value differs, because you change those later on
-  purpose (`acme_ca`, `ami_id`, rotations).
+[`infra/bootstrap/bootstrap-hcp.rb`](../../infra/bootstrap/bootstrap-hcp.rb) does this through the
+HCP Terraform API:
+- the `RentSync` project, and the `rentsync-aws` variable set holding the
+  `rentsync-hcp-terraform` role ARN;
+- the three workspaces, tracking `main`, with their apply methods and tags;
+- remote state sharing from `rentsync-shared-us`;
+- every workspace variable in contracts/workspace-variables.md.
+
+It needs only Ruby, with no gems.
+- **Secrets:** each `admin_token` is generated inside the script, a different one per
+  environment, and sent straight to HCP Terraform as a sensitive variable. The OpenObserve root
+  password is asked for twice, without echo, and checked against Terraform's rule before anything
+  changes.
+- **Reruns:** it restores workspace settings that drifted, but never changes a variable that
+  exists. It reports one whose value differs, because you change those on purpose later
+  (`acme_ca`, `ami_id`, rotations).
 
 Run it in PowerShell or Windows Terminal. Git Bash's terminal can't hide the password prompt.
 
-1. Sign in once. `terraform login` opens the browser and saves a token in your user profile,
-   where the script reads it. The token is never printed:
+1. Sign in to HCP Terraform once. `terraform login` opens the browser and saves a token in your
+   user profile, where the script reads it. The token is never printed:
 
    ```powershell
    terraform login
    ```
 
-2. GitHub must already be connected to the organization. If the script says it found no GitHub
-   connection, do this once: in HCP choose **New** → **Workspace** → **Version control workflow**
-   → **GitHub**, authorize and install the app for `craig-tx`, then cancel before creating the
-   workspace.
-3. Print the plan. It changes nothing:
+2. Print the plan:
 
    ```powershell
-   ruby infra/bootstrap/bootstrap-hcp.rb --aws-account <AWS account ID> --ami <AMI from step 3> `
+   ruby infra/bootstrap/bootstrap-hcp.rb --aws-account <AWS account ID> --ami <AMI from step 2> `
      --acme-email <contact> --openobserve-email <sign-in email> --budget-email <alert recipient>
    ```
 
-4. Add `--apply` to make the changes. Options:
-   - `--branch` sets the branch the workspaces track (default `main`);
-   - `--health-assessments` turns on drift detection, if your plan includes it.
+3. Add `--apply` to make the changes. Other options:
+   - `--branch` changes the branch the workspaces track (default `main`);
+   - `--health-assessments` turns on drift detection, if your HCP Terraform plan includes it.
 
-The console steps below do the same by hand. Skip to step 7 if the script succeeded.
+### 4. GitHub: variables, Environments and secret scanning
 
-### 4. HCP Terraform: project and variable set (console)
+[`infra/bootstrap/bootstrap-github.sh`](../../infra/bootstrap/bootstrap-github.sh) does this
+through the GitHub API, with the `gh` CLI:
+- the repository variables `AWS_BUILD_ROLE_ARN`, `AWS_ROLE_ARN` and `AWS_REGION`;
+- the Environments `dev-staging` and `prod-us`. Each allows only branch `main`, because the
+  release roles trust these Environments by name;
+- each Environment's `SITE_URL`, the only place deployment URLs are recorded;
+- the `prod-us` `AWS_ROLE_ARN` override, which points production jobs at
+  `rentsync-github-actions-prod`;
+- secret scanning and push protection (SC-004).
 
-1. In organization `craig-personal`, go to **Projects** → **New project** and name it
-   `RentSync`.
-2. Go to **Settings** → **Variable sets** → **Create variable set**. Name it `rentsync-aws`, and
-   apply it to the project `RentSync`. Add two **Environment** variables, neither of them
-   sensitive:
+It sets only non-secret values. On a rerun, a value that differs is set again, an extra deployment
+branch is removed, and an existing reviewer is kept.
 
-   | Key | Value |
-   |---|---|
-   | `TFC_AWS_PROVIDER_AUTH` | `true` |
-   | `TFC_AWS_RUN_ROLE_ARN` | the `rentsync-hcp-terraform` role ARN |
+You run it three times. Each run passes the earlier flags again and adds one:
 
-### 5. HCP Terraform: workspaces (console)
-
-Create each workspace in project `RentSync`:
-
-1. Choose **New** → **Workspace** → **Version control workflow** → GitHub → `craig-tx/RentSync`.
-2. Under **Advanced options**, set the **Terraform working directory**, the VCS branch `main`,
-   and the trigger pattern `infra/**`.
-3. After creating it, open **Settings** → **General**:
-   - set **Terraform version** to `1.16.6`;
-   - set the **Apply method** as shown in the table;
-   - add the workspace tag shown in the table. The `cloud` block in `versions.tf` selects
-     workspaces by these tags.
-
-| Workspace | Working directory | Apply method | Tag |
-|---|---|---|---|
-| `rentsync-shared-us` | `infra/terraform/shared` | Manual apply | `rentsync-shared` |
-| `rentsync-dev-staging` | `infra/terraform/environment` | **Auto apply** | `rentsync-environment` |
-| `rentsync-prod-us` | `infra/terraform/environment` | Manual apply | `rentsync-environment` |
-
-Then finish the workspace settings:
-
-- In `rentsync-shared-us`, open **Settings** → **General** → **Remote state sharing**. Choose
-  **Share with specific workspaces**, and add `rentsync-dev-staging` and `rentsync-prod-us`.
-  Without this, the environment workspaces can't read the shared outputs.
-- In each workspace, open **Settings** → **Health** and turn on drift detection if your plan
-  includes it. Without it, any plan still shows drift (FR-005).
-
-### 6. HCP Terraform: workspace variables (console)
-
-All of these are **Terraform** variables. Mark the sensitive ones **Sensitive**. Generate each
-`admin_token` on your own machine with `openssl rand -hex 32`, separately for each
-environment, and paste it straight into HCP. Don't store it anywhere else.
-
-`rentsync-shared-us`:
-
-| Variable | Value | Sensitive |
+| When | Flags | What the run adds |
 |---|---|---|
-| `deployment_id` | `shared-us` | no |
-| `ami_id` | AMI from step 3 | no |
-| `telemetry_private_ip` | `10.40.1.10` | no |
-| `acme_email` | your contact email | no |
-| `acme_ca` | `https://acme-staging-v02.api.letsencrypt.org/directory` (first bring-up; see §DNS) | no |
-| `openobserve_root_email` | the OpenObserve sign-in email | no |
-| `openobserve_root_password` | 8–128 characters, with upper, lower, digit and special | **yes** |
-| `budget_email` | budget alert recipient | no |
+| Now | `--aws-account <AWS account ID>` | everything in the list above |
+| After the first `rentsync-shared-us` apply (T054) | add `--ecr-repository-url <URL>` | `ECR_REPOSITORY_URL`, from that workspace's `ecr_repository_url` output (HCP Terraform → `rentsync-shared-us` → **Outputs**). Releases are skipped until it is set. |
+| Task T074 | add `--prod-reviewer <your GitHub username>` | you, as the `prod-us` required reviewer |
 
-`rentsync-dev-staging` and `rentsync-prod-us`:
+1. Sign in to GitHub once, if you haven't: `gh auth login`.
+2. In Git Bash, print the plan:
 
-| Variable | `rentsync-dev-staging` | `rentsync-prod-us` | Sensitive |
+   ```bash
+   bash infra/bootstrap/bootstrap-github.sh --aws-account <AWS account ID>
+   ```
+
+3. Add `--apply` to make the changes.
+
+### 5. AWS: activate the cost allocation tag
+
+AWS can only activate a tag after its billing data has seen it, which happens about a day after
+the first apply. Then, in CloudShell:
+
+```bash
+aws ce list-cost-allocation-tags --region us-east-1 --tag-keys DeploymentId \
+  --query 'CostAllocationTags[].Status' --output text
+aws ce update-cost-allocation-tags-status --region us-east-1 \
+  --cost-allocation-tags-status TagKey=DeploymentId,Status=Active
+```
+
+If the first command prints nothing, AWS hasn't seen the tag yet; try again later. Once active,
+Cost Explorer can group spend by deployment (constitution VI).
+
+### If a step fails
+
+- **`create-role` fails with "Invalid principal" (step 1):** the OIDC providers were created
+  moments before, and IAM hasn't caught up. Wait a few seconds and rerun `--apply`.
+- **Step 1 says a policy exists and was not changed:** an existing policy is never changed
+  automatically. Compare it with the file in `.bootstrap/iam/`, and if the file is right, run the
+  `create-policy-version` command the script prints.
+- **Step 3 says it found no GitHub connection:** HCP Terraform isn't connected to GitHub yet.
+  Connect it once, in HCP Terraform: **New** → **Workspace** → **Version control workflow** →
+  **GitHub**. Authorize and install the app for `craig-tx`, cancel before creating the workspace,
+  and rerun the script.
+- **Step 3 reports a variable whose value differs:** that's expected after a deliberate change,
+  such as the switch to production certificates. To change a variable, edit it in the workspace.
+
+### Values
+
+Every value below is non-secret, but don't write them into this file: the repository is public
+and never names an AWS account ID. You pass each one to a script, and the script sets it in the
+place shown. Those places are the record.
+
+| Value | Where it comes from | Passed to | Ends up in |
 |---|---|---|---|
-| `deployment_id` | `dev-staging` | `prod-us` | no |
-| `environment` | `staging` | `production` | no |
-| `hostname` | `pms-staging.rentsync.org` | `pms.rentsync.org` | no |
-| `private_ip` | `10.40.1.20` | `10.40.1.30` | no |
-| `acme_email` | your contact email | your contact email | no |
-| `acme_ca` | the Let's Encrypt staging URL, as above | the Let's Encrypt staging URL, as above | no |
-| `admin_token` | `openssl rand -hex 32` | a different `openssl rand -hex 32` | **yes** |
-| `protected` | `false` (default; leave unset) | `true` | no |
-
-Everything else keeps the defaults in `variables.tf` (contracts/workspace-variables.md).
-
-### 7. GitHub: variables and Environments
-
-1. Go to **Settings** → **Secrets and variables** → **Actions** → **Variables**, and add
-   `AWS_BUILD_ROLE_ARN` (the `rentsync-github-build` ARN), `AWS_ROLE_ARN` (the
-   `rentsync-github-actions` ARN) and `AWS_REGION` (`us-east-1`). Add
-   `ECR_REPOSITORY_URL` after the first `rentsync-shared-us` apply, from its
-   `ecr_repository_url` output.
-2. Go to **Settings** → **Environments** and create `dev-staging` and `prod-us`. In each
-   Environment:
-   - add the Environment variable `SITE_URL`: `https://pms-staging.rentsync.org` for
-     `dev-staging` and `https://pms.rentsync.org` for `prod-us`. This is the only place
-     deployment URLs are recorded;
-   - in **`prod-us` only**, add the Environment variable `AWS_ROLE_ARN` = the
-     `rentsync-github-actions-prod` ARN. It overrides the repository variable for production
-     jobs;
-   - restrict deployment branches to `main`. This is **required, not optional**: the release
-     roles trust these Environments by name, so a branch must not be able to run a job in them.
-
-   The `prod-us` required reviewer is added in task T074.
-3. Go to **Settings** → **Code security** and confirm that secret scanning and push protection
-   are on. They are free for public repositories (SC-004).
-
-### 8. AWS Billing: cost allocation tag
-
-About a day after the first apply, go to Billing → **Cost allocation tags** → **User-defined**.
-Select `DeploymentId` and choose **Activate**. Cost Explorer can then group spend by
-deployment (constitution VI).
-
-### Values to record
-
-Every value below is non-secret, but don't write them into this file: the repository is
-public and never names an AWS account ID. Enter each value where the last column says. Those places
-are the record.
-
-| Value | Where it comes from | Where it is entered |
-|---|---|---|
-| AWS account ID | AWS console, top right | read by `bootstrap-iam.sh`; `--render-only` for the console path; `bootstrap-hcp.rb --aws-account` |
-| Region | `us-east-1` | variable defaults; GitHub `AWS_REGION` |
-| HCP organization | `craig-personal` | `versions.tf` (`cloud` block) |
-| `rentsync-hcp-terraform` role ARN | step 2 | variable set `TFC_AWS_RUN_ROLE_ARN` |
-| `rentsync-github-build` role ARN | step 2 | GitHub repository variable `AWS_BUILD_ROLE_ARN` |
-| `rentsync-github-actions` role ARN | step 2 | GitHub repository variable `AWS_ROLE_ARN` |
-| `rentsync-github-actions-prod` role ARN | step 2 | GitHub `prod-us` Environment variable `AWS_ROLE_ARN` |
-| AMI ID | step 3 | `rentsync-shared-us` `ami_id` |
-| ECR repository URL | `rentsync-shared-us` output `ecr_repository_url` | GitHub `ECR_REPOSITORY_URL` |
+| AWS account ID | AWS console, top right | `bootstrap-hcp.rb` and `bootstrap-github.sh` (`--aws-account`); step 1 reads it itself | the role ARNs below |
+| AWS region | `us-east-1` | fixed in the scripts | variable defaults; GitHub `AWS_REGION` |
+| HCP Terraform organization | `craig-personal` | fixed in `bootstrap-hcp.rb` | `versions.tf` (`cloud` block) |
+| `rentsync-hcp-terraform` role ARN | built from the AWS account ID | `bootstrap-hcp.rb` | variable set `TFC_AWS_RUN_ROLE_ARN` |
+| `rentsync-github-build` role ARN | built from the AWS account ID | `bootstrap-github.sh` | GitHub repository variable `AWS_BUILD_ROLE_ARN` |
+| `rentsync-github-actions` role ARN | built from the AWS account ID | `bootstrap-github.sh` | GitHub repository variable `AWS_ROLE_ARN` |
+| `rentsync-github-actions-prod` role ARN | built from the AWS account ID | `bootstrap-github.sh` | GitHub `prod-us` Environment variable `AWS_ROLE_ARN` |
+| AMI ID | step 2 | `bootstrap-hcp.rb --ami` | `rentsync-shared-us` `ami_id` |
+| ECR repository URL | `rentsync-shared-us` output `ecr_repository_url` | `bootstrap-github.sh --ecr-repository-url` | GitHub `ECR_REPOSITORY_URL` |
 
 ## DNS
 
@@ -367,7 +286,7 @@ run succeeds starts **Release** (`.github/workflows/release.yml`):
 
 1. **`build`** builds `mock_pms` for arm64 from the merge commit and pushes
    `<ECR>/shared-us/mock_pms:<sha>`. Tags are immutable, and an existing tag is skipped.
-   Releases are skipped until the bootstrap has set `ECR_REPOSITORY_URL`.
+   Releases are skipped until `ECR_REPOSITORY_URL` is set (§Bootstrap step 4, after T054).
 2. **`deploy-dev-staging`** runs `rentsync-deploy <sha>` on the `dev-staging` host, then checks
    `https://pms-staging.rentsync.org/healthz` for `status=ok`, `version=<sha>` and
    `deployment_id=dev-staging`. The target is 15 minutes from merge (SC-005).
@@ -611,7 +530,8 @@ code or variables change (FR-042). The only edit to shared configuration is one 
 release role's trust policy, step 2:
 
 1. **HCP:** create workspace `rentsync-pr-42` on `infra/terraform/environment`, tagged
-   `rentsync-environment`, like the others in §Bootstrap step 5. Pick its apply method. Add it
+   `rentsync-environment`, with the settings `bootstrap-hcp.rb` gives the other environment
+   workspaces (§Bootstrap step 3). Pick its apply method. Add it
    to `rentsync-shared-us`'s remote state sharing list, and set its variables:
    - `deployment_id = pr-42`;
    - `environment` (`staging` for anything that isn't production);
@@ -621,8 +541,10 @@ release role's trust policy, step 2:
    - a fresh `admin_token`.
 2. **AWS IAM:** add `"repo:craig-tx@16706018/RentSync@1427164274:environment:pr-42"` to the `sub` list in the
    `rentsync-github-actions` trust policy
-   ([`iam/github-actions-trust.json`](iam/github-actions-trust.json)). Trust uses exact names,
-   so a job in an unlisted Environment can't assume the role (security review 2026-10-21).
+   ([`iam/github-actions-trust.json`](iam/github-actions-trust.json)). Merge that, then rerun
+   `bootstrap-iam.sh --apply` in CloudShell, which updates the role's trust policy. Trust uses
+   exact names, so a job in an unlisted Environment can't assume the role (security review
+   2026-10-21).
 3. **GitHub:** create Environment `pr-42` with `SITE_URL = https://pms-pr-42.rentsync.org`,
    limited to `main`. Add `pr-42` to the `deployment_id` choice list in
    `.github/workflows/deploy.yml`, which is the only code change.
@@ -680,6 +602,6 @@ then `shared-us`, because the environments depend on its network.
 
 6. Delete the NameCheap A records.
 7. If you're leaving for good, also delete the bootstrap roles, policies and OIDC providers
-   (§Bootstrap steps 1–2), and the HCP workspaces.
+   (§Bootstrap step 1), and the HCP workspaces.
 
 Next day: Cost Explorer, grouped by `DeploymentId`, should show no new charges.

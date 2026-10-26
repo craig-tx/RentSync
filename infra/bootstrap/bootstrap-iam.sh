@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Runbook §Bootstrap steps 1–2 (feature 002): the two OIDC providers and the four bootstrap
-# roles, from the policy files in docs/deploy/iam/. Meant for AWS CloudShell, which runs as the
-# console session, so no access key is ever created.
+# Runbook §Bootstrap step 1 (feature 002): the two OIDC providers and the four bootstrap roles,
+# from the policy files in docs/deploy/iam/. Meant for AWS CloudShell, which runs as the console
+# session, so no access key is ever created.
 #
-#   bootstrap-iam.sh                               render, validate, and print the plan; changes nothing
-#   bootstrap-iam.sh --apply                       the same, then create or update what the plan lists
-#   bootstrap-iam.sh --render-only AWS_ACCOUNT_ID  only write the filled-in copies; no AWS calls
+#   bootstrap-iam.sh          render, validate, and print the plan; changes nothing
+#   bootstrap-iam.sh --apply  the same, then create or update what the plan lists
 #
 # Filled-in copies go to $RENTSYNC_IAM_OUT (default <repo>/.bootstrap/iam, gitignored), so the
 # AWS account ID never lands in a tracked file. Safe to rerun: what exists is skipped or updated.
@@ -21,17 +20,13 @@ stems="hcp-terraform github-build github-actions github-actions-prod"
 die() { echo "error: $*" >&2; exit 1; }
 
 mode="plan"
-aws_account_id=""
 case "${1:-}" in
   "") ;;
   --apply) mode="apply" ;;
-  --render-only) mode="render"; aws_account_id="${2:-}" ;;
-  *) die "usage: $0 [--apply | --render-only AWS_ACCOUNT_ID]" ;;
+  *) die "usage: $0 [--apply]" ;;
 esac
 
-if [ "$mode" != "render" ]; then
-  aws_account_id="$(aws sts get-caller-identity --query Account --output text)"
-fi
+aws_account_id="$(aws sts get-caller-identity --query Account --output text)"
 [[ "$aws_account_id" =~ ^[0-9]{12}$ ]] || die "AWS account ID must be 12 digits, got '$aws_account_id'"
 
 # --- Render ------------------------------------------------------------------------------
@@ -43,7 +38,6 @@ if grep -l '<[A-Za-z_-]*>' "$out"/*.json >&2; then
   die "placeholders remain in the files above"
 fi
 echo "Rendered $(find "$out" -name '*.json' | wc -l | tr -d ' ') files for AWS account $aws_account_id into $out"
-[ "$mode" = "render" ] && exit 0
 
 # --- Validate (IAM Access Analyzer, the console editor's "Policy validation") -------------
 blocked=0
@@ -126,8 +120,9 @@ else
 fi
 
 echo
-echo "Role ARNs (runbook §Bootstrap, values table):"
-echo "  rentsync-hcp-terraform        arn:aws:iam::$aws_account_id:role/rentsync-hcp-terraform        -> HCP variable set TFC_AWS_RUN_ROLE_ARN"
-echo "  rentsync-github-build         arn:aws:iam::$aws_account_id:role/rentsync-github-build         -> GitHub repository variable AWS_BUILD_ROLE_ARN"
-echo "  rentsync-github-actions       arn:aws:iam::$aws_account_id:role/rentsync-github-actions       -> GitHub repository variable AWS_ROLE_ARN"
-echo "  rentsync-github-actions-prod  arn:aws:iam::$aws_account_id:role/rentsync-github-actions-prod  -> GitHub prod-us Environment variable AWS_ROLE_ARN"
+echo "Role ARNs. Nothing to copy: bootstrap-hcp.rb and bootstrap-github.sh build them from"
+echo "--aws-account $aws_account_id and set them where shown."
+echo "  arn:aws:iam::$aws_account_id:role/rentsync-hcp-terraform        -> HCP variable set TFC_AWS_RUN_ROLE_ARN"
+echo "  arn:aws:iam::$aws_account_id:role/rentsync-github-build         -> GitHub repository variable AWS_BUILD_ROLE_ARN"
+echo "  arn:aws:iam::$aws_account_id:role/rentsync-github-actions       -> GitHub repository variable AWS_ROLE_ARN"
+echo "  arn:aws:iam::$aws_account_id:role/rentsync-github-actions-prod  -> GitHub prod-us Environment variable AWS_ROLE_ARN"

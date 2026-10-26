@@ -1,7 +1,7 @@
-# Contract: bootstrap IAM (created by hand, once)
+# Contract: bootstrap IAM (created once, by script)
 
-The operator creates these in the AWS console during bootstrap (FR-006). The runbook has the
-click path. No access keys are created. `<aws-account-id>` is the AWS account ID.
+The operator creates these during bootstrap (FR-006) by running `infra/bootstrap/bootstrap-iam.sh`
+in AWS CloudShell (runbook §Bootstrap step 1). No access keys are created. `<aws-account-id>` is the AWS account ID.
 
 ## OIDC identity providers
 
@@ -72,7 +72,7 @@ deploy pins `<sha>@sha256:<digest>` (research R9).
 ### Role `rentsync-github-actions` (non-production deploys)
 
 **Trust**: `sub` **exactly** `repo:craig-tx@16706018/RentSync@1427164274:environment:dev-staging`. The `dev-staging`
-Environment is limited to `main` (runbook ?Bootstrap step 7). Adding a side-by-side deployment
+Environment is limited to `main` (runbook §Bootstrap step 4). Adding a side-by-side deployment
 adds its Environment's exact subject to this list. That is a one-line change and the only IAM
 edit a new deployment needs. See `docs/deploy/iam/github-actions-trust.json`.
 

@@ -556,7 +556,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 - [X] T052a [US1] Script runbook §Bootstrap steps 1–2 in `infra/bootstrap/bootstrap-iam.sh`, for
   AWS CloudShell (no access keys). It renders the `iam/` files into the gitignored
   `.bootstrap/iam/`, validates them with Access Analyzer, prints a plan, and applies only with
-  `--apply`. It is idempotent, and `--render-only AWS_ACCOUNT_ID` serves the console path. Test with a
+  `--apply`. It is idempotent. (`--render-only`, which served the console path, was removed with that path.) Test with a
   stub `aws`: `infra/bootstrap/test/bootstrap_iam_test.sh`, run in CI.
 - [X] T052b [US1] Script runbook §Bootstrap steps 4–6 in `infra/bootstrap/bootstrap-hcp.rb`
   (Ruby standard library only), through the HCP Terraform API: the project, the variable set,
@@ -564,6 +564,16 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   prompts for the OpenObserve password without echo, prints a plan unless `--apply` is given,
   restores drifted workspace settings, and never changes a variable that exists. Test against a
   fake API: `infra/bootstrap/test/bootstrap_hcp_test.rb`, run in CI.
+- [X] T052c [US1] Script the GitHub part of runbook §Bootstrap in `infra/bootstrap/bootstrap-github.sh`,
+  through the GitHub API (`gh`): the repository variables, both Environments restricted to
+  `main`, their variables, and secret scanning and push protection, plus `--ecr-repository-url`
+  (after T054) and `--prod-reviewer` (T074). It plans by default, is idempotent, and keeps
+  existing reviewers. Test with a stub `gh`: `infra/bootstrap/test/bootstrap_github_test.sh`,
+  run in CI.
+- [X] T052d [US1] Make runbook §Bootstrap script-only: five steps (IAM script, AMI lookup, HCP
+  script, GitHub script, cost allocation tag by AWS CLI), with no console click paths. Remove
+  `bootstrap-iam.sh --render-only`, and reword spec.md (Bootstrap), contracts/bootstrap-iam.md
+  and quickstart §1 to match.
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the
@@ -576,7 +586,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   `docs/ai-build-log.md`, against FR-006's one-hour limit.
 - [ ] T054 [US1] **🧑 OPERATOR**: apply `rentsync-shared-us` (confirm), then
   `rentsync-dev-staging`, then `rentsync-prod-us` (confirm), with `acme_ca` set to the Let's
-  Encrypt staging endpoint. Then add the A records (runbook §DNS), and record the three
+  Encrypt staging endpoint. Then rerun `bootstrap-github.sh` with `--ecr-repository-url` (runbook §Bootstrap step 4), add the A records (runbook §DNS), and record the three
   public IPs in runbook §DNS. Record the elapsed time from the first apply to three hosts
   serving HTTPS, excluding DNS propagation, in `docs/ai-build-log.md`, against SC-001's 60
   minutes.
@@ -795,9 +805,9 @@ Ingest stays inside the VPC.
   - the one rollback action, `deploy.yml` with `rollback=true`;
   - the **expand-only migrations** rule: a release may add tables and columns, never drop or
     rename them. Contraction happens a release later (research R9).
-- [ ] T074 [US4] **🧑 OPERATOR**: in GitHub → Settings → Environments → `prod-us`, add yourself
-  as a required reviewer and restrict the Environment to branch `main`. Restrict `dev-staging`
-  to `main` too.
+- [ ] T074 [US4] **🧑 OPERATOR**: rerun `bootstrap-github.sh` with `--prod-reviewer <your GitHub
+  username>` (runbook §Bootstrap step 4). It adds you as the `prod-us` required reviewer; both
+  Environments are already restricted to branch `main`.
 - [ ] T075 [US4] Run quickstart §3 (a visible change, staging first, then the approved
   promotion, timed against SC-005) and §6:
   - roll back `prod-us` and check that the data counts are unchanged (SC-006);
