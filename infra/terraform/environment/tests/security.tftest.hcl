@@ -24,12 +24,14 @@ override_data {
 }
 
 variables {
-  deployment_id = "dev-staging"
-  environment   = "staging"
-  hostname      = "pms-staging.rentsync.org"
-  private_ip    = "10.40.1.20"
-  acme_email    = "ops@example.test"
-  admin_token   = "0123456789abcdef0123456789abcdef"
+  region           = "us-east-1"
+  hcp_organization = "example-org"
+  deployment_id    = "dev-staging"
+  environment      = "staging"
+  hostname         = "pms-staging.example.com"
+  private_ip       = "10.40.1.20"
+  acme_email       = "ops@example.test"
+  admin_token      = "0123456789abcdef0123456789abcdef"
 }
 
 run "only_http_and_https_from_the_internet" {
@@ -113,7 +115,7 @@ run "production_hosts_are_protected" {
   variables {
     deployment_id = "prod-us"
     environment   = "production"
-    hostname      = "pms.rentsync.org"
+    hostname      = "pms.example.com"
     private_ip    = "10.40.1.30"
     protected     = true
   }

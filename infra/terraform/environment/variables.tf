@@ -28,13 +28,18 @@ variable "shared_workspace" {
 }
 
 variable "region" {
-  type    = string
-  default = "us-east-1"
+  type        = string
+  description = "AWS region, from the deployment settings (bootstrap-hcp.rb)."
+}
+
+variable "hcp_organization" {
+  type        = string
+  description = "HCP Terraform organization holding the shared workspace, from the deployment settings."
 }
 
 variable "hostname" {
   type        = string
-  description = "Public hostname, e.g. pms-staging.rentsync.org (DNS set by hand, FR-021)."
+  description = "Public hostname, e.g. pms-staging.example.com (DNS set by hand, FR-021)."
 }
 
 variable "private_ip" {

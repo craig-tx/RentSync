@@ -11,14 +11,13 @@ variable "deployment_id" {
 }
 
 variable "region" {
-  type    = string
-  default = "us-east-1"
+  type        = string
+  description = "AWS region, from the deployment settings (bootstrap-hcp.rb)."
 }
 
 variable "availability_zone" {
   type        = string
-  default     = "us-east-1a"
-  description = "All hosts and data volumes live in this zone (research R3)."
+  description = "All hosts and data volumes live in this zone (research R3), from the deployment settings."
 }
 
 variable "vpc_cidr" {
@@ -47,8 +46,8 @@ variable "telemetry_private_ip" {
 }
 
 variable "telemetry_hostname" {
-  type    = string
-  default = "telemetry.rentsync.org"
+  type        = string
+  description = "Public hostname of the telemetry host, telemetry.<domain> (bootstrap-hcp.rb)."
 }
 
 variable "acme_email" {
