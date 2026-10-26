@@ -3,6 +3,14 @@
 # a RENTSYNC_ key, so loading the file assigns variables and never runs code.
 # shellcheck shell=bash
 
+# The scripts need bash 4.4 or later. macOS ships 3.2, so stop with the fix rather than fail
+# later in a confusing way. This check itself must stay valid bash 3.2.
+if [ "${BASH_VERSINFO[0]}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  echo "error: these scripts need bash 4.4 or later; this is bash $BASH_VERSION." >&2
+  echo "  On macOS: brew install bash, open a new Terminal, and check that bash --version says 5.x." >&2
+  exit 1
+fi
+
 settings_file="${RENTSYNC_SETTINGS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.bootstrap/settings.env}"
 
 load_settings() {

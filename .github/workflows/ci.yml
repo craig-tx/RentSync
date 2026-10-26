@@ -98,6 +98,19 @@ jobs:
         run: bash infra/host/test/render_env_test.sh
       - name: Deploy-script test (stub docker and aws)
         run: bash infra/host/test/deploy_test.sh
+      - name: Bootstrap scripts refuse bash older than 4.4 (macOS ships 3.2)
+        run: |
+          for v in 3.2 4.3; do
+            for s in bootstrap-init.sh bootstrap-iam.sh bootstrap-github.sh; do
+              if out="$(docker run --rm -v "$PWD":/src -w /src bash:$v bash infra/bootstrap/$s 2>&1)"; then
+                echo "$s ran under bash $v"; exit 1
+              fi
+              grep -q 'need bash 4.4 or later' <<< "$out" || { echo "$s under bash $v: $out"; exit 1; }
+            done
+          done
+          out="$(docker run --rm -v "$PWD":/src -w /src -e RENTSYNC_SETTINGS=/nonexistent bash:4.4 \
+            bash infra/bootstrap/bootstrap-iam.sh 2>&1)" || true
+          grep -q 'bootstrap-init.sh first' <<< "$out" || { echo "bash 4.4 was refused: $out"; exit 1; }
       - name: Bootstrap-init test (stub gh)
         run: bash infra/bootstrap/test/bootstrap_init_test.sh
       - name: Bootstrap-IAM test (stub aws)

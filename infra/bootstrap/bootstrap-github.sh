@@ -47,7 +47,7 @@ fi
 role() { echo "arn:aws:iam::$aws_account_id:role/rentsync-$1"; }
 
 # On Windows, `bash` typed in PowerShell is WSL, which cannot see the Windows gh install.
-command -v gh > /dev/null || die "gh not found on this bash's PATH. On Windows, run this from Git Bash,
+command -v gh > /dev/null || die "gh not found on this bash's PATH. Install it (macOS: brew install gh). On Windows, run this from Git Bash,
 or from PowerShell as: & \"C:\\Program Files\\Git\\bin\\bash.exe\" infra/bootstrap/bootstrap-github.sh ..."
 
 tmp="$(mktemp -d)"
