@@ -4,6 +4,7 @@
 x-mock-pms: &mock-pms
   build:
     context: ./mock_pms
+    target: dev # every gem, for tests and lint; releases build the default (production) target
     args:
       GIT_SHA: ${GIT_SHA:-dev}
   image: rentsync/mock_pms:dev

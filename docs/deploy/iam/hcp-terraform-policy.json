@@ -72,6 +72,30 @@
       "Resource": "arn:aws:budgets::<aws-account-id>:budget/rentsync-*"
     },
     {
+      "Sid": "RentSyncLogBuckets",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::rentsync-*", "arn:aws:s3:::rentsync-*/*"]
+    },
+    {
+      "Sid": "RentSyncTrail",
+      "Effect": "Allow",
+      "Action": "cloudtrail:*",
+      "Resource": "arn:aws:cloudtrail:*:<aws-account-id>:trail/rentsync-*"
+    },
+    {
+      "Sid": "ReadTrails",
+      "Effect": "Allow",
+      "Action": ["cloudtrail:DescribeTrails", "cloudtrail:ListTrails"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "FlowLogDeliveryToS3",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogDelivery", "logs:DeleteLogDelivery"],
+      "Resource": "*"
+    },
+    {
       "Sid": "AwsManagedKeysOnly",
       "Effect": "Allow",
       "Action": ["kms:DescribeKey", "kms:ListAliases"],

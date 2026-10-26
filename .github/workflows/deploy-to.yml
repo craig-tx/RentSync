@@ -64,7 +64,7 @@ jobs:
             [[ "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "image_tag must be a full 40-character commit SHA"; exit 1; }
             [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "image_digest must come from build-image.yml (sha256:...)"; exit 1; }
           fi
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}

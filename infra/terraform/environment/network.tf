@@ -12,6 +12,8 @@ module "network" {
   subnet_cidr = var.subnet_cidr
   # The shared zone: the host and its data volume are zonal, and peering within a zone is free.
   availability_zone = local.shared.availability_zone
+
+  flow_log_bucket_arn = local.shared.log_bucket_arn
 }
 
 # Same AWS account and region, so the connection accepts itself.

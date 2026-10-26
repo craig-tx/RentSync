@@ -62,3 +62,12 @@ output "ssm_parameter_names" {
     aws_ssm_parameter.openobserve_db_password.name,
   ]
 }
+
+output "log_bucket_arn" {
+  description = "Audit log bucket: CloudTrail, and every deployment's VPC Flow Logs."
+  value       = aws_s3_bucket.logs.arn
+}
+
+output "log_bucket_name" {
+  value = aws_s3_bucket.logs.id
+}

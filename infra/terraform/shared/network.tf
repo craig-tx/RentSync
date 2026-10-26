@@ -10,4 +10,7 @@ module "network" {
   vpc_cidr          = var.vpc_cidr
   subnet_cidr       = var.subnet_cidr
   availability_zone = var.availability_zone
+
+  flow_log_bucket_arn = aws_s3_bucket.logs.arn
+  depends_on          = [aws_s3_bucket_policy.logs] # flow log delivery checks the bucket policy
 }

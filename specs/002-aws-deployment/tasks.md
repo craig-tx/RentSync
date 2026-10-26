@@ -603,6 +603,20 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   group is gone. Ranges: shared `10.40.0.0/16`, staging `10.41.0.0/16`, prod `10.42.0.0/16`.
   `check_prevent_destroy.sh` forbids inline route, ingress and egress blocks. Docs name the
   production gold standard: the Multi-Account Strategy via AWS Organizations.
+- [X] T052i [US1] Hardening from review:
+  - **mock_pms image:** multi-stage. The production target holds runtime gems only (no test or
+    dev gems, no compiler) and runs as UID 10001; local Compose uses the `dev` target. The
+    host chowns `/srv/data/receiver` to UID 10001.
+  - **Supply chain:** Dependabot for gems, Actions, Docker and Terraform; every Action pinned
+    to a commit SHA.
+  - **CI scanning:** `bundle-audit`, CodeQL (Ruby), and Trivy for Terraform, with accepted
+    findings in `infra/terraform/.trivyignore`.
+  - **Audit logging:** a CloudTrail trail (all regions, log file validation) and VPC Flow Logs
+    for every deployment, into one private, encrypted log bucket kept 90 days, with the HCP
+    Terraform role permissions to manage them.
+  - **Docs:** runbook §Monthly OS patching and §Audit logs; production-differences adds a
+    security section (CSPM such as Orca, GuardDuty, Security Hub, Config, log archive, egress,
+    patching, scanning).
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the

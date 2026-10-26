@@ -577,3 +577,45 @@ Then, for the blank slate:
 
 **Next task:** merge, then the operator's re-bootstrap. Step 3 hasn't run, so the new variables
 land on the first apply. Then the CLI speculative plan check, then T054.
+
+### 2026-10-25: hardening from review (T052i)
+
+- **Why:** the operator asked which AWS and Ruby best practices the demo was missing. They chose:
+  - the five cheap, high-signal fixes;
+  - a monthly AMI-patching procedure;
+  - production-differences entries, including a CSPM such as Orca;
+  - then Flow Logs and CloudTrail as real additions.
+- **Image:** the Dockerfile had `bundle config set without ""`, so production shipped test and
+  lint gems, a compiler, and ran as root. It is now multi-stage:
+  - `production`, the default and what releases build: runtime gems only, no compiler, UID
+    10001. It loads the app; 316 MB against 852 MB for dev;
+  - `dev`, for local Compose and in-container RSpec.
+
+  `rentsync-boot` chowns `/srv/data/receiver` to UID 10001, and the boot-volume test asserts it.
+- **Supply chain:**
+  - Dependabot weekly for bundler, docker, github-actions and terraform;
+  - all seven third-party Actions pinned to commit SHAs with exact-version comments;
+  - CodeQL for Ruby.
+- **CI scanning:**
+  - `bundle-audit` 0.9.2 (no vulnerabilities today);
+  - Trivy 0.57.1 config scan. Its four findings are deliberate and justified in
+    `.trivyignore`: unrestricted egress, and AWS-managed rather than customer-managed KMS
+    encryption.
+- **Audit logging (shared deployment):**
+  - one bucket, `rentsync-shared-us-logs-<AWS account ID>`: public access blocked,
+    bucket-owner-enforced ownership, SSE-S3, 90-day expiry, TLS-only policy, and service
+    writes limited to this account's trail and flow logs;
+  - a multi-region CloudTrail with log file validation;
+  - an `aws_flow_log` in the network module, so every deployment's VPC is covered, under its
+    own prefix;
+  - `force_destroy` on the bucket: CloudTrail and Flow Logs write until destroyed, so emptying
+    it by hand would race them. The runbook warns to copy logs out first;
+  - the HCP Terraform policy gains S3 (`rentsync-*`), CloudTrail (`trail/rentsync-*`) and
+    log-delivery permissions, which the operator's re-bootstrap picks up.
+- **Tests:** a new shared audit test; a network Flow Logs test; Terraform shared 9, environment
+  15, network 5, host 2; every shell test; shellcheck; HCP 15.
+- **Not run here:** the host rehearsal with the new production image. CI's telemetry smoke test
+  covers the dev image in Compose.
+
+**Next task:** merge PR #7, retarget and merge this PR, then the operator's re-bootstrap from
+step 1 (the IAM policy changed) and T054.

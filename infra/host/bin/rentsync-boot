@@ -45,5 +45,7 @@ fi
 for dir in postgres caddy receiver openobserve openobserve-db; do
   mkdir -p "$mount_point/$dir"
 done
+# The mock PMS image runs as UID 10001 (mock_pms/Dockerfile); its test receiver writes here.
+chown 10001:10001 "$mount_point/receiver"
 
 echo "rentsync-boot: $device (UUID=$uuid) mounted at $mount_point"

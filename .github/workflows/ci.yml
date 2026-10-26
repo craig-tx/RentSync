@@ -37,8 +37,8 @@ jobs:
       run:
         working-directory: mock_pms
     steps:
-      - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
@@ -46,13 +46,17 @@ jobs:
       - run: bundle exec bin/setup --test-db-only
       - run: bundle exec rubocop
       - run: bundle exec rspec
+      - name: Gem vulnerability audit (ruby-advisory-db)
+        run: |
+          gem install bundler-audit -v 0.9.2 --no-document
+          bundle-audit check --update
 
   # Constitution VI: an OTLP backend runs in CI and receives every service's telemetry.
   telemetry-smoke:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: cp .env.example .env
       - name: Start the stack
         run: docker compose up -d --build --wait postgres redis mock_pms mock_pms_worker otel-collector openobserve
@@ -72,8 +76,8 @@ jobs:
   infra:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: 1.16.6
           terraform_wrapper: false
@@ -87,6 +91,10 @@ jobs:
           done
       - name: Static checks
         run: bash infra/terraform/check_prevent_destroy.sh
+      - name: Terraform security scan (Trivy; accepted findings in infra/terraform/.trivyignore)
+        run: |
+          docker run --rm -v "$PWD":/src aquasec/trivy:0.57.1 config --exit-code 1 \
+            --severity HIGH,CRITICAL --ignorefile /src/infra/terraform/.trivyignore /src/infra/terraform
       - name: Shellcheck
         run: |
           find infra/host/bin infra/host/test infra/terraform infra/bootstrap infra/bootstrap/test -maxdepth 1 -type f \( -path "infra/host/bin/*" -o -name "*.sh" \) -print0 | xargs -0 shellcheck
@@ -117,7 +125,7 @@ jobs:
         run: bash infra/bootstrap/test/bootstrap_iam_test.sh
       - name: Bootstrap-GitHub test (stub gh)
         run: bash infra/bootstrap/test/bootstrap_github_test.sh
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
         with:
           ruby-version: "3.3"
       - name: Bootstrap-HCP test (fake API)

@@ -29,3 +29,13 @@ variable "availability_zone" {
   type        = string
   description = "Every deployment uses the same zone: hosts and volumes are zonal, and peering traffic within one zone is free."
 }
+
+variable "flow_log_bucket_arn" {
+  type        = string
+  description = "ARN of the shared deployment's log bucket, which receives this VPC's Flow Logs."
+
+  validation {
+    condition     = startswith(var.flow_log_bucket_arn, "arn:aws:s3:::")
+    error_message = "flow_log_bucket_arn must be an S3 bucket ARN."
+  }
+}

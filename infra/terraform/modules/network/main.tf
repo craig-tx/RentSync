@@ -45,3 +45,15 @@ resource "aws_route_table_association" "public" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
 }
+
+# VPC Flow Logs: accepted and rejected traffic for the whole VPC, into the shared deployment's
+# log bucket under this deployment's prefix (shared/audit.tf). S3 keeps the cost to storage.
+resource "aws_flow_log" "this" {
+  vpc_id                   = aws_vpc.this.id
+  traffic_type             = "ALL"
+  log_destination_type     = "s3"
+  log_destination          = "${var.flow_log_bucket_arn}/vpc-flow-logs/${var.name}/"
+  max_aggregation_interval = 600
+
+  tags = { Name = "${var.name}-flow-log" }
+}
