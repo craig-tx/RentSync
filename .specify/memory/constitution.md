@@ -163,12 +163,26 @@ feature.
 ### VIII. Simplicity
 
 - Prefer boring, well-understood libraries and patterns.
-- A new dependency MUST have a one-line justification in that feature's `plan.md`.
+- A new dependency MUST have a one-line justification in that feature's `plan.md`. The
+  justification MUST say why writing it locally isn't reasonable.
+- **Avoid trivial dependencies.** When deciding whether to take a dependency, lean toward not
+  taking it if the functionality can reasonably be written and tested locally. Try, in order:
+  1. the language's standard library;
+  2. a small local implementation, with its own tests;
+  3. a dependency.
+
+  A dependency is the right choice when the problem is genuinely hard, large or
+  security-sensitive: for example cryptography, password hashing, TLS, database drivers, or
+  parsers for protocols and file formats. The package must also be widely used and actively
+  maintained. Cryptographic primitives MUST never be written locally.
 - Build only what the current spec requires. Any extra complexity MUST be justified in the
   plan's Complexity Tracking table.
 
 **Rationale**: Every dependency and abstraction is a maintenance cost. A small, legible system
-is easier to verify and to explain.
+is easier to verify and to explain. A package that does something trivial, such as padding or
+trimming a string, saves minutes once. It costs supply-chain risk, update churn (Development
+Workflow, "Dependency maintenance") and breakage outside the project's control for as long as
+it stays. The 2016 npm `left-pad` incident broke thousands of builds over an 11-line function.
 
 ### IX. Documented Decisions
 
@@ -312,4 +326,4 @@ a second instance starts.
   every PR review MUST verify compliance with these principles. Any unjustified violation
   blocks the merge.
 
-**Version**: 1.5.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-25
+**Version**: 1.6.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-25
