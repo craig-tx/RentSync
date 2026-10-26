@@ -25,7 +25,7 @@ every change goes through HCP Terraform runs. Note the start time; T053 records 
 | 1 | `bootstrap-iam.sh`: AWS OIDC providers and roles | AWS CloudShell | first |
 | 2 | AWS CLI: look up the AMI | AWS CloudShell | after step 1 |
 | 3 | `bootstrap-hcp.rb`: HCP Terraform project, workspaces and variables | PowerShell, your machine | after step 2 |
-| 4 | `bootstrap-github.sh`: GitHub variables, Environments and secret scanning | Git Bash, your machine | after step 1; rerun after T054 and at T074 |
+| 4 | `bootstrap-github.sh`: GitHub variables, Environments and secret scanning | Git Bash (not WSL), your machine | after step 1; rerun after T054 and at T074 |
 | 5 | AWS CLI: activate the `DeploymentId` cost allocation tag | AWS CloudShell | about a day after the first apply |
 
 You need an AWS account (AWS region `us-east-1`), owner access to the HCP Terraform
@@ -140,10 +140,17 @@ You run it three times. Each run passes the earlier flags again and adds one:
 | Task T074 | add `--prod-reviewer <your GitHub username>` | you, as the `prod-us` required reviewer |
 
 1. Sign in to GitHub once, if you haven't: `gh auth login`.
-2. In Git Bash, print the plan:
+2. Print the plan from **Git Bash**:
 
    ```bash
    bash infra/bootstrap/bootstrap-github.sh --aws-account <AWS account ID>
+   ```
+
+   Or from PowerShell, call Git Bash explicitly. A bare `bash` in PowerShell starts WSL, which
+   can't see the Windows `gh`:
+
+   ```powershell
+   & "C:\Program Files\Git\bin\bash.exe" infra/bootstrap/bootstrap-github.sh --aws-account <AWS account ID>
    ```
 
 3. Add `--apply` to make the changes.
