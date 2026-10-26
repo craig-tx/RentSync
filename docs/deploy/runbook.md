@@ -10,10 +10,15 @@ Bootstrap step 0 writes that file, and it is never committed. In this runbook, `
 your domain.
 
 - **The bootstrap scripts read the file themselves.** You never need to load it to run them.
-- **Commands you type by hand** (`dig`, `curl`, and the `aws` and `terraform` one-offs in later
+- **Commands you type by hand** (`curl`, and the `aws` and `terraform` one-offs in later
   sections) use its values as `$RENTSYNC_…` variables. Each of those code blocks starts with
   `source .bootstrap/settings.env`, which loads them into your shell; run it from the repository
   root. Running it again is harmless.
+- **Where to run them:** `aws` commands in **CloudShell**, because your machine has no AWS
+  credentials; everything else on **your machine**, in Git Bash on Windows or Terminal on macOS
+  (`source` is a bash command, so not in PowerShell or Command Prompt). Bootstrap step 1 copies
+  every setting into CloudShell, so the same blocks work in both. After rerunning step 0, paste
+  its CloudShell block again to keep the copy current.
 
 Deployments (constitution Principle VI, DeploymentId):
 
@@ -110,8 +115,8 @@ created.
 1. Sign in to the AWS console as an administrator, switch to your AWS region, and open
    **CloudShell** from the top bar.
 2. Paste the block that step 0 printed. It clones your repository (or updates an existing clone),
-   enters it, and writes the
-   settings this step needs.
+   enters it, and writes a copy of your settings there. CloudShell keeps your home directory
+   between sessions, so later CloudShell commands in this runbook find it too.
 3. Print the plan, and review the `+ aws …` lines:
 
    ```bash
@@ -299,9 +304,21 @@ certificates are not publicly trusted. Once every record resolves to its IP:
 2. Apply `rentsync-shared-us` (confirm), then `rentsync-dev-staging`, then `rentsync-prod-us`
    (confirm). Changing the host configuration replaces each host. Its address and data are
    kept (research R6).
-3. Check with `source .bootstrap/settings.env` and then
-   `curl -sv "https://pms-staging.$RENTSYNC_DOMAIN/healthz" 2>&1 | grep issuer`, which
-   should name a Let's Encrypt production issuer.
+3. Check each certificate, on your machine (Git Bash on Windows, Terminal on macOS):
+
+   ```bash
+   source .bootstrap/settings.env
+   for h in telemetry pms-staging pms; do
+     printf '%s: ' "$h.$RENTSYNC_DOMAIN"
+     curl -sv -o /dev/null "https://$h.$RENTSYNC_DOMAIN/" 2>&1 |
+       grep -E 'issuer:|verify ok|certificate problem' | sed 's/^\* *//' | tr '\n' ' '
+     echo
+   done
+   ```
+
+   Each line should show `O=Let's Encrypt` with an issuer such as `CN=YE1` or `CN=E7`, and
+   `SSL certificate verify ok`. A staging certificate's issuer starts with `(STAGING)`, and
+   curl reports a certificate problem instead.
 
 After bring-up, set the TTLs back to **Automatic**. The records never change again, because
 the Elastic IPs survive host replacement.

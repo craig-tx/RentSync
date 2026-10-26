@@ -2,7 +2,7 @@
 # Test for bootstrap-init.sh (runbook §Bootstrap step 0). Answers come on stdin and a stub `gh`
 # reports the repository's OIDC subject format, so no GitHub access is needed. Proves:
 #   1. the answers, plus the subject prefix from GitHub, are saved as KEY='value' lines that the
-#      other scripts' loader accepts, and the CloudShell block carries only what step 1 needs;
+#      other scripts' loader accepts, and the CloudShell block writes an identical copy;
 #   2. an invalid answer is asked again, and the AMI may stay blank;
 #   3. a rerun offers every saved value, so Enter keeps them all;
 #   4. a repository with a custom OIDC subject template is refused, and nothing is written;
@@ -69,11 +69,12 @@ grep -q 'The AMI ID is blank' <<< "$out" || fail "a blank AMI was not pointed ou
   [ "$RENTSYNC_GITHUB_SUBJECT" = "repo:example-owner@111/example-app@222" ] || fail "loader read the wrong subject"
 ) || exit 1
 
-# The CloudShell block writes only step 1's four settings, and works whether or not the
-# repository is already cloned (a stub git stands in for GitHub).
+# The CloudShell block writes every setting, so runbook commands that use the domain or the
+# emails work there too, and works whether or not the repository is already cloned (a stub git
+# stands in for GitHub).
 block="$(sed -n '/^\[ -d /,/^EOF$/p' <<< "$out")"
-[ "$(grep -c "^RENTSYNC_" <<< "$block")" -eq 4 ] || fail "the CloudShell block should carry 4 settings: $block"
-if grep -q EMAIL <<< "$block"; then fail "the CloudShell block carries emails it doesn't need"; fi
+cmp -s <(grep '^RENTSYNC_' <<< "$block") <(grep '^RENTSYNC_' "$RENTSYNC_SETTINGS") \
+  || fail "the CloudShell block does not carry every setting: $block"
 mkdir -p "$work/cloudshell" "$work/gitbin"
 cat > "$work/gitbin/git" <<'STUB'
 #!/usr/bin/env bash

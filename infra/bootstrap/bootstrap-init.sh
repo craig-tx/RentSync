@@ -91,7 +91,6 @@ fi
 keys="RENTSYNC_AWS_ACCOUNT_ID RENTSYNC_AWS_REGION RENTSYNC_AWS_AZ RENTSYNC_HCP_ORG RENTSYNC_GITHUB_REPO
 RENTSYNC_GITHUB_SUBJECT RENTSYNC_DOMAIN RENTSYNC_ACME_EMAIL RENTSYNC_OPENOBSERVE_EMAIL RENTSYNC_BUDGET_EMAIL
 RENTSYNC_AMI_ID"
-cloudshell_keys="RENTSYNC_AWS_ACCOUNT_ID RENTSYNC_AWS_REGION RENTSYNC_HCP_ORG RENTSYNC_GITHUB_SUBJECT"
 lines() { local key; for key in $1; do printf "%s='%s'\n" "$key" "${!key}"; done; }
 
 mkdir -p "$(dirname "$settings_file")"
@@ -111,12 +110,12 @@ echo
 echo "Saved $settings_file."
 echo
 echo "For step 1, paste this into AWS CloudShell. It clones the repository, or updates an existing"
-echo "clone, and writes the four settings that step needs:"
+echo "clone, and writes the same settings there, so every runbook command works in CloudShell too:"
 echo
 repo_dir="${RENTSYNC_GITHUB_REPO#*/}"
 echo "[ -d $repo_dir ] || git clone https://github.com/$RENTSYNC_GITHUB_REPO.git"
 echo "cd $repo_dir && git pull --ff-only && mkdir -p .bootstrap && cat > .bootstrap/settings.env <<'EOF'"
-lines "$cloudshell_keys"
+lines "$keys"
 echo "EOF"
 if [ -z "$RENTSYNC_AMI_ID" ]; then
   echo

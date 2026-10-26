@@ -684,3 +684,18 @@ No major-version port is outstanding beyond these. The next quarterly review cov
 - **Historical task text** (T052a, T052b) keeps the step numbers it was written with.
 
 **Next task:** the operator's blank-slate re-bootstrap with the new step 1, then T054.
+
+### 2026-10-26: CloudShell gets every setting; where hand-typed commands run
+
+- **Found (operator):** the certificate check failed in CloudShell, whose settings copy held
+  only the four values step 1 needs (no domain), and `source` failed in Windows Command Prompt.
+- **Done:** step 0's CloudShell block now writes every setting (all are non-secret), so each
+  runbook block works in either place. The runbook intro says where commands run: `aws` in
+  CloudShell, everything else in Git Bash or macOS Terminal (not PowerShell or Command Prompt).
+  The certificate check is now a block covering all three hosts.
+- **Test change (requirement changed, not weakened):** the init test asserted the CloudShell
+  block carried exactly four settings; it now asserts the block is identical to the local
+  settings file. A mutation back to four settings fails it.
+- **Checked live:** all three hosts already serve trusted Let's Encrypt production certificates.
+
+**Next task:** merge #25, #26 and this; then §First deploy.
