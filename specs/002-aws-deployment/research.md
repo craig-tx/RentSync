@@ -291,6 +291,15 @@ OpenObserve's data directory is `/srv/data/openobserve` (FR-020).
 - When the telemetry host is down, the Collector's in-memory queue (1000 batches) absorbs the
   outage and then drops data, counting what it drops. The mock PMS is unaffected (US3 AC4,
   001 R16).
+- **Volume and retention** (added 2026-10-27): OpenObserve stores one row per metric series per
+  scrape, so metrics dominate its event count. Request-duration histograms alone are a row per
+  bucket, route and status, and 15 s scrapes on two hosts reached ~1.6M events in about two days.
+  - Deployed Collectors scrape every **60 s** (`METRICS_SCRAPE_INTERVAL` in
+    `compose.env.yaml`), a quarter of the rows. Local runs and the CI telemetry smoke test keep
+    the 15 s default, so the smoke test stays inside its 60 s wait.
+  - OpenObserve deletes data older than **30 days** (`ZO_COMPACT_DATA_RETENTION_DAYS` in
+    `compose.telemetry.yaml`). Its default keeps about 10 years, so the data volume would only
+    grow. Storage was never the constraint (about 10 MB compressed for those 1.6M events).
 
 **Trade-off**: the Collectors use the OpenObserve root credentials, and OTLP crosses the VPC in
 plain HTTP. In production each environment would have its own ingest-only OpenObserve service account, with

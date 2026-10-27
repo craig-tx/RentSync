@@ -625,6 +625,9 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 - [X] T052k [US1] Environment hosts default to `t4g.micro` (operator decision 2026-10-27, to
   cut cost; telemetry stays `t4g.small`). Research R4/R5 (≈ $43 a month), the variables
   contract and runbook §Changing a host's instance type (check memory; go back up per workspace).
+- [X] T052l [US3] Telemetry volume: deployed Collectors scrape every 60 s
+  (`METRICS_SCRAPE_INTERVAL`, default 15 s for local and CI) and OpenObserve keeps 30 days
+  (`ZO_COMPACT_DATA_RETENTION_DAYS`). Research R8 "Volume and retention".
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the

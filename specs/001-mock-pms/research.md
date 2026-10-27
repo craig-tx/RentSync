@@ -534,7 +534,8 @@ PMS is a separate small Ruby service in `/mock_pms` with its own database. Entri
     - It promotes `service.*`, `deployment.environment`, and `service.instance.id` to resource
       attributes, and keeps `code.*` and `correlation_id` as log attributes.
     - It maps `severity_text` onto the OTLP severity.
-  - **Metrics**: the `prometheus` receiver scrapes `http://mock_pms:4001/metrics` every 15 s.
+  - **Metrics**: the `prometheus` receiver scrapes `http://mock_pms:4001/metrics` every 15 s
+    (`METRICS_SCRAPE_INTERVAL`; deployed hosts use 60 s, feature 002 R8).
     One target is enough. Any instance returns totals for the whole cluster (R12), and Compose
     DNS routes the scrape to whichever instance it reaches. `/metrics` emits
     `target_info{service_name="mock_pms-web",service_version="<SERVICE_VERSION>",deployment_environment="<env>"} 1`,
