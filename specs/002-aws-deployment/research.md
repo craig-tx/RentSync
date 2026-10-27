@@ -449,7 +449,9 @@ never stored in state or shown in plans (FR-022 to FR-024).
 - **Rotation** (edge case): change the HCP variable or bump `<name>_version`, apply, then run
   `deploy.yml` with the current tag, which re-renders the env file. The Postgres password also
   needs an `ALTER USER` before the restart, because the `postgres` image sets it only on first
-  initialization. The runbook has the exact steps.
+  initialization. The runbook has the exact steps. The telemetry host does that `ALTER USER`
+  itself on every start (`rentsync-start`, before OpenObserve starts), so rotating
+  OpenObserve's database password is a version bump, an apply and a restart (issue #35).
 - `FR-025`: the `environment` root has a `validation` that rejects an `admin_token` shorter than
   32 characters or equal to `change-me-admin-token`.
 
