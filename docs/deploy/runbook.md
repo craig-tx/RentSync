@@ -166,9 +166,25 @@ It needs only Ruby 3 or later, with no gems. On Windows, run it in PowerShell (s
   environment, and sent straight to HCP Terraform as a sensitive variable. The OpenObserve root
   password is asked for twice, without echo, and checked against Terraform's rule before anything
   changes.
-- **Reruns:** it restores workspace settings that drifted, and adds variables that are missing.
-  It never changes a variable that exists; it only reports one whose value differs, because you
-  change those on purpose later (`acme_ca`, `ami_id`, rotations).
+- **Reruns:** rerun it any time; it treats workspace *settings* and *variables* differently.
+  - **Settings** (working directory, apply method, Terraform version, trigger patterns, the
+    GitHub connection) are part of the design, so a rerun restores any that drifted.
+  - **Variables** are set once. A rerun adds missing ones but **never changes one that exists**;
+    it prints `… is "<current>", not "<first value>"; not changed`. Some variables are meant to
+    change after bootstrap, and resetting them would undo that work. For example, resetting
+    `acme_ca` would put every host back on untrusted staging certificates.
+
+    | Variable | Changed later by |
+    |---|---|
+    | `acme_ca` | §DNS, the switch to production certificates |
+    | `ami_id` | §Monthly OS patching |
+    | `instance_type`, `telemetry_instance_type` | §Changing a host's instance type |
+    | `admin_token`, `openobserve_root_password`, `postgres_password_version` and their `*_version` counters | §Secret rotation (`openobserve_db_password_version` has no procedure yet; see the contract) |
+    | `data_snapshot_id` | §Backup restore |
+
+    To change any other value bootstrap set, such as a hostname after a domain change, edit
+    the variable in the workspace yourself; a rerun won't. Each variable's role is in
+    contracts/workspace-variables.md.
 
 1. Sign in to HCP Terraform once. `terraform login` opens the browser and saves a token in your
    user profile, where the script reads it. The token is never printed:

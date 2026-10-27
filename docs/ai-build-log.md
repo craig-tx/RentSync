@@ -767,3 +767,46 @@ No major-version port is outstanding beyond these. The next quarterly review cov
 
 **Next task:** watch the runs after merge; check dev-staging's `/healthz` still reports the
 deployed SHA after its host is replaced.
+
+### 2026-10-27: why HCP Terraform never ran from GitHub (found by experiment)
+
+- **Experiments** (operator changed `rentsync-dev-staging`'s VCS settings in the UI; empty or
+  scratch commits on draft PR #32; the PR's "Terraform Cloud" status showed whether a
+  speculative plan started: "0 of 1 complete" vs a bare "Success"):
+
+  | dev-staging setting | Commit touched | Plan started |
+  |---|---|---|
+  | Always trigger runs | nothing (empty commit) | yes |
+  | pattern `/infra/**` (typed in the UI) | `infra/host/` | no |
+  | pattern `infra/**/*` (the UI's hint form) | `infra/host/` | **yes** |
+  | "Prefixes" `infra/host/`, `infra/otel/`, `infra/terraform/modules/` | `infra/host/` | no |
+  | (same) | `infra/bootstrap/` | no |
+
+- **Cause:** a trigger pattern must name files, ending in `/*`, without a leading slash (the
+  UI's hint is `foo/**/*`). `infra/**` (the original) and `/infra/**` (yesterday's PR #29, an
+  unverified fix based on the docs' examples) matched nothing. The GitHub connection was never
+  at fault. The "prefixes" row did not test prefixes: the API afterwards showed the UI had saved
+  them as trigger *patterns* (`infra/host/`, which names a directory, not files), with
+  `trigger-prefixes` empty. So it failed for the same reason; real prefixes were never tried.
+- **Done:** each workspace watches what its root reads, as `…/**/*` patterns: its own root,
+  `infra/terraform/modules/`, `infra/host/`, and for the environments `infra/otel/`.
+  Bootstrap/test changes no longer queue runs. Prefixes are cleared. A new test reads each root's
+  `.tf` files, the modules they source and the files passed to `file()`/`templatefile()`, and
+  fails if any is outside that workspace's patterns (shown by removing `infra/otel/**/*`).
+- **Corrections:** PR #29's "leading slash" diagnosis was wrong. Earlier "Terraform Cloud
+  pass 0" checks were read as "0 runs"; the 0 was the check's duration. The workspace runs API
+  query used here does not list speculative plans.
+
+**Next task:** operator reruns step 2 from this branch, then two scratch pushes on #32 prove
+the patterns (`infra/host/` → plans in all three workspaces; `infra/bootstrap/` → none).
+- **Verified before merge** (operator ran step 2 from this branch; all three workspaces got
+  their patterns, `acme_ca` untouched): a PR touching `infra/host/` started plans in all three
+  workspaces ("0 of 3 complete"); a fresh PR touching only `infra/bootstrap/` (#34) started
+  none. A PR's plans follow every file the PR changes against `main`, not just its latest
+  commit, so a negative test needs its own PR.
+- **Docs:** runbook step 2 "Reruns" now explains settings (restored on rerun) vs variables
+  (owned by the operator after bootstrap) and lists which variables change later and how;
+  contracts/workspace-variables.md has the same as "Who owns a variable after bootstrap".
+- **Gap found:** no runbook procedure rotates `openobserve_db_password_version`. Bumping it
+  would change SSM but not OpenObserve's Postgres. Marked "don't bump" in the contract until a
+  procedure exists.

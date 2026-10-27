@@ -187,15 +187,21 @@ class BootstrapHcpTest < Minitest::Test
                  varset[:vars].to_h { |v| [v["attributes"]["key"], v["attributes"]["value"]] })
     assert(varset[:vars].all? { |v| v["attributes"]["category"] == "env" })
 
-    { "rentsync-shared-us" => ["infra/terraform/shared", false, "rentsync-shared"],
-      "rentsync-dev-staging" => ["infra/terraform/environment", true, "rentsync-environment"],
-      "rentsync-prod-us" => ["infra/terraform/environment", false, "rentsync-environment"] }.each do |name, (dir, auto, tag)|
+    common = ["infra/terraform/modules/**/*", "infra/host/**/*"]
+    { "rentsync-shared-us" => ["infra/terraform/shared", false, "rentsync-shared",
+                               ["infra/terraform/shared/**/*"] + common],
+      "rentsync-dev-staging" => ["infra/terraform/environment", true, "rentsync-environment",
+                                 ["infra/terraform/environment/**/*", "infra/otel/**/*"] + common],
+      "rentsync-prod-us" => ["infra/terraform/environment", false, "rentsync-environment",
+                             ["infra/terraform/environment/**/*", "infra/otel/**/*"] + common] }
+      .each do |name, (dir, auto, tag, triggers)|
       ws = @hcp.ws(name)
       assert_equal project, ws[:project], name
       assert_equal dir, ws[:attrs]["working-directory"], name
       assert_equal auto, ws[:attrs]["auto-apply"], name
       assert_equal "1.16.6", ws[:attrs]["terraform-version"]
-      assert_equal ["/infra/**"], ws[:attrs]["trigger-patterns"]
+      assert_equal triggers, ws[:attrs]["trigger-patterns"], name
+      assert_equal [], ws[:attrs]["trigger-prefixes"], name
       assert ws[:attrs]["file-triggers-enabled"]
       assert_equal({ "identifier" => "example-owner/example-app", "branch" => "main", "oauth-token-id" => "ot-github" }, ws[:attrs]["vcs-repo"])
       refute ws[:attrs].key?("assessments-enabled"), "assessments are opt-in"
@@ -239,6 +245,35 @@ class BootstrapHcpTest < Minitest::Test
     assert_match(/change\(s\) applied\.$/, out)
   end
 
+  # Every file a workspace's root reads must match one of its trigger patterns, or a change to
+  # that file would never queue a run: its .tf files, the modules it sources, and the files
+  # they pass to cloud-init with file() or templatefile().
+  def test_trigger_patterns_cover_every_file_a_root_reads
+    repo = File.expand_path("../../..", __dir__)
+    reads = lambda do |dir, seen = []|
+      return [] if seen.include?(dir)
+
+      seen << dir
+      tf = Dir[File.join(dir, "*.tf")]
+      text = tf.map { |f| File.read(f) }.join("\n")
+      host_dir = text[/host_dir\s*=\s*"\$\{path\.module\}([^"]*)"/, 1]
+      files = text.scan(/(?:file|templatefile)\("\$\{(path\.module|local\.host_dir)\}([^"]*)"/).map do |base, rest|
+        File.expand_path((base == "path.module" ? dir : File.join(dir, host_dir)) + rest)
+      end
+      modules = text.scan(/source\s*=\s*"(\.\.?\/[^"]*)"/).flatten.map { |m| File.expand_path(m, dir) }
+      tf + files + modules.flat_map { |m| reads.call(m, seen) }
+    end
+    HcpBootstrap::WORKSPACES.each do |ws|
+      paths = reads.call(File.join(repo, ws[:dir])).map { |p| p.delete_prefix("#{repo}/") }.uniq
+      assert_operator paths.size, :>, 5, "#{ws[:name]}: found too few files; the scan is broken"
+      paths.each do |path|
+        assert File.exist?(File.join(repo, path)), "#{ws[:name]}: #{path} does not exist"
+        assert ws[:triggers].any? { |pattern| File.fnmatch?(pattern, path, File::FNM_PATHNAME) },
+               "#{ws[:name]} reads #{path}, which no trigger pattern matches"
+      end
+    end
+  end
+
   def test_rerun_changes_nothing
     run_bootstrap(apply: true)
     before = @hcp.mutations.size
@@ -255,14 +290,16 @@ class BootstrapHcpTest < Minitest::Test
     @hcp.var("rentsync-prod-us", "acme_ca")["attributes"]["value"] = production_ca
     @hcp.var("rentsync-shared-us", "ami_id")["attributes"]["value"] = "ami-0fedcba9876543210"
 
-    # Workspaces made before the pattern was anchored get it on the next run.
-    @hcp.ws("rentsync-prod-us")[:attrs]["trigger-patterns"] = ["infra/**"]
+    # Workspaces made with the old pattern, or left with prefixes by an experiment, are corrected.
+    @hcp.ws("rentsync-prod-us")[:attrs]["trigger-patterns"] = ["/infra/**"]
+    @hcp.ws("rentsync-prod-us")[:attrs]["trigger-prefixes"] = ["infra/host/"]
 
     out = run_bootstrap(apply: true)
     assert_equal true, @hcp.ws("rentsync-dev-staging")[:attrs]["auto-apply"]
     assert_match(/^\+ update workspace rentsync-dev-staging: auto-apply$/, out)
-    assert_equal ["/infra/**"], @hcp.ws("rentsync-prod-us")[:attrs]["trigger-patterns"]
-    assert_match(/^\+ update workspace rentsync-prod-us: trigger-patterns$/, out)
+    assert_equal HcpBootstrap::ENVIRONMENT_TRIGGERS, @hcp.ws("rentsync-prod-us")[:attrs]["trigger-patterns"]
+    assert_equal [], @hcp.ws("rentsync-prod-us")[:attrs]["trigger-prefixes"]
+    assert_match(/^\+ update workspace rentsync-prod-us: trigger-patterns, trigger-prefixes$/, out)
     assert_equal production_ca, @hcp.var("rentsync-prod-us", "acme_ca")["attributes"]["value"]
     assert_equal "ami-0fedcba9876543210", @hcp.var("rentsync-shared-us", "ami_id")["attributes"]["value"]
     assert_match(/rentsync-prod-us acme_ca is .*; not changed/, out)
