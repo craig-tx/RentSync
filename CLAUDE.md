@@ -10,4 +10,4 @@ This file is runtime guidance only and MUST NOT contradict the constitution. If 
 - Run the full test suite before each commit; commit in small, well-described steps.
 - No new dependencies without a justification line in plan.md.
 - Never commit secrets; use .env.example.
-- At the end of each session, append to docs/ai-build-log.md: what was done, what was blocked, decisions made, and the next task.
+- At the end of each session, write an entry in docs/ai-build-log.md: what was done, what was blocked, decisions made, and the next task. Open the PR first, then put the entry in the slot with the PR's number: `ruby bin/build-log fill <pr> entry.md`. Never append to the end of the file.

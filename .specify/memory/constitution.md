@@ -253,8 +253,12 @@ a second instance starts.
   when its tests pass.
 - The full test suite MUST pass before each commit. Commits are small and clearly described.
 - CI (lint, type checks, unit and integration tests, agent evals) MUST be green before merge.
-- At the end of each autonomous or interactive build session, an entry MUST be appended to
+- At the end of each autonomous or interactive build session, an entry MUST be written to
   `docs/ai-build-log.md`: what was done, what was blocked, decisions made, and the next task.
+  The entry goes in the slot numbered with the session's pull request
+  (`ruby bin/build-log fill <pr>`), not at the end of the file, so concurrent pull requests
+  never conflict on the log. Entries written before the slots existed are the archive.
+  Anything else this constitution says to log in `docs/ai-build-log.md` goes in the same slot.
 - Unattended sessions run on a separate branch or in a container, with only the permissions
   the session needs. Their output is reviewed by a human before merge.
 - **Explicit system names**: every reference to an account or its identifier MUST name the
@@ -349,4 +353,4 @@ a second instance starts.
   every PR review MUST verify compliance with these principles. Any unjustified violation
   blocks the merge.
 
-**Version**: 1.7.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-26
+**Version**: 1.7.1 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-27
