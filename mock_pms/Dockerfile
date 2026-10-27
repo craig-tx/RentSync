@@ -4,7 +4,7 @@
 #   - dev: every gem, including test and lint, for local Compose (`docker compose run mock_pms
 #     bundle exec rspec`).
 
-FROM ruby:3.3-slim AS base
+FROM ruby:4.0-slim AS base
 WORKDIR /app
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends libpq5 curl \
