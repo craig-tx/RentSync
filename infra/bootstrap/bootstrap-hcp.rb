@@ -33,16 +33,23 @@ module HcpBootstrap
   PROJECT = "RentSync"
   VARSET = "rentsync-aws"
   TERRAFORM_VERSION = "1.16.6"
-  # Anchored at the repository root with a leading slash, as in HCP Terraform's documented
-  # examples. Without it ("infra/**"), no push or pull request ever matched: HCP Terraform
-  # reported success on each commit and queued no run.
-  TRIGGER_PATTERNS = ["/infra/**"].freeze
+  # Each workspace runs when a file it reads changes: its own root, the modules, and the host
+  # files its root passes to cloud-init. Add a directory here when a root starts reading it.
+  # The form was found by experiment (2026-10-27, docs/ai-build-log.md): a pattern must name
+  # files, so it ends in "/*", and has no leading slash. "infra/**" and "/infra/**" matched
+  # nothing, and trigger prefixes ("infra/host/") didn't fire either.
+  COMMON_TRIGGERS = ["infra/terraform/modules/**/*", "infra/host/**/*"].freeze
+  SHARED_TRIGGERS = (["infra/terraform/shared/**/*"] + COMMON_TRIGGERS).freeze
+  ENVIRONMENT_TRIGGERS = (["infra/terraform/environment/**/*", "infra/otel/**/*"] + COMMON_TRIGGERS).freeze
   LE_STAGING = "https://acme-staging-v02.api.letsencrypt.org/directory"
   SHARED = "rentsync-shared-us"
   WORKSPACES = [
-    { name: SHARED, dir: "infra/terraform/shared", auto_apply: false, tag: "rentsync-shared" },
-    { name: "rentsync-dev-staging", dir: "infra/terraform/environment", auto_apply: true, tag: "rentsync-environment" },
-    { name: "rentsync-prod-us", dir: "infra/terraform/environment", auto_apply: false, tag: "rentsync-environment" }
+    { name: SHARED, dir: "infra/terraform/shared", auto_apply: false, tag: "rentsync-shared",
+      triggers: SHARED_TRIGGERS },
+    { name: "rentsync-dev-staging", dir: "infra/terraform/environment", auto_apply: true, tag: "rentsync-environment",
+      triggers: ENVIRONMENT_TRIGGERS },
+    { name: "rentsync-prod-us", dir: "infra/terraform/environment", auto_apply: false, tag: "rentsync-environment",
+      triggers: ENVIRONMENT_TRIGGERS }
   ].freeze
 
   class Abort < StandardError; end
@@ -349,7 +356,8 @@ module HcpBootstrap
         "auto-apply" => ws[:auto_apply],
         "terraform-version" => TERRAFORM_VERSION,
         "file-triggers-enabled" => true,
-        "trigger-patterns" => TRIGGER_PATTERNS,
+        "trigger-patterns" => ws[:triggers],
+        "trigger-prefixes" => [],
         "vcs-repo" => { "identifier" => @opts[:github_repo], "branch" => @opts[:branch] }.merge(vcs)
       }
       settings["assessments-enabled"] = true if @opts[:health_assessments]
