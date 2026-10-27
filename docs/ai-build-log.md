@@ -1,15 +1,25 @@
 # AI Build Log
 
-The constitution's Development Workflow section requires an entry at the end of every build session, whether autonomous or interactive.
+The constitution's Development Workflow section requires an entry for every build session, whether autonomous or interactive.
+
+**Where an entry goes:** each PR writes its entry into its own slot under [Entries by PR](#entries-by-pr), the one numbered with the PR's number. Open the PR first, then:
+
+```bash
+ruby bin/build-log fill <pr-number> entry.md   # or pipe the entry on stdin
+```
+
+Two open PRs never touch the same lines, so the log never causes a merge conflict. Entries above the slots are the archive, in session order; don't add to it. CI runs `ruby bin/build-log check`, which warns when fewer than 100 free slots are left; then open a PR that runs `ruby bin/build-log top-up`.
 
 ## Entry template
 
 ```
-### YYYY-MM-DD — <session type: interactive | unattended>
+### YYYY-MM-DD: <title> (<session type: interactive | unattended>)
+
 - **Done:**
 - **Blocked:**
 - **Decisions:**
-- **Next task:**
+
+**Next task:**
 ```
 
 ---
@@ -893,3 +903,2027 @@ check `free -m` / `swapon --show` on both hosts.
 
 **Next task:** after merge and apply, the telemetry host is replaced (a host file changed); its
 start runs the new step with the unchanged password, a no-op. Rotate once to prove it live.
+
+## Entries by PR
+
+<!-- One slot per PR number, filled by `ruby bin/build-log fill <pr>`; see the top of this file. -->
+
+<!-- PR #42 -->
+### 2026-10-27: build-log slots (interactive)
+
+- **Why:** every PR appended to the end of this file, so the second of any two open PRs
+  always conflicted and needed a manual merge of `main`.
+- **Done:** the log now ends with one slot per PR number (#42 to #1041, HTML comments that
+  don't render). `ruby bin/build-log fill <pr>` writes an entry into its own slot; GitHub
+  never reuses a number, so two PRs never touch the same lines. `check` runs in CI (slot
+  order, empty free slots, a `###` heading on filled ones; warns below 100 free) and
+  `top-up` adds slots back to 1000. Plain Ruby, LF output on every platform.
+- **Tests:** `bin/test/build_log_test.rb`, including a real `git merge` of two branches that
+  fill neighbouring slots. A scratch-repo experiment first confirmed neighbouring slots merge
+  cleanly and a shared slot conflicts, which is why slots are keyed by PR number rather than
+  "first free".
+- **Decisions:** operator chose slots in one file over one file per entry or a
+  `.gitattributes` union merge (GitHub ignores merge drivers when checking PRs). 1000 slots
+  instead of 100, at the operator's request, so top-ups are years away. Constitution 1.7.1
+  (PATCH): entries go in the PR's slot; `CLAUDE.md` matches.
+
+**Next task:** write every later entry with `ruby bin/build-log fill <pr>` after opening the PR.
+
+<!-- PR #43: free -->
+
+<!-- PR #44: free -->
+
+<!-- PR #45: free -->
+
+<!-- PR #46: free -->
+
+<!-- PR #47: free -->
+
+<!-- PR #48: free -->
+
+<!-- PR #49: free -->
+
+<!-- PR #50: free -->
+
+<!-- PR #51: free -->
+
+<!-- PR #52: free -->
+
+<!-- PR #53: free -->
+
+<!-- PR #54: free -->
+
+<!-- PR #55: free -->
+
+<!-- PR #56: free -->
+
+<!-- PR #57: free -->
+
+<!-- PR #58: free -->
+
+<!-- PR #59: free -->
+
+<!-- PR #60: free -->
+
+<!-- PR #61: free -->
+
+<!-- PR #62: free -->
+
+<!-- PR #63: free -->
+
+<!-- PR #64: free -->
+
+<!-- PR #65: free -->
+
+<!-- PR #66: free -->
+
+<!-- PR #67: free -->
+
+<!-- PR #68: free -->
+
+<!-- PR #69: free -->
+
+<!-- PR #70: free -->
+
+<!-- PR #71: free -->
+
+<!-- PR #72: free -->
+
+<!-- PR #73: free -->
+
+<!-- PR #74: free -->
+
+<!-- PR #75: free -->
+
+<!-- PR #76: free -->
+
+<!-- PR #77: free -->
+
+<!-- PR #78: free -->
+
+<!-- PR #79: free -->
+
+<!-- PR #80: free -->
+
+<!-- PR #81: free -->
+
+<!-- PR #82: free -->
+
+<!-- PR #83: free -->
+
+<!-- PR #84: free -->
+
+<!-- PR #85: free -->
+
+<!-- PR #86: free -->
+
+<!-- PR #87: free -->
+
+<!-- PR #88: free -->
+
+<!-- PR #89: free -->
+
+<!-- PR #90: free -->
+
+<!-- PR #91: free -->
+
+<!-- PR #92: free -->
+
+<!-- PR #93: free -->
+
+<!-- PR #94: free -->
+
+<!-- PR #95: free -->
+
+<!-- PR #96: free -->
+
+<!-- PR #97: free -->
+
+<!-- PR #98: free -->
+
+<!-- PR #99: free -->
+
+<!-- PR #100: free -->
+
+<!-- PR #101: free -->
+
+<!-- PR #102: free -->
+
+<!-- PR #103: free -->
+
+<!-- PR #104: free -->
+
+<!-- PR #105: free -->
+
+<!-- PR #106: free -->
+
+<!-- PR #107: free -->
+
+<!-- PR #108: free -->
+
+<!-- PR #109: free -->
+
+<!-- PR #110: free -->
+
+<!-- PR #111: free -->
+
+<!-- PR #112: free -->
+
+<!-- PR #113: free -->
+
+<!-- PR #114: free -->
+
+<!-- PR #115: free -->
+
+<!-- PR #116: free -->
+
+<!-- PR #117: free -->
+
+<!-- PR #118: free -->
+
+<!-- PR #119: free -->
+
+<!-- PR #120: free -->
+
+<!-- PR #121: free -->
+
+<!-- PR #122: free -->
+
+<!-- PR #123: free -->
+
+<!-- PR #124: free -->
+
+<!-- PR #125: free -->
+
+<!-- PR #126: free -->
+
+<!-- PR #127: free -->
+
+<!-- PR #128: free -->
+
+<!-- PR #129: free -->
+
+<!-- PR #130: free -->
+
+<!-- PR #131: free -->
+
+<!-- PR #132: free -->
+
+<!-- PR #133: free -->
+
+<!-- PR #134: free -->
+
+<!-- PR #135: free -->
+
+<!-- PR #136: free -->
+
+<!-- PR #137: free -->
+
+<!-- PR #138: free -->
+
+<!-- PR #139: free -->
+
+<!-- PR #140: free -->
+
+<!-- PR #141: free -->
+
+<!-- PR #142: free -->
+
+<!-- PR #143: free -->
+
+<!-- PR #144: free -->
+
+<!-- PR #145: free -->
+
+<!-- PR #146: free -->
+
+<!-- PR #147: free -->
+
+<!-- PR #148: free -->
+
+<!-- PR #149: free -->
+
+<!-- PR #150: free -->
+
+<!-- PR #151: free -->
+
+<!-- PR #152: free -->
+
+<!-- PR #153: free -->
+
+<!-- PR #154: free -->
+
+<!-- PR #155: free -->
+
+<!-- PR #156: free -->
+
+<!-- PR #157: free -->
+
+<!-- PR #158: free -->
+
+<!-- PR #159: free -->
+
+<!-- PR #160: free -->
+
+<!-- PR #161: free -->
+
+<!-- PR #162: free -->
+
+<!-- PR #163: free -->
+
+<!-- PR #164: free -->
+
+<!-- PR #165: free -->
+
+<!-- PR #166: free -->
+
+<!-- PR #167: free -->
+
+<!-- PR #168: free -->
+
+<!-- PR #169: free -->
+
+<!-- PR #170: free -->
+
+<!-- PR #171: free -->
+
+<!-- PR #172: free -->
+
+<!-- PR #173: free -->
+
+<!-- PR #174: free -->
+
+<!-- PR #175: free -->
+
+<!-- PR #176: free -->
+
+<!-- PR #177: free -->
+
+<!-- PR #178: free -->
+
+<!-- PR #179: free -->
+
+<!-- PR #180: free -->
+
+<!-- PR #181: free -->
+
+<!-- PR #182: free -->
+
+<!-- PR #183: free -->
+
+<!-- PR #184: free -->
+
+<!-- PR #185: free -->
+
+<!-- PR #186: free -->
+
+<!-- PR #187: free -->
+
+<!-- PR #188: free -->
+
+<!-- PR #189: free -->
+
+<!-- PR #190: free -->
+
+<!-- PR #191: free -->
+
+<!-- PR #192: free -->
+
+<!-- PR #193: free -->
+
+<!-- PR #194: free -->
+
+<!-- PR #195: free -->
+
+<!-- PR #196: free -->
+
+<!-- PR #197: free -->
+
+<!-- PR #198: free -->
+
+<!-- PR #199: free -->
+
+<!-- PR #200: free -->
+
+<!-- PR #201: free -->
+
+<!-- PR #202: free -->
+
+<!-- PR #203: free -->
+
+<!-- PR #204: free -->
+
+<!-- PR #205: free -->
+
+<!-- PR #206: free -->
+
+<!-- PR #207: free -->
+
+<!-- PR #208: free -->
+
+<!-- PR #209: free -->
+
+<!-- PR #210: free -->
+
+<!-- PR #211: free -->
+
+<!-- PR #212: free -->
+
+<!-- PR #213: free -->
+
+<!-- PR #214: free -->
+
+<!-- PR #215: free -->
+
+<!-- PR #216: free -->
+
+<!-- PR #217: free -->
+
+<!-- PR #218: free -->
+
+<!-- PR #219: free -->
+
+<!-- PR #220: free -->
+
+<!-- PR #221: free -->
+
+<!-- PR #222: free -->
+
+<!-- PR #223: free -->
+
+<!-- PR #224: free -->
+
+<!-- PR #225: free -->
+
+<!-- PR #226: free -->
+
+<!-- PR #227: free -->
+
+<!-- PR #228: free -->
+
+<!-- PR #229: free -->
+
+<!-- PR #230: free -->
+
+<!-- PR #231: free -->
+
+<!-- PR #232: free -->
+
+<!-- PR #233: free -->
+
+<!-- PR #234: free -->
+
+<!-- PR #235: free -->
+
+<!-- PR #236: free -->
+
+<!-- PR #237: free -->
+
+<!-- PR #238: free -->
+
+<!-- PR #239: free -->
+
+<!-- PR #240: free -->
+
+<!-- PR #241: free -->
+
+<!-- PR #242: free -->
+
+<!-- PR #243: free -->
+
+<!-- PR #244: free -->
+
+<!-- PR #245: free -->
+
+<!-- PR #246: free -->
+
+<!-- PR #247: free -->
+
+<!-- PR #248: free -->
+
+<!-- PR #249: free -->
+
+<!-- PR #250: free -->
+
+<!-- PR #251: free -->
+
+<!-- PR #252: free -->
+
+<!-- PR #253: free -->
+
+<!-- PR #254: free -->
+
+<!-- PR #255: free -->
+
+<!-- PR #256: free -->
+
+<!-- PR #257: free -->
+
+<!-- PR #258: free -->
+
+<!-- PR #259: free -->
+
+<!-- PR #260: free -->
+
+<!-- PR #261: free -->
+
+<!-- PR #262: free -->
+
+<!-- PR #263: free -->
+
+<!-- PR #264: free -->
+
+<!-- PR #265: free -->
+
+<!-- PR #266: free -->
+
+<!-- PR #267: free -->
+
+<!-- PR #268: free -->
+
+<!-- PR #269: free -->
+
+<!-- PR #270: free -->
+
+<!-- PR #271: free -->
+
+<!-- PR #272: free -->
+
+<!-- PR #273: free -->
+
+<!-- PR #274: free -->
+
+<!-- PR #275: free -->
+
+<!-- PR #276: free -->
+
+<!-- PR #277: free -->
+
+<!-- PR #278: free -->
+
+<!-- PR #279: free -->
+
+<!-- PR #280: free -->
+
+<!-- PR #281: free -->
+
+<!-- PR #282: free -->
+
+<!-- PR #283: free -->
+
+<!-- PR #284: free -->
+
+<!-- PR #285: free -->
+
+<!-- PR #286: free -->
+
+<!-- PR #287: free -->
+
+<!-- PR #288: free -->
+
+<!-- PR #289: free -->
+
+<!-- PR #290: free -->
+
+<!-- PR #291: free -->
+
+<!-- PR #292: free -->
+
+<!-- PR #293: free -->
+
+<!-- PR #294: free -->
+
+<!-- PR #295: free -->
+
+<!-- PR #296: free -->
+
+<!-- PR #297: free -->
+
+<!-- PR #298: free -->
+
+<!-- PR #299: free -->
+
+<!-- PR #300: free -->
+
+<!-- PR #301: free -->
+
+<!-- PR #302: free -->
+
+<!-- PR #303: free -->
+
+<!-- PR #304: free -->
+
+<!-- PR #305: free -->
+
+<!-- PR #306: free -->
+
+<!-- PR #307: free -->
+
+<!-- PR #308: free -->
+
+<!-- PR #309: free -->
+
+<!-- PR #310: free -->
+
+<!-- PR #311: free -->
+
+<!-- PR #312: free -->
+
+<!-- PR #313: free -->
+
+<!-- PR #314: free -->
+
+<!-- PR #315: free -->
+
+<!-- PR #316: free -->
+
+<!-- PR #317: free -->
+
+<!-- PR #318: free -->
+
+<!-- PR #319: free -->
+
+<!-- PR #320: free -->
+
+<!-- PR #321: free -->
+
+<!-- PR #322: free -->
+
+<!-- PR #323: free -->
+
+<!-- PR #324: free -->
+
+<!-- PR #325: free -->
+
+<!-- PR #326: free -->
+
+<!-- PR #327: free -->
+
+<!-- PR #328: free -->
+
+<!-- PR #329: free -->
+
+<!-- PR #330: free -->
+
+<!-- PR #331: free -->
+
+<!-- PR #332: free -->
+
+<!-- PR #333: free -->
+
+<!-- PR #334: free -->
+
+<!-- PR #335: free -->
+
+<!-- PR #336: free -->
+
+<!-- PR #337: free -->
+
+<!-- PR #338: free -->
+
+<!-- PR #339: free -->
+
+<!-- PR #340: free -->
+
+<!-- PR #341: free -->
+
+<!-- PR #342: free -->
+
+<!-- PR #343: free -->
+
+<!-- PR #344: free -->
+
+<!-- PR #345: free -->
+
+<!-- PR #346: free -->
+
+<!-- PR #347: free -->
+
+<!-- PR #348: free -->
+
+<!-- PR #349: free -->
+
+<!-- PR #350: free -->
+
+<!-- PR #351: free -->
+
+<!-- PR #352: free -->
+
+<!-- PR #353: free -->
+
+<!-- PR #354: free -->
+
+<!-- PR #355: free -->
+
+<!-- PR #356: free -->
+
+<!-- PR #357: free -->
+
+<!-- PR #358: free -->
+
+<!-- PR #359: free -->
+
+<!-- PR #360: free -->
+
+<!-- PR #361: free -->
+
+<!-- PR #362: free -->
+
+<!-- PR #363: free -->
+
+<!-- PR #364: free -->
+
+<!-- PR #365: free -->
+
+<!-- PR #366: free -->
+
+<!-- PR #367: free -->
+
+<!-- PR #368: free -->
+
+<!-- PR #369: free -->
+
+<!-- PR #370: free -->
+
+<!-- PR #371: free -->
+
+<!-- PR #372: free -->
+
+<!-- PR #373: free -->
+
+<!-- PR #374: free -->
+
+<!-- PR #375: free -->
+
+<!-- PR #376: free -->
+
+<!-- PR #377: free -->
+
+<!-- PR #378: free -->
+
+<!-- PR #379: free -->
+
+<!-- PR #380: free -->
+
+<!-- PR #381: free -->
+
+<!-- PR #382: free -->
+
+<!-- PR #383: free -->
+
+<!-- PR #384: free -->
+
+<!-- PR #385: free -->
+
+<!-- PR #386: free -->
+
+<!-- PR #387: free -->
+
+<!-- PR #388: free -->
+
+<!-- PR #389: free -->
+
+<!-- PR #390: free -->
+
+<!-- PR #391: free -->
+
+<!-- PR #392: free -->
+
+<!-- PR #393: free -->
+
+<!-- PR #394: free -->
+
+<!-- PR #395: free -->
+
+<!-- PR #396: free -->
+
+<!-- PR #397: free -->
+
+<!-- PR #398: free -->
+
+<!-- PR #399: free -->
+
+<!-- PR #400: free -->
+
+<!-- PR #401: free -->
+
+<!-- PR #402: free -->
+
+<!-- PR #403: free -->
+
+<!-- PR #404: free -->
+
+<!-- PR #405: free -->
+
+<!-- PR #406: free -->
+
+<!-- PR #407: free -->
+
+<!-- PR #408: free -->
+
+<!-- PR #409: free -->
+
+<!-- PR #410: free -->
+
+<!-- PR #411: free -->
+
+<!-- PR #412: free -->
+
+<!-- PR #413: free -->
+
+<!-- PR #414: free -->
+
+<!-- PR #415: free -->
+
+<!-- PR #416: free -->
+
+<!-- PR #417: free -->
+
+<!-- PR #418: free -->
+
+<!-- PR #419: free -->
+
+<!-- PR #420: free -->
+
+<!-- PR #421: free -->
+
+<!-- PR #422: free -->
+
+<!-- PR #423: free -->
+
+<!-- PR #424: free -->
+
+<!-- PR #425: free -->
+
+<!-- PR #426: free -->
+
+<!-- PR #427: free -->
+
+<!-- PR #428: free -->
+
+<!-- PR #429: free -->
+
+<!-- PR #430: free -->
+
+<!-- PR #431: free -->
+
+<!-- PR #432: free -->
+
+<!-- PR #433: free -->
+
+<!-- PR #434: free -->
+
+<!-- PR #435: free -->
+
+<!-- PR #436: free -->
+
+<!-- PR #437: free -->
+
+<!-- PR #438: free -->
+
+<!-- PR #439: free -->
+
+<!-- PR #440: free -->
+
+<!-- PR #441: free -->
+
+<!-- PR #442: free -->
+
+<!-- PR #443: free -->
+
+<!-- PR #444: free -->
+
+<!-- PR #445: free -->
+
+<!-- PR #446: free -->
+
+<!-- PR #447: free -->
+
+<!-- PR #448: free -->
+
+<!-- PR #449: free -->
+
+<!-- PR #450: free -->
+
+<!-- PR #451: free -->
+
+<!-- PR #452: free -->
+
+<!-- PR #453: free -->
+
+<!-- PR #454: free -->
+
+<!-- PR #455: free -->
+
+<!-- PR #456: free -->
+
+<!-- PR #457: free -->
+
+<!-- PR #458: free -->
+
+<!-- PR #459: free -->
+
+<!-- PR #460: free -->
+
+<!-- PR #461: free -->
+
+<!-- PR #462: free -->
+
+<!-- PR #463: free -->
+
+<!-- PR #464: free -->
+
+<!-- PR #465: free -->
+
+<!-- PR #466: free -->
+
+<!-- PR #467: free -->
+
+<!-- PR #468: free -->
+
+<!-- PR #469: free -->
+
+<!-- PR #470: free -->
+
+<!-- PR #471: free -->
+
+<!-- PR #472: free -->
+
+<!-- PR #473: free -->
+
+<!-- PR #474: free -->
+
+<!-- PR #475: free -->
+
+<!-- PR #476: free -->
+
+<!-- PR #477: free -->
+
+<!-- PR #478: free -->
+
+<!-- PR #479: free -->
+
+<!-- PR #480: free -->
+
+<!-- PR #481: free -->
+
+<!-- PR #482: free -->
+
+<!-- PR #483: free -->
+
+<!-- PR #484: free -->
+
+<!-- PR #485: free -->
+
+<!-- PR #486: free -->
+
+<!-- PR #487: free -->
+
+<!-- PR #488: free -->
+
+<!-- PR #489: free -->
+
+<!-- PR #490: free -->
+
+<!-- PR #491: free -->
+
+<!-- PR #492: free -->
+
+<!-- PR #493: free -->
+
+<!-- PR #494: free -->
+
+<!-- PR #495: free -->
+
+<!-- PR #496: free -->
+
+<!-- PR #497: free -->
+
+<!-- PR #498: free -->
+
+<!-- PR #499: free -->
+
+<!-- PR #500: free -->
+
+<!-- PR #501: free -->
+
+<!-- PR #502: free -->
+
+<!-- PR #503: free -->
+
+<!-- PR #504: free -->
+
+<!-- PR #505: free -->
+
+<!-- PR #506: free -->
+
+<!-- PR #507: free -->
+
+<!-- PR #508: free -->
+
+<!-- PR #509: free -->
+
+<!-- PR #510: free -->
+
+<!-- PR #511: free -->
+
+<!-- PR #512: free -->
+
+<!-- PR #513: free -->
+
+<!-- PR #514: free -->
+
+<!-- PR #515: free -->
+
+<!-- PR #516: free -->
+
+<!-- PR #517: free -->
+
+<!-- PR #518: free -->
+
+<!-- PR #519: free -->
+
+<!-- PR #520: free -->
+
+<!-- PR #521: free -->
+
+<!-- PR #522: free -->
+
+<!-- PR #523: free -->
+
+<!-- PR #524: free -->
+
+<!-- PR #525: free -->
+
+<!-- PR #526: free -->
+
+<!-- PR #527: free -->
+
+<!-- PR #528: free -->
+
+<!-- PR #529: free -->
+
+<!-- PR #530: free -->
+
+<!-- PR #531: free -->
+
+<!-- PR #532: free -->
+
+<!-- PR #533: free -->
+
+<!-- PR #534: free -->
+
+<!-- PR #535: free -->
+
+<!-- PR #536: free -->
+
+<!-- PR #537: free -->
+
+<!-- PR #538: free -->
+
+<!-- PR #539: free -->
+
+<!-- PR #540: free -->
+
+<!-- PR #541: free -->
+
+<!-- PR #542: free -->
+
+<!-- PR #543: free -->
+
+<!-- PR #544: free -->
+
+<!-- PR #545: free -->
+
+<!-- PR #546: free -->
+
+<!-- PR #547: free -->
+
+<!-- PR #548: free -->
+
+<!-- PR #549: free -->
+
+<!-- PR #550: free -->
+
+<!-- PR #551: free -->
+
+<!-- PR #552: free -->
+
+<!-- PR #553: free -->
+
+<!-- PR #554: free -->
+
+<!-- PR #555: free -->
+
+<!-- PR #556: free -->
+
+<!-- PR #557: free -->
+
+<!-- PR #558: free -->
+
+<!-- PR #559: free -->
+
+<!-- PR #560: free -->
+
+<!-- PR #561: free -->
+
+<!-- PR #562: free -->
+
+<!-- PR #563: free -->
+
+<!-- PR #564: free -->
+
+<!-- PR #565: free -->
+
+<!-- PR #566: free -->
+
+<!-- PR #567: free -->
+
+<!-- PR #568: free -->
+
+<!-- PR #569: free -->
+
+<!-- PR #570: free -->
+
+<!-- PR #571: free -->
+
+<!-- PR #572: free -->
+
+<!-- PR #573: free -->
+
+<!-- PR #574: free -->
+
+<!-- PR #575: free -->
+
+<!-- PR #576: free -->
+
+<!-- PR #577: free -->
+
+<!-- PR #578: free -->
+
+<!-- PR #579: free -->
+
+<!-- PR #580: free -->
+
+<!-- PR #581: free -->
+
+<!-- PR #582: free -->
+
+<!-- PR #583: free -->
+
+<!-- PR #584: free -->
+
+<!-- PR #585: free -->
+
+<!-- PR #586: free -->
+
+<!-- PR #587: free -->
+
+<!-- PR #588: free -->
+
+<!-- PR #589: free -->
+
+<!-- PR #590: free -->
+
+<!-- PR #591: free -->
+
+<!-- PR #592: free -->
+
+<!-- PR #593: free -->
+
+<!-- PR #594: free -->
+
+<!-- PR #595: free -->
+
+<!-- PR #596: free -->
+
+<!-- PR #597: free -->
+
+<!-- PR #598: free -->
+
+<!-- PR #599: free -->
+
+<!-- PR #600: free -->
+
+<!-- PR #601: free -->
+
+<!-- PR #602: free -->
+
+<!-- PR #603: free -->
+
+<!-- PR #604: free -->
+
+<!-- PR #605: free -->
+
+<!-- PR #606: free -->
+
+<!-- PR #607: free -->
+
+<!-- PR #608: free -->
+
+<!-- PR #609: free -->
+
+<!-- PR #610: free -->
+
+<!-- PR #611: free -->
+
+<!-- PR #612: free -->
+
+<!-- PR #613: free -->
+
+<!-- PR #614: free -->
+
+<!-- PR #615: free -->
+
+<!-- PR #616: free -->
+
+<!-- PR #617: free -->
+
+<!-- PR #618: free -->
+
+<!-- PR #619: free -->
+
+<!-- PR #620: free -->
+
+<!-- PR #621: free -->
+
+<!-- PR #622: free -->
+
+<!-- PR #623: free -->
+
+<!-- PR #624: free -->
+
+<!-- PR #625: free -->
+
+<!-- PR #626: free -->
+
+<!-- PR #627: free -->
+
+<!-- PR #628: free -->
+
+<!-- PR #629: free -->
+
+<!-- PR #630: free -->
+
+<!-- PR #631: free -->
+
+<!-- PR #632: free -->
+
+<!-- PR #633: free -->
+
+<!-- PR #634: free -->
+
+<!-- PR #635: free -->
+
+<!-- PR #636: free -->
+
+<!-- PR #637: free -->
+
+<!-- PR #638: free -->
+
+<!-- PR #639: free -->
+
+<!-- PR #640: free -->
+
+<!-- PR #641: free -->
+
+<!-- PR #642: free -->
+
+<!-- PR #643: free -->
+
+<!-- PR #644: free -->
+
+<!-- PR #645: free -->
+
+<!-- PR #646: free -->
+
+<!-- PR #647: free -->
+
+<!-- PR #648: free -->
+
+<!-- PR #649: free -->
+
+<!-- PR #650: free -->
+
+<!-- PR #651: free -->
+
+<!-- PR #652: free -->
+
+<!-- PR #653: free -->
+
+<!-- PR #654: free -->
+
+<!-- PR #655: free -->
+
+<!-- PR #656: free -->
+
+<!-- PR #657: free -->
+
+<!-- PR #658: free -->
+
+<!-- PR #659: free -->
+
+<!-- PR #660: free -->
+
+<!-- PR #661: free -->
+
+<!-- PR #662: free -->
+
+<!-- PR #663: free -->
+
+<!-- PR #664: free -->
+
+<!-- PR #665: free -->
+
+<!-- PR #666: free -->
+
+<!-- PR #667: free -->
+
+<!-- PR #668: free -->
+
+<!-- PR #669: free -->
+
+<!-- PR #670: free -->
+
+<!-- PR #671: free -->
+
+<!-- PR #672: free -->
+
+<!-- PR #673: free -->
+
+<!-- PR #674: free -->
+
+<!-- PR #675: free -->
+
+<!-- PR #676: free -->
+
+<!-- PR #677: free -->
+
+<!-- PR #678: free -->
+
+<!-- PR #679: free -->
+
+<!-- PR #680: free -->
+
+<!-- PR #681: free -->
+
+<!-- PR #682: free -->
+
+<!-- PR #683: free -->
+
+<!-- PR #684: free -->
+
+<!-- PR #685: free -->
+
+<!-- PR #686: free -->
+
+<!-- PR #687: free -->
+
+<!-- PR #688: free -->
+
+<!-- PR #689: free -->
+
+<!-- PR #690: free -->
+
+<!-- PR #691: free -->
+
+<!-- PR #692: free -->
+
+<!-- PR #693: free -->
+
+<!-- PR #694: free -->
+
+<!-- PR #695: free -->
+
+<!-- PR #696: free -->
+
+<!-- PR #697: free -->
+
+<!-- PR #698: free -->
+
+<!-- PR #699: free -->
+
+<!-- PR #700: free -->
+
+<!-- PR #701: free -->
+
+<!-- PR #702: free -->
+
+<!-- PR #703: free -->
+
+<!-- PR #704: free -->
+
+<!-- PR #705: free -->
+
+<!-- PR #706: free -->
+
+<!-- PR #707: free -->
+
+<!-- PR #708: free -->
+
+<!-- PR #709: free -->
+
+<!-- PR #710: free -->
+
+<!-- PR #711: free -->
+
+<!-- PR #712: free -->
+
+<!-- PR #713: free -->
+
+<!-- PR #714: free -->
+
+<!-- PR #715: free -->
+
+<!-- PR #716: free -->
+
+<!-- PR #717: free -->
+
+<!-- PR #718: free -->
+
+<!-- PR #719: free -->
+
+<!-- PR #720: free -->
+
+<!-- PR #721: free -->
+
+<!-- PR #722: free -->
+
+<!-- PR #723: free -->
+
+<!-- PR #724: free -->
+
+<!-- PR #725: free -->
+
+<!-- PR #726: free -->
+
+<!-- PR #727: free -->
+
+<!-- PR #728: free -->
+
+<!-- PR #729: free -->
+
+<!-- PR #730: free -->
+
+<!-- PR #731: free -->
+
+<!-- PR #732: free -->
+
+<!-- PR #733: free -->
+
+<!-- PR #734: free -->
+
+<!-- PR #735: free -->
+
+<!-- PR #736: free -->
+
+<!-- PR #737: free -->
+
+<!-- PR #738: free -->
+
+<!-- PR #739: free -->
+
+<!-- PR #740: free -->
+
+<!-- PR #741: free -->
+
+<!-- PR #742: free -->
+
+<!-- PR #743: free -->
+
+<!-- PR #744: free -->
+
+<!-- PR #745: free -->
+
+<!-- PR #746: free -->
+
+<!-- PR #747: free -->
+
+<!-- PR #748: free -->
+
+<!-- PR #749: free -->
+
+<!-- PR #750: free -->
+
+<!-- PR #751: free -->
+
+<!-- PR #752: free -->
+
+<!-- PR #753: free -->
+
+<!-- PR #754: free -->
+
+<!-- PR #755: free -->
+
+<!-- PR #756: free -->
+
+<!-- PR #757: free -->
+
+<!-- PR #758: free -->
+
+<!-- PR #759: free -->
+
+<!-- PR #760: free -->
+
+<!-- PR #761: free -->
+
+<!-- PR #762: free -->
+
+<!-- PR #763: free -->
+
+<!-- PR #764: free -->
+
+<!-- PR #765: free -->
+
+<!-- PR #766: free -->
+
+<!-- PR #767: free -->
+
+<!-- PR #768: free -->
+
+<!-- PR #769: free -->
+
+<!-- PR #770: free -->
+
+<!-- PR #771: free -->
+
+<!-- PR #772: free -->
+
+<!-- PR #773: free -->
+
+<!-- PR #774: free -->
+
+<!-- PR #775: free -->
+
+<!-- PR #776: free -->
+
+<!-- PR #777: free -->
+
+<!-- PR #778: free -->
+
+<!-- PR #779: free -->
+
+<!-- PR #780: free -->
+
+<!-- PR #781: free -->
+
+<!-- PR #782: free -->
+
+<!-- PR #783: free -->
+
+<!-- PR #784: free -->
+
+<!-- PR #785: free -->
+
+<!-- PR #786: free -->
+
+<!-- PR #787: free -->
+
+<!-- PR #788: free -->
+
+<!-- PR #789: free -->
+
+<!-- PR #790: free -->
+
+<!-- PR #791: free -->
+
+<!-- PR #792: free -->
+
+<!-- PR #793: free -->
+
+<!-- PR #794: free -->
+
+<!-- PR #795: free -->
+
+<!-- PR #796: free -->
+
+<!-- PR #797: free -->
+
+<!-- PR #798: free -->
+
+<!-- PR #799: free -->
+
+<!-- PR #800: free -->
+
+<!-- PR #801: free -->
+
+<!-- PR #802: free -->
+
+<!-- PR #803: free -->
+
+<!-- PR #804: free -->
+
+<!-- PR #805: free -->
+
+<!-- PR #806: free -->
+
+<!-- PR #807: free -->
+
+<!-- PR #808: free -->
+
+<!-- PR #809: free -->
+
+<!-- PR #810: free -->
+
+<!-- PR #811: free -->
+
+<!-- PR #812: free -->
+
+<!-- PR #813: free -->
+
+<!-- PR #814: free -->
+
+<!-- PR #815: free -->
+
+<!-- PR #816: free -->
+
+<!-- PR #817: free -->
+
+<!-- PR #818: free -->
+
+<!-- PR #819: free -->
+
+<!-- PR #820: free -->
+
+<!-- PR #821: free -->
+
+<!-- PR #822: free -->
+
+<!-- PR #823: free -->
+
+<!-- PR #824: free -->
+
+<!-- PR #825: free -->
+
+<!-- PR #826: free -->
+
+<!-- PR #827: free -->
+
+<!-- PR #828: free -->
+
+<!-- PR #829: free -->
+
+<!-- PR #830: free -->
+
+<!-- PR #831: free -->
+
+<!-- PR #832: free -->
+
+<!-- PR #833: free -->
+
+<!-- PR #834: free -->
+
+<!-- PR #835: free -->
+
+<!-- PR #836: free -->
+
+<!-- PR #837: free -->
+
+<!-- PR #838: free -->
+
+<!-- PR #839: free -->
+
+<!-- PR #840: free -->
+
+<!-- PR #841: free -->
+
+<!-- PR #842: free -->
+
+<!-- PR #843: free -->
+
+<!-- PR #844: free -->
+
+<!-- PR #845: free -->
+
+<!-- PR #846: free -->
+
+<!-- PR #847: free -->
+
+<!-- PR #848: free -->
+
+<!-- PR #849: free -->
+
+<!-- PR #850: free -->
+
+<!-- PR #851: free -->
+
+<!-- PR #852: free -->
+
+<!-- PR #853: free -->
+
+<!-- PR #854: free -->
+
+<!-- PR #855: free -->
+
+<!-- PR #856: free -->
+
+<!-- PR #857: free -->
+
+<!-- PR #858: free -->
+
+<!-- PR #859: free -->
+
+<!-- PR #860: free -->
+
+<!-- PR #861: free -->
+
+<!-- PR #862: free -->
+
+<!-- PR #863: free -->
+
+<!-- PR #864: free -->
+
+<!-- PR #865: free -->
+
+<!-- PR #866: free -->
+
+<!-- PR #867: free -->
+
+<!-- PR #868: free -->
+
+<!-- PR #869: free -->
+
+<!-- PR #870: free -->
+
+<!-- PR #871: free -->
+
+<!-- PR #872: free -->
+
+<!-- PR #873: free -->
+
+<!-- PR #874: free -->
+
+<!-- PR #875: free -->
+
+<!-- PR #876: free -->
+
+<!-- PR #877: free -->
+
+<!-- PR #878: free -->
+
+<!-- PR #879: free -->
+
+<!-- PR #880: free -->
+
+<!-- PR #881: free -->
+
+<!-- PR #882: free -->
+
+<!-- PR #883: free -->
+
+<!-- PR #884: free -->
+
+<!-- PR #885: free -->
+
+<!-- PR #886: free -->
+
+<!-- PR #887: free -->
+
+<!-- PR #888: free -->
+
+<!-- PR #889: free -->
+
+<!-- PR #890: free -->
+
+<!-- PR #891: free -->
+
+<!-- PR #892: free -->
+
+<!-- PR #893: free -->
+
+<!-- PR #894: free -->
+
+<!-- PR #895: free -->
+
+<!-- PR #896: free -->
+
+<!-- PR #897: free -->
+
+<!-- PR #898: free -->
+
+<!-- PR #899: free -->
+
+<!-- PR #900: free -->
+
+<!-- PR #901: free -->
+
+<!-- PR #902: free -->
+
+<!-- PR #903: free -->
+
+<!-- PR #904: free -->
+
+<!-- PR #905: free -->
+
+<!-- PR #906: free -->
+
+<!-- PR #907: free -->
+
+<!-- PR #908: free -->
+
+<!-- PR #909: free -->
+
+<!-- PR #910: free -->
+
+<!-- PR #911: free -->
+
+<!-- PR #912: free -->
+
+<!-- PR #913: free -->
+
+<!-- PR #914: free -->
+
+<!-- PR #915: free -->
+
+<!-- PR #916: free -->
+
+<!-- PR #917: free -->
+
+<!-- PR #918: free -->
+
+<!-- PR #919: free -->
+
+<!-- PR #920: free -->
+
+<!-- PR #921: free -->
+
+<!-- PR #922: free -->
+
+<!-- PR #923: free -->
+
+<!-- PR #924: free -->
+
+<!-- PR #925: free -->
+
+<!-- PR #926: free -->
+
+<!-- PR #927: free -->
+
+<!-- PR #928: free -->
+
+<!-- PR #929: free -->
+
+<!-- PR #930: free -->
+
+<!-- PR #931: free -->
+
+<!-- PR #932: free -->
+
+<!-- PR #933: free -->
+
+<!-- PR #934: free -->
+
+<!-- PR #935: free -->
+
+<!-- PR #936: free -->
+
+<!-- PR #937: free -->
+
+<!-- PR #938: free -->
+
+<!-- PR #939: free -->
+
+<!-- PR #940: free -->
+
+<!-- PR #941: free -->
+
+<!-- PR #942: free -->
+
+<!-- PR #943: free -->
+
+<!-- PR #944: free -->
+
+<!-- PR #945: free -->
+
+<!-- PR #946: free -->
+
+<!-- PR #947: free -->
+
+<!-- PR #948: free -->
+
+<!-- PR #949: free -->
+
+<!-- PR #950: free -->
+
+<!-- PR #951: free -->
+
+<!-- PR #952: free -->
+
+<!-- PR #953: free -->
+
+<!-- PR #954: free -->
+
+<!-- PR #955: free -->
+
+<!-- PR #956: free -->
+
+<!-- PR #957: free -->
+
+<!-- PR #958: free -->
+
+<!-- PR #959: free -->
+
+<!-- PR #960: free -->
+
+<!-- PR #961: free -->
+
+<!-- PR #962: free -->
+
+<!-- PR #963: free -->
+
+<!-- PR #964: free -->
+
+<!-- PR #965: free -->
+
+<!-- PR #966: free -->
+
+<!-- PR #967: free -->
+
+<!-- PR #968: free -->
+
+<!-- PR #969: free -->
+
+<!-- PR #970: free -->
+
+<!-- PR #971: free -->
+
+<!-- PR #972: free -->
+
+<!-- PR #973: free -->
+
+<!-- PR #974: free -->
+
+<!-- PR #975: free -->
+
+<!-- PR #976: free -->
+
+<!-- PR #977: free -->
+
+<!-- PR #978: free -->
+
+<!-- PR #979: free -->
+
+<!-- PR #980: free -->
+
+<!-- PR #981: free -->
+
+<!-- PR #982: free -->
+
+<!-- PR #983: free -->
+
+<!-- PR #984: free -->
+
+<!-- PR #985: free -->
+
+<!-- PR #986: free -->
+
+<!-- PR #987: free -->
+
+<!-- PR #988: free -->
+
+<!-- PR #989: free -->
+
+<!-- PR #990: free -->
+
+<!-- PR #991: free -->
+
+<!-- PR #992: free -->
+
+<!-- PR #993: free -->
+
+<!-- PR #994: free -->
+
+<!-- PR #995: free -->
+
+<!-- PR #996: free -->
+
+<!-- PR #997: free -->
+
+<!-- PR #998: free -->
+
+<!-- PR #999: free -->
+
+<!-- PR #1000: free -->
+
+<!-- PR #1001: free -->
+
+<!-- PR #1002: free -->
+
+<!-- PR #1003: free -->
+
+<!-- PR #1004: free -->
+
+<!-- PR #1005: free -->
+
+<!-- PR #1006: free -->
+
+<!-- PR #1007: free -->
+
+<!-- PR #1008: free -->
+
+<!-- PR #1009: free -->
+
+<!-- PR #1010: free -->
+
+<!-- PR #1011: free -->
+
+<!-- PR #1012: free -->
+
+<!-- PR #1013: free -->
+
+<!-- PR #1014: free -->
+
+<!-- PR #1015: free -->
+
+<!-- PR #1016: free -->
+
+<!-- PR #1017: free -->
+
+<!-- PR #1018: free -->
+
+<!-- PR #1019: free -->
+
+<!-- PR #1020: free -->
+
+<!-- PR #1021: free -->
+
+<!-- PR #1022: free -->
+
+<!-- PR #1023: free -->
+
+<!-- PR #1024: free -->
+
+<!-- PR #1025: free -->
+
+<!-- PR #1026: free -->
+
+<!-- PR #1027: free -->
+
+<!-- PR #1028: free -->
+
+<!-- PR #1029: free -->
+
+<!-- PR #1030: free -->
+
+<!-- PR #1031: free -->
+
+<!-- PR #1032: free -->
+
+<!-- PR #1033: free -->
+
+<!-- PR #1034: free -->
+
+<!-- PR #1035: free -->
+
+<!-- PR #1036: free -->
+
+<!-- PR #1037: free -->
+
+<!-- PR #1038: free -->
+
+<!-- PR #1039: free -->
+
+<!-- PR #1040: free -->
+
+<!-- PR #1041: free -->
+
