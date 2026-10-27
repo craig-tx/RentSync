@@ -908,7 +908,26 @@ start runs the new step with the unchanged password, a no-op. Rotate once to pro
 
 <!-- One slot per PR number, filled by `ruby bin/build-log fill <pr>`; see the top of this file. -->
 
-<!-- PR #42: free -->
+<!-- PR #42 -->
+### 2026-10-27: build-log slots (interactive)
+
+- **Why:** every PR appended to the end of this file, so the second of any two open PRs
+  always conflicted and needed a manual merge of `main`.
+- **Done:** the log now ends with one slot per PR number (#42 to #1041, HTML comments that
+  don't render). `ruby bin/build-log fill <pr>` writes an entry into its own slot; GitHub
+  never reuses a number, so two PRs never touch the same lines. `check` runs in CI (slot
+  order, empty free slots, a `###` heading on filled ones; warns below 100 free) and
+  `top-up` adds slots back to 1000. Plain Ruby, LF output on every platform.
+- **Tests:** `bin/test/build_log_test.rb`, including a real `git merge` of two branches that
+  fill neighbouring slots. A scratch-repo experiment first confirmed neighbouring slots merge
+  cleanly and a shared slot conflicts, which is why slots are keyed by PR number rather than
+  "first free".
+- **Decisions:** operator chose slots in one file over one file per entry or a
+  `.gitattributes` union merge (GitHub ignores merge drivers when checking PRs). 1000 slots
+  instead of 100, at the operator's request, so top-ups are years away. Constitution 1.7.1
+  (PATCH): entries go in the PR's slot; `CLAUDE.md` matches.
+
+**Next task:** write every later entry with `ruby bin/build-log fill <pr>` after opening the PR.
 
 <!-- PR #43: free -->
 
