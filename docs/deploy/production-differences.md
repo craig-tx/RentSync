@@ -1,6 +1,6 @@
 # How a real production deployment would differ
 
-This deployment is a cost-conscious demonstration (about $55 a month; research R5). It is
+This deployment is a cost-conscious demonstration (about $43 a month; research R5). It is
 **not** production-ready (constitution §Scope). Each row compares a deliberate demo choice with
 what a real production design would use, and says why the demo differs (FR-036). The overall
 decisions are ADR-0005 and ADR-0008.

@@ -12,7 +12,7 @@ under `rentsync.org`.
 
 Run the feature 001 mock PMS on AWS as two independent environments, staging and production,
 plus one shared OpenObserve host, applied from HCP Terraform. This is a cost-conscious demo, about
-$55 per month.
+$43 per month.
 
 > **Amended 2026-10-25 (ADR-0008):** the plan below describes one VPC. Every deployment now owns
 > its VPC instead, and each environment VPC is peered only with the shared telemetry VPC, so
@@ -97,8 +97,8 @@ See [research.md](research.md) (R1–R17) for each decision.
 
 **Target Platform**:
 
-- AWS `us-east-1`, a single availability zone (`us-east-1a`), EC2 `t4g.small`, Amazon Linux
-  2023 arm64.
+- AWS `us-east-1`, a single availability zone (`us-east-1a`), EC2 `t4g.micro` (environments) and
+  `t4g.small` (telemetry), Amazon Linux 2023 arm64.
 - HCP Terraform, organization `craig-personal`, project `RentSync`.
 - GitHub Actions (`ubuntu-latest`; `ubuntu-24.04-arm` for image builds).
 

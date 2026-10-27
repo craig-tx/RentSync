@@ -304,7 +304,7 @@ Next: §First apply.
 
 This creates the AWS resources: the three VPCs and their peering, the three hosts with their
 Elastic IPs and data volumes, the image registry, the audit trail and log bucket, backups and the
-budget. AWS charges start here, at about $55 a month (README). Bootstrap only created the
+budget. AWS charges start here, at about $43 a month (README). Bootstrap only created the
 workspaces; none of them has run yet.
 
 Apply in this order, because each environment reads `rentsync-shared-us`'s outputs (its VPC,
@@ -553,27 +553,29 @@ waits for it, and `rentsync.service` re-renders secrets and starts the stack.
 
 ## Changing a host's instance type
 
-Every host is `t4g.small` (2 GiB). The environment hosts measured about 700–750 MiB at peak
-(research R4), so `t4g.micro` (1 GiB) is worth trying to save about $6 per host per month.
-Every host has a 1 GiB swap file for short peaks. Don't go below `t4g.micro`, and keep the
-telemetry host on `t4g.small`: OpenObserve alone peaked near 950 MiB.
+The environment hosts are `t4g.micro` (1 GiB) and the telemetry host is `t4g.small` (2 GiB).
+The environment hosts measured about 700–750 MiB at peak (research R4), and every host has a
+1 GiB swap file for short peaks. Don't go below `t4g.micro`, and keep the telemetry host on
+`t4g.small`: OpenObserve alone peaked near 950 MiB.
 
-Try it on staging first, and only after §First deploy, so there is a real stack to measure:
+The size comes from the variable's default in the Terraform root (`instance_type` in
+`infra/terraform/environment/variables.tf`, `telemetry_instance_type` in
+`infra/terraform/shared/variables.tf`). Changing a default changes every workspace that hasn't
+set the variable. To size one workspace differently, set the variable in that workspace.
+Either way the next apply replaces the host as in §Host replacement; its address and data are
+kept.
 
-1. In `rentsync-dev-staging`, set the variable `instance_type` to `t4g.micro` and start a run.
-   It replaces the host as in §Host replacement; its address and data are kept.
-2. Deploy to it once (§Release and promotion) and check `/healthz`. A deploy is the busiest
-   moment for memory.
-3. In a session on the host (`aws ssm start-session --target <instance_id>`), check memory:
+**Check memory** after a deploy, the busiest moment for memory. In a session on the host
+(`aws ssm start-session --target <instance_id>`):
 
-   ```bash
-   free -m                          # "available" should stay above ~100 MiB
-   swapon --show                    # swap in use; a little after a deploy is normal
-   sudo docker stats --no-stream    # memory per container
-   ```
+```bash
+free -m                          # "available" should stay above ~100 MiB
+swapon --show                    # swap in use; a little after a deploy is normal
+sudo docker stats --no-stream    # memory per container
+```
 
-4. If swap use keeps growing, or `/healthz` gets slow, set `instance_type` back to `t4g.small`.
-   Otherwise, after a few days and a few deploys, do the same for `rentsync-prod-us`.
+**Going back up**: if swap use keeps growing, or `/healthz` gets slow, set `instance_type` to
+`t4g.small` in that environment's workspace and start a run.
 
 ## Monthly OS patching (AMI update)
 

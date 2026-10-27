@@ -823,6 +823,20 @@ the patterns (`infra/host/` → plans in all three workspaces; `infra/bootstrap/
 **Next task:** confirm the shared-us and prod-us runs, check dev-staging's `/healthz` after its
 replacement (same version), then the `/healthz` timestamps.
 
+### 2026-10-27: environment hosts on t4g.micro
+
+- **Done:** the environment root's `instance_type` default is now `t4g.micro` (1 GiB), so
+  dev-staging and prod-us both move down one size on their next apply (host replacement; data,
+  IP and certificates kept). The telemetry host stays `t4g.small` (OpenObserve peaked at
+  949 MiB). Research R4/R5, the variables contract, data model, plan, README and runbook
+  updated; estimated cost drops from ≈ $55 to ≈ $43 a month.
+- **Decision:** operator chose to move both environments at once instead of the staging-first
+  trial the runbook described. Basis: measured ~700–750 MiB peak plus the 1 GiB swap file
+  (#26) and the Collector's `GOMEMLIMIT` (#30). The runbook now says how to check memory after
+  a deploy and how to put one workspace back on `t4g.small` by setting the variable there.
+
+**Next task:** after the merge, confirm prod-us's run (dev-staging auto-applies), deploy, and
+check `free -m` / `swapon --show` on both hosts.
 ### 2026-10-27: /healthz reports time and started_at
 
 - **Done (test first):** `/healthz` and `/healthz/live` add `time` (current UTC time, from
