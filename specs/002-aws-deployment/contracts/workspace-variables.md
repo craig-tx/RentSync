@@ -20,7 +20,7 @@ runbook procedure:
 | `instance_type`, `telemetry_instance_type` | environments, shared | §Changing a host's instance type | resizing a host; not set by bootstrap |
 | `admin_token`, `admin_token_version` | environments | §Secret rotation | rotation sets a new token and bumps the version |
 | `openobserve_root_password`, `openobserve_root_password_version`, `postgres_password_version` | as listed below | §Secret rotation | the same |
-| `openobserve_db_password_version` | `rentsync-shared-us` | **no procedure yet** | bumping it writes a new password to SSM, but OpenObserve's Postgres keeps the old one until changed by hand, as in the Postgres procedure; don't bump it until the runbook covers it |
+| `openobserve_db_password_version` | `rentsync-shared-us` | §Secret rotation | bumping it writes a new password to SSM; the next start of the telemetry stack (`rentsync-start`) sets it on OpenObserve's Postgres |
 | `data_snapshot_id` | environments | §Backup restore | set to restore a data volume from a snapshot |
 
 Every other variable describes the deployment itself (its ID, network, hostnames, emails). It

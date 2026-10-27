@@ -628,6 +628,10 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 - [X] T052l [US3] Telemetry volume: deployed Collectors scrape every 60 s
   (`METRICS_SCRAPE_INTERVAL`, default 15 s for local and CI) and OpenObserve keeps 30 days
   (`ZO_COMPACT_DATA_RETENTION_DAYS`). Research R8 "Volume and retention".
+- [X] T052m [US5] OpenObserve database password rotation (issue #35): `rentsync-start` sets the
+  `openobserve` Postgres user's password to the SSM value on every telemetry start, before
+  OpenObserve. Rotation = bump `openobserve_db_password_version`, apply, restart
+  `rentsync.service` (runbook §Secret rotation). Test: `infra/host/test/start_test.sh`.
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the
