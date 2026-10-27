@@ -78,7 +78,7 @@ changes only by editing it in the workspace, for example after moving to a new d
 | `vpc_cidr` | string | `10.41.0.0/16` | `10.42.0.0/16` | no |
 | `subnet_cidr` | string | `10.41.1.0/24` | `10.42.1.0/24` | no |
 | `private_ip` | string | `10.41.1.20` | `10.42.1.30` | no |
-| `instance_type` | string | `t4g.small` | `t4g.small` | no |
+| `instance_type` | string | `t4g.micro` (default) | `t4g.micro` (default) | no |
 | `acme_email`, `acme_ca` | string | as for shared | as for shared | no |
 | `admin_token` | string (validated: ≥ 32 characters, not `change-me-admin-token`) | random, per environment | different random | **yes** |
 | `admin_token_version` | number | `1` | `1` | no |

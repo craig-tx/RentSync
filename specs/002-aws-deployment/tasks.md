@@ -622,6 +622,9 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   `vm.swappiness = 10`). Tests: `infra/host/test/swap_test.sh` (root, in CI) and the host
   module's Terraform tests. Runbook §Changing a host's instance type describes trying
   `t4g.micro` on staging.
+- [X] T052k [US1] Environment hosts default to `t4g.micro` (operator decision 2026-10-27, to
+  cut cost; telemetry stays `t4g.small`). Research R4/R5 (≈ $43 a month), the variables
+  contract and runbook §Changing a host's instance type (check memory; go back up per workspace).
 
 > **Merge order changed (operator decision, 2026-10-25):** the branch merges to `main` before
 > the live checks, at T090–T091. The HCP Terraform workspaces track `main`, and the

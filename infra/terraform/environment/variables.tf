@@ -64,7 +64,7 @@ variable "private_ip" {
 
 variable "instance_type" {
   type    = string
-  default = "t4g.small"
+  default = "t4g.micro"
 }
 
 variable "acme_email" {

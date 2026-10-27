@@ -104,7 +104,10 @@ implementation.
   `most_recent` lookup, which would make every plan want to replace the hosts. Upgrading the AMI
   is a deliberate variable change, applied staging first. It replaces the host and goes through
   the host-replacement path (US5).
-- **Instance type**: `t4g.small` (2 vCPU burstable, 2 GiB) for all three hosts.
+- **Instance type**: `t4g.micro` (2 vCPU burstable, 1 GiB) for the environment hosts and
+  `t4g.small` (2 GiB) for the telemetry host. All three started on `t4g.small`; the environment
+  hosts moved to `t4g.micro` on 2026-10-27 (operator decision, to cut cost) after the
+  measurement and swap below.
   - An environment host runs Puma, the worker, Postgres, Redis, the Collector and Caddy (the
     test receiver only under the `tools` profile). The original estimate was 1–1.3 GiB; the
     measurement below puts it at about 700–750 MiB.
@@ -137,8 +140,9 @@ implementation.
   - **Swap**: every host gets a 1 GiB swap file on the root disk at first boot
     (`rentsync-swap`, module variable `swap_mib`; 0 turns it off), with `vm.swappiness = 10`.
     Swap is used only under memory pressure, so a brief peak slows the host down instead of
-    the kernel killing a container. It makes `t4g.micro` a reasonable trial for the
-    environment hosts (runbook §Changing a host's instance type); `t4g.small` stays the default.
+    the kernel killing a container. It is what makes `t4g.micro` workable for the environment
+    hosts; runbook §Changing a host's instance type says how to check memory and how to go
+    back to `t4g.small` for one environment.
   - The instance type is a variable. `t3.small` (amd64) is the fallback if an image lacks
     arm64.
 - **Image architecture**: the mock PMS image is built for `linux/arm64` on GitHub's native
@@ -162,7 +166,8 @@ us-east-1 on-demand prices, 730 hours a month:
 
 | Item | Quantity | Monthly (USD) |
 |---|---|---|
-| `t4g.small` | 3 × $0.0168/h | 36.79 |
+| `t4g.micro` (environment hosts) | 2 × $0.0084/h | 12.26 |
+| `t4g.small` (telemetry host) | 1 × $0.0168/h | 12.26 |
 | Public IPv4 (in-use Elastic IPs are charged) | 3 × $0.005/h | 10.95 |
 | gp3 root disks | 3 × 16 GiB × $0.08 | 3.84 |
 | gp3 data volumes | 3 × 10 GiB × $0.08 | 2.40 |
@@ -170,9 +175,10 @@ us-east-1 on-demand prices, 730 hours a month:
 | ECR (lifecycle keeps 100 images) | ~2 GiB | ~0.20 |
 | SSM Parameter Store (standard tier), DLM, IAM, budgets (first 2 free) | — | 0.00 |
 | Data transfer out (demo traffic) | < 10 GiB | < 0.90 |
-| **Total** | | **≈ 55** |
+| **Total** | | **≈ 43** |
 
-- This is under the $60 ceiling, with about $5 of headroom.
+- This is under the $60 ceiling, with about $17 of headroom. With all three hosts on
+  `t4g.small` (the original plan) it was ≈ 55.
 - The budget is $60 per month. It alerts on actual spend at 80% and 100%, and on forecast
   spend at 100% (FR-035). The forecast alert catches runaway spend before month end.
 - Secrets Manager ($0.40 per secret per month), NAT gateways (about $33 each), and load
