@@ -13,6 +13,7 @@ set -euo pipefail
 tests=(
   infra/host/test/render_env_test.sh
   infra/host/test/deploy_test.sh
+  infra/release/test/run_deploy_test.sh
   infra/bootstrap/test/bootstrap_init_test.sh
   infra/bootstrap/test/bootstrap_iam_test.sh
   infra/bootstrap/test/bootstrap_github_test.sh

@@ -873,3 +873,24 @@ check `free -m` / `swapon --show` on both hosts.
   are replaced (data, IP and certificates kept).
 
 **Next task:** after apply, confirm the event rate in OpenObserve drops to about a quarter.
+
+### 2026-10-27: releases wait for a host being replaced
+
+- **Why:** #39's merge started an HCP host replacement and the auto-release together; the
+  dev-staging deploy reached the old host as it shut down ("status: Failed", no output), and
+  the new host booted on the previous image.
+- **Done:** the SSM send/poll logic moved from `deploy-to.yml` into
+  `infra/release/run-deploy.sh` (the job now checks out the repo). The host runs
+  `cloud-init status --wait` before `rentsync-deploy`, because a new host has the deploy
+  script before Docker. The command is resent every 30 s, up to 25 minutes, while no host is
+  tagged or the host didn't finish (any exit code `rentsync-deploy` never uses). Its own
+  outcomes (0, 1, 2, 3, 64, 75) are final. No IAM change: only SendCommand,
+  ListCommandInvocations and GetCommandInvocation are used.
+- **Tests:** `infra/release/test/run_deploy_test.sh` (stub aws): first-time success, killed
+  host then success, no host then success, rollback not retried, deadline. Mutations caught:
+  no retry, and retrying a rollback. Added to `infra/test/run.sh` and CI's shellcheck.
+- **Not proven live yet:** the exit code SSM reports for a host killed mid-command is assumed
+  to be outside rentsync-deploy's set (SSM uses -1 for an interrupted command).
+
+**Next task:** the next merge that touches `infra/host/` is the live test; the release log
+should show "trying again" and then success on the new host.

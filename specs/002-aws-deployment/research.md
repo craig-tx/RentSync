@@ -342,6 +342,14 @@ successfully on `main`.
    - it waits for the command, prints its output, then checks
      `https://pms-staging.rentsync.org/healthz` from outside for `status=ok`,
      `version=<sha>` and `deployment_id=dev-staging`.
+   - **Host being replaced** (added 2026-10-27): a merge that changes host files starts an HCP
+     Terraform host replacement and this release together. The first time, the deploy reached
+     the old host as it shut down and failed. `infra/release/run-deploy.sh` now has the host
+     wait for cloud-init (a new host gets Docker late in boot), and sends the command again
+     every 30 s, for up to 25 minutes, while no host is tagged or the host did not finish
+     (killed, unreachable, or an exit code `rentsync-deploy` never uses). An outcome from
+     `rentsync-deploy` itself (rolled back, unhealthy, bad argument, lock busy) is final. A
+     resend is safe: deploying the running tag is a no-op.
 3. **`deploy-prod-us`** (GitHub Environment `prod-us`, **required reviewer: the operator**): the
    same steps against the production host and URL, with the **same tag**. Its approval gate is
    the promotion approval (FR-027). Nothing is rebuilt.
