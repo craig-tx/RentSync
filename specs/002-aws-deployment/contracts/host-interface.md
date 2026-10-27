@@ -49,15 +49,18 @@ forbidden in this script.
 ## `/healthz` (mock PMS, changed in this feature)
 
 ```json
-GET /healthz        200 {"status":"ok","db":"ok","redis":"ok","worker_heartbeat_age_s":3,"version":"<sha>","deployment_id":"prod-us"}
-                    503 {"status":"degraded",...,"version":"<sha>","deployment_id":"prod-us"}
-GET /healthz/live   200 {"status":"ok","version":"<sha>","deployment_id":"prod-us"}
+GET /healthz        200 {"status":"ok","db":"ok","redis":"ok","worker_heartbeat_age_s":3,"version":"<sha>","deployment_id":"prod-us",
+                         "time":"2026-10-27T12:00:05Z","started_at":"2026-10-27T11:58:40Z"}
+                    503 {"status":"degraded",...,"version":"<sha>","deployment_id":"prod-us","time":...,"started_at":...}
+GET /healthz/live   200 {"status":"ok","version":"<sha>","deployment_id":"prod-us","time":...,"started_at":...}
 ```
 
-`version` is `SERVICE_VERSION`: the image's `GIT_SHA`, or `dev` locally. `deployment_id` is
-`DEPLOYMENT_ID`, so the release check also proves it reached the intended deployment. These are
-additions only. Existing fields and status codes are unchanged (001 `contracts/openapi.yaml`
-gains both fields).
+`version` is `SERVICE_VERSION`: the full git commit SHA the image was built from (the build's
+`GIT_SHA`), or `dev` locally. `deployment_id` is `DEPLOYMENT_ID`, so the release check also proves
+it reached the intended deployment. `time` is the server's current time and `started_at` is when
+the web process started (both UTC, ISO 8601), so a reader can tell the answer is fresh and when
+the last deploy or restart happened. These are additions only. Existing fields and status codes
+are unchanged (001 `contracts/openapi.yaml` has all four fields).
 
 ## `bin/setup --deploy` (mock PMS, new flag)
 

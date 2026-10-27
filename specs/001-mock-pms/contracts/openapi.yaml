@@ -101,7 +101,7 @@ components:
   schemas:
     Health:
       type: object
-      required: [status, db, redis, worker_heartbeat_age_s, version, deployment_id]
+      required: [status, db, redis, worker_heartbeat_age_s, version, deployment_id, time, started_at]
       properties:
         status: { type: string, enum: [ok, degraded] }
         db: { type: string, enum: [ok, down] }
@@ -109,6 +109,8 @@ components:
         worker_heartbeat_age_s: { type: [integer, "null"] }
         version: { type: string, description: 'SERVICE_VERSION: the image GIT_SHA, or dev locally (feature 002 FR-028)' }
         deployment_id: { type: string, description: 'DEPLOYMENT_ID, e.g. prod-us (constitution VI)' }
+        time: { type: string, format: date-time, description: 'Current server time, UTC, ISO 8601: shows the answer is fresh' }
+        started_at: { type: string, format: date-time, description: 'When this process started, UTC, ISO 8601: dates the last deploy or restart' }
     Error:
       type: object
       required: [error]
@@ -750,7 +752,7 @@ paths:
       summary: Liveness (process is up; used by container healthchecks)
       security: []
       responses:
-        '200': { description: 'Process is up', content: { application/json: { schema: { type: object, required: [status, version, deployment_id], properties: { status: { type: string, enum: [ok] }, version: { type: string, description: 'SERVICE_VERSION (git SHA, or dev)' }, deployment_id: { type: string, description: 'DEPLOYMENT_ID (constitution VI)' } } } } } }
+        '200': { description: 'Process is up', content: { application/json: { schema: { type: object, required: [status, version, deployment_id, time, started_at], properties: { status: { type: string, enum: [ok] }, version: { type: string, description: 'SERVICE_VERSION (git SHA, or dev)' }, deployment_id: { type: string, description: 'DEPLOYMENT_ID (constitution VI)' }, time: { type: string, format: date-time }, started_at: { type: string, format: date-time } } } } } }
   /metrics:
     get:
       tags: [ops]
