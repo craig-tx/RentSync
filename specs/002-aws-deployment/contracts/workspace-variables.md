@@ -6,6 +6,26 @@ Values in angle brackets come from the deployment settings (`bootstrap-init.sh`)
 "Sensitive" means marked sensitive in HCP Terraform *and* declared `ephemeral = true` in
 Terraform, so the value never reaches state or plan files.
 
+## Who owns a variable after bootstrap
+
+`bootstrap-hcp.rb` creates each variable once and never changes it on a rerun, because the
+operator owns it from then on (runbook §Bootstrap step 2, "Reruns"). Workspace *settings*, by
+contrast, are restored on every rerun. These variables are expected to change, each through a
+runbook procedure:
+
+| Variable | Workspaces | Changed by | Why |
+|---|---|---|---|
+| `acme_ca` | all three | §DNS | starts at Let's Encrypt staging; switched to production once DNS resolves |
+| `ami_id` | `rentsync-shared-us` | §Monthly OS patching | each patch pins a newer Amazon Linux AMI |
+| `instance_type`, `telemetry_instance_type` | environments, shared | §Changing a host's instance type | resizing a host; not set by bootstrap |
+| `admin_token`, `admin_token_version` | environments | §Secret rotation | rotation sets a new token and bumps the version |
+| `openobserve_root_password`, `openobserve_root_password_version`, `postgres_password_version` | as listed below | §Secret rotation | the same |
+| `openobserve_db_password_version` | `rentsync-shared-us` | **no procedure yet** | bumping it writes a new password to SSM, but OpenObserve's Postgres keeps the old one until changed by hand, as in the Postgres procedure; don't bump it until the runbook covers it |
+| `data_snapshot_id` | environments | §Backup restore | set to restore a data volume from a snapshot |
+
+Every other variable describes the deployment itself (its ID, network, hostnames, emails). It
+changes only by editing it in the workspace, for example after moving to a new domain.
+
 ## Project variable set `rentsync-aws` (applied to project `RentSync`)
 
 | Key | Category | Value | Sensitive |

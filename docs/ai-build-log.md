@@ -799,3 +799,14 @@ deployed SHA after its host is replaced.
 
 **Next task:** operator reruns step 2 from this branch, then two scratch pushes on #32 prove
 the patterns (`infra/host/` → plans in all three workspaces; `infra/bootstrap/` → none).
+- **Verified before merge** (operator ran step 2 from this branch; all three workspaces got
+  their patterns, `acme_ca` untouched): a PR touching `infra/host/` started plans in all three
+  workspaces ("0 of 3 complete"); a fresh PR touching only `infra/bootstrap/` (#34) started
+  none. A PR's plans follow every file the PR changes against `main`, not just its latest
+  commit, so a negative test needs its own PR.
+- **Docs:** runbook step 2 "Reruns" now explains settings (restored on rerun) vs variables
+  (owned by the operator after bootstrap) and lists which variables change later and how;
+  contracts/workspace-variables.md has the same as "Who owns a variable after bootstrap".
+- **Gap found:** no runbook procedure rotates `openobserve_db_password_version`. Bumping it
+  would change SSM but not OpenObserve's Postgres. Marked "don't bump" in the contract until a
+  procedure exists.
