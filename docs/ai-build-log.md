@@ -856,3 +856,20 @@ check `free -m` / `swapon --show` on both hosts.
   gem (constitution VIII). Specs cover both seasons, a date rollover and both switch instants in
   two years; moving the March switch to the first Sunday fails them. Full suite: 182 examples,
   0 failures; RuboCop clean. Demo-specific: the zone is fixed to US Central.
+
+### 2026-10-27: telemetry volume (scrape interval and retention)
+
+- **Why:** OpenObserve showed ~1.6M events. Nearly all are metric rows: one per series per
+  scrape, with a row per histogram bucket, route and status, scraped every 15 s on two hosts.
+  Storage was small (~10 MB compressed) but OpenObserve had no retention set (default ~10 years).
+- **Done:** `infra/otel/collector.yaml` reads `scrape_interval` from `METRICS_SCRAPE_INTERVAL`
+  (default 15s); `infra/host/compose.env.yaml` sets 60s on deployed hosts (a quarter of the
+  rows). `compose.telemetry.yaml` sets `ZO_COMPACT_DATA_RETENTION_DAYS: "30"` (name checked in
+  the v1.0.4 binary). Verified with `otelcol validate`: unset → 15s, `60s` accepted, `bogus`
+  rejected, so the variable is really read.
+- **Decision:** local and CI keep 15 s, because the telemetry smoke test waits only 60 s for a
+  Collector self-metric that needs a second scrape after the first log export.
+- **Effect on merge:** files under `infra/host/` and `infra/otel/` change, so all three hosts
+  are replaced (data, IP and certificates kept).
+
+**Next task:** after apply, confirm the event rate in OpenObserve drops to about a quarter.
