@@ -810,3 +810,15 @@ the patterns (`infra/host/` → plans in all three workspaces; `infra/bootstrap/
 - **Gap found:** no runbook procedure rotates `openobserve_db_password_version`. Bumping it
   would change SSM but not OpenObserve's Postgres. Marked "don't bump" in the contract until a
   procedure exists.
+
+### 2026-10-27: infra/host README (also deploys #26 and #30)
+
+- **Done:** `infra/host/README.md` maps each host file to its place on the host, which hosts get
+  it and what it does, and says that editing a passed file replaces hosts.
+- **Why now:** it is under `infra/host/`, so its merge queues runs in all three workspaces
+  through the new trigger patterns. It is not passed to hosts, so those runs plan only what was
+  waiting: #26's swap file and #30's Collector `GOMEMLIMIT`, which replace each host (data, IP
+  and certificates kept). First real proof of runs starting from a merge to `main`.
+
+**Next task:** confirm the shared-us and prod-us runs, check dev-staging's `/healthz` after its
+replacement (same version), then the `/healthz` timestamps.
