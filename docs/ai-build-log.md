@@ -779,13 +779,15 @@ deployed SHA after its host is replaced.
   | Always trigger runs | nothing (empty commit) | yes |
   | pattern `/infra/**` (typed in the UI) | `infra/host/` | no |
   | pattern `infra/**/*` (the UI's hint form) | `infra/host/` | **yes** |
-  | prefixes `infra/host/`, `infra/otel/`, `infra/terraform/modules/` | `infra/host/` | no |
-  | (same prefixes) | `infra/bootstrap/` | no |
+  | "Prefixes" `infra/host/`, `infra/otel/`, `infra/terraform/modules/` | `infra/host/` | no |
+  | (same) | `infra/bootstrap/` | no |
 
 - **Cause:** a trigger pattern must name files, ending in `/*`, without a leading slash (the
   UI's hint is `foo/**/*`). `infra/**` (the original) and `/infra/**` (yesterday's PR #29, an
-  unverified fix based on the docs' examples) matched nothing. Prefixes didn't fire as
-  documented either. The GitHub connection was never at fault.
+  unverified fix based on the docs' examples) matched nothing. The GitHub connection was never
+  at fault. The "prefixes" row did not test prefixes: the API afterwards showed the UI had saved
+  them as trigger *patterns* (`infra/host/`, which names a directory, not files), with
+  `trigger-prefixes` empty. So it failed for the same reason; real prefixes were never tried.
 - **Done:** each workspace watches what its root reads, as `…/**/*` patterns: its own root,
   `infra/terraform/modules/`, `infra/host/`, and for the environments `infra/otel/`.
   Bootstrap/test changes no longer queue runs. Prefixes are cleared. A new test reads each root's

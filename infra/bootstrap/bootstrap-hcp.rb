@@ -36,8 +36,8 @@ module HcpBootstrap
   # Each workspace runs when a file it reads changes: its own root, the modules, and the host
   # files its root passes to cloud-init. Add a directory here when a root starts reading it.
   # The form was found by experiment (2026-10-27, docs/ai-build-log.md): a pattern must name
-  # files, so it ends in "/*", and has no leading slash. "infra/**" and "/infra/**" matched
-  # nothing, and trigger prefixes ("infra/host/") didn't fire either.
+  # files, so it ends in "/*", and has no leading slash. "infra/**", "/infra/**" and
+  # "infra/host/" matched nothing.
   COMMON_TRIGGERS = ["infra/terraform/modules/**/*", "infra/host/**/*"].freeze
   SHARED_TRIGGERS = (["infra/terraform/shared/**/*"] + COMMON_TRIGGERS).freeze
   ENVIRONMENT_TRIGGERS = (["infra/terraform/environment/**/*", "infra/otel/**/*"] + COMMON_TRIGGERS).freeze
