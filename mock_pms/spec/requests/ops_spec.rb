@@ -56,6 +56,15 @@ RSpec.describe "ops endpoints", type: :request do
       expect(Time.iso8601(body["started_at"])).to be <= Time.now.utc
     end
 
+    it "repeats both times in US Central time, for readers who don't think in UTC" do
+      beat!(1)
+      freeze_time(Time.utc(2026, 10, 27, 12, 0, 5))
+      get "/healthz"
+      body = JSON.parse(last_response.body)
+      expect(body["time_ct"]).to eq("2026-10-27 07:00:05 CDT")
+      expect(body["started_at_ct"]).to eq(MockPms::CentralTime.format(Time.iso8601(body["started_at"])))
+    end
+
     it "keeps started_at fixed while the time moves on" do
       beat!(1)
       get "/healthz"
@@ -91,10 +100,12 @@ RSpec.describe "ops endpoints", type: :request do
       get "/healthz/live"
       expect(last_response.status).to eq(200)
       body = JSON.parse(last_response.body)
-      expect(body.except("started_at")).to eq("status" => "ok", "version" => MockPms::Settings.service_version,
-                                              "deployment_id" => MockPms::Settings.deployment_id,
-                                              "time" => "2026-10-27T12:00:05Z")
+      expect(body.except("started_at", "started_at_ct"))
+        .to eq("status" => "ok", "version" => MockPms::Settings.service_version,
+               "deployment_id" => MockPms::Settings.deployment_id,
+               "time" => "2026-10-27T12:00:05Z", "time_ct" => "2026-10-27 07:00:05 CDT")
       expect(body["started_at"]).to match(/\A\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\z/)
+      expect(body["started_at_ct"]).to match(/\A\d{4}-\d\d-\d\d \d\d:\d\d:\d\d C[DS]T\z/)
     end
   end
 

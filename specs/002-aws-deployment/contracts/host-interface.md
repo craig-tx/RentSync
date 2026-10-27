@@ -50,17 +50,19 @@ forbidden in this script.
 
 ```json
 GET /healthz        200 {"status":"ok","db":"ok","redis":"ok","worker_heartbeat_age_s":3,"version":"<sha>","deployment_id":"prod-us",
-                         "time":"2026-10-27T12:00:05Z","started_at":"2026-10-27T11:58:40Z"}
-                    503 {"status":"degraded",...,"version":"<sha>","deployment_id":"prod-us","time":...,"started_at":...}
-GET /healthz/live   200 {"status":"ok","version":"<sha>","deployment_id":"prod-us","time":...,"started_at":...}
+                         "time":"2026-10-27T12:00:05Z","started_at":"2026-10-27T11:58:40Z",
+                         "time_ct":"2026-10-27 07:00:05 CDT","started_at_ct":"2026-10-27 06:58:40 CDT"}
+                    503 {"status":"degraded",...,"version":"<sha>","deployment_id":"prod-us","time":...}
+GET /healthz/live   200 {"status":"ok","version":"<sha>","deployment_id":"prod-us","time":...}
 ```
 
 `version` is `SERVICE_VERSION`: the full git commit SHA the image was built from (the build's
 `GIT_SHA`), or `dev` locally. `deployment_id` is `DEPLOYMENT_ID`, so the release check also proves
 it reached the intended deployment. `time` is the server's current time and `started_at` is when
 the web process started (both UTC, ISO 8601), so a reader can tell the answer is fresh and when
-the last deploy or restart happened. These are additions only. Existing fields and status codes
-are unchanged (001 `contracts/openapi.yaml` has all four fields).
+the last deploy or restart happened. `time_ct` and `started_at_ct` repeat them in US Central time
+for reading (`MockPms::CentralTime`). Every endpoint returns all six. These are additions only.
+Existing fields and status codes are unchanged (001 `contracts/openapi.yaml` has them all).
 
 ## `bin/setup --deploy` (mock PMS, new flag)
 

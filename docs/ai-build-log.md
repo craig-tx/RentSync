@@ -824,3 +824,9 @@ the patterns (`infra/host/` → plans in all three workspaces; `infra/bootstrap/
   fields change nothing for them.
 
 **Next task:** merge, then Deploy to dev-staging and prod-us to see the new fields live.
+- **Added (operator request):** `time_ct` and `started_at_ct`, the same times in US Central
+  (`2026-10-27 07:00:05 CDT`). `MockPms::CentralTime` writes the US daylight-time rule locally
+  (second Sunday of March to first Sunday of November, 2:00 local) instead of adding a time zone
+  gem (constitution VIII). Specs cover both seasons, a date rollover and both switch instants in
+  two years; moving the March switch to the first Sunday fails them. Full suite: 182 examples,
+  0 failures; RuboCop clean. Demo-specific: the zone is fixed to US Central.
