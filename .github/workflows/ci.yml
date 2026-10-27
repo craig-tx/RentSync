@@ -125,3 +125,8 @@ jobs:
           ruby-version: "3.3"
       - name: Bootstrap-HCP test (fake API)
         run: ruby infra/bootstrap/test/bootstrap_hcp_test.rb
+      # Each PR writes its build-log entry into its own slot (docs/ai-build-log.md).
+      - name: Build log slots
+        run: |
+          ruby bin/test/build_log_test.rb
+          ruby bin/build-log check

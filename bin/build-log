@@ -1,0 +1,145 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Writes entries into docs/ai-build-log.md without merge conflicts. The log ends with one
+# pre-made slot per PR number:
+#
+#   <!-- PR #42: free -->      a free slot
+#   <!-- PR #42 -->            a filled slot, followed by its entry
+#
+# Each PR writes only into the slot with its own number, so two open PRs never touch the same
+# lines and Git merges them cleanly. GitHub never reuses a number, so no two PRs share a slot.
+#
+#   ruby bin/build-log fill <pr> [file]   put the entry (file, or stdin) in slot <pr>
+#   ruby bin/build-log check              validate the slots; warn when few are left
+#   ruby bin/build-log top-up             add slots so SLOTS_AHEAD are free past the last entry
+#
+# Plain Ruby, no gems: runs the same on Windows, macOS and Linux (constitution, Cross-platform
+# development). Tests: bin/test/build_log_test.rb.
+
+module BuildLog
+  SECTION = "## Entries by PR"
+  MARKER = /\A<!-- PR #(\d+)(: free)? -->\z/
+  SLOTS_AHEAD = 1000 # what top-up leaves free past the last entry
+  WARN_BELOW = 100 # check warns below this, so a top-up PR lands well before they run out
+
+  Slot = Struct.new(:number, :free, :body)
+
+  class Error < StandardError; end
+
+  module_function
+
+  def path = File.expand_path("../docs/ai-build-log.md", __dir__)
+
+  def read(file) = File.binread(file).force_encoding(Encoding::UTF_8).gsub("\r\n", "\n")
+
+  # Binary write keeps LF line endings on Windows too.
+  def write(file, text) = File.binwrite(file, text)
+
+  # Returns [everything up to the first slot, slots]. The archive and the section's own note
+  # stay as they are.
+  def parse(text)
+    head = +""
+    slots = []
+    in_section = false
+    text.each_line(chomp: true) do |line|
+      m = in_section && MARKER.match(line)
+      if m
+        slots << Slot.new(m[1].to_i, !m[2].nil?, [])
+      elsif slots.any?
+        slots.last.body << line
+      else
+        head << line << "\n"
+        in_section ||= line == SECTION
+      end
+    end
+    raise Error, "no \"#{SECTION}\" section" unless in_section
+
+    [head, slots]
+  end
+
+  def render(head, slots)
+    out = +head
+    slots.each do |s|
+      out << (s.free ? "<!-- PR ##{s.number}: free -->\n" : "<!-- PR ##{s.number} -->\n")
+      s.body.each { |l| out << l << "\n" }
+    end
+    out
+  end
+
+  def problems(slots)
+    found = []
+    numbers = slots.map(&:number)
+    found << "slot numbers must increase: #{numbers.each_cons(2).find { |a, b| b <= a }&.join(' then ')}" unless numbers.each_cons(2).all? { |a, b| b > a }
+    slots.each do |s|
+      text = s.body.reject { |l| l.strip.empty? }
+      if s.free && text.any?
+        found << "slot ##{s.number} is marked free but has text"
+      elsif !s.free && !text.first.to_s.start_with?("### ")
+        found << "slot ##{s.number} is filled but its entry doesn't start with a ### heading"
+      end
+    end
+    found
+  end
+
+  def free_ahead(slots)
+    last = slots.rindex { |s| !s.free }
+    slots[(last ? last + 1 : 0)..].count(&:free)
+  end
+
+  def fill(text, number, entry)
+    head, slots = parse(text)
+    slot = slots.find { |s| s.number == number }
+    raise Error, "no slot for PR ##{number}; run: ruby bin/build-log top-up" unless slot
+    raise Error, "slot ##{number} is already filled" unless slot.free
+
+    lines = entry.gsub("\r\n", "\n").strip.split("\n", -1)
+    raise Error, "an entry must start with a \"### \" heading" unless lines.first.to_s.start_with?("### ")
+
+    slot.free = false
+    slot.body = lines + [""]
+    render(head, slots)
+  end
+
+  def top_up(text)
+    head, slots = parse(text)
+    need = SLOTS_AHEAD - free_ahead(slots)
+    next_number = (slots.last&.number || 0) + 1
+    need.times { |i| slots << Slot.new(next_number + i, true, [""]) }
+    [render(head, slots), [need, 0].max]
+  end
+
+  def main(argv, file: path, stdin: $stdin, out: $stdout)
+    text = read(file)
+    case argv
+    in ["fill", /\A\d+\z/ => number, *rest] if rest.size <= 1
+      write(file, fill(text, number.to_i, rest.empty? ? stdin.read : read(rest.first)))
+      out.puts "build-log: wrote the entry into slot ##{number}"
+    in ["check"]
+      _, slots = parse(text)
+      found = problems(slots)
+      found.each { |p| out.puts "build-log: #{p}" }
+      return 1 if found.any?
+
+      ahead = free_ahead(slots)
+      out.puts "build-log: #{slots.count { |s| !s.free }} entries, #{ahead} free slots ahead"
+      if ahead < WARN_BELOW
+        out.puts "::warning file=docs/ai-build-log.md::only #{ahead} free build-log slots left; " \
+                 "open a PR that runs: ruby bin/build-log top-up"
+      end
+    in ["top-up"]
+      new_text, added = top_up(text)
+      write(file, new_text)
+      out.puts "build-log: added #{added} slots"
+    else
+      out.puts "usage: ruby bin/build-log fill <pr> [file] | check | top-up"
+      return 64
+    end
+    0
+  rescue Error => e
+    out.puts "build-log: #{e.message}"
+    1
+  end
+end
+
+exit BuildLog.main(ARGV) if $PROGRAM_NAME == __FILE__
