@@ -822,3 +822,23 @@ the patterns (`infra/host/` → plans in all three workspaces; `infra/bootstrap/
 
 **Next task:** confirm the shared-us and prod-us runs, check dev-staging's `/healthz` after its
 replacement (same version), then the `/healthz` timestamps.
+
+### 2026-10-27: /healthz reports time and started_at
+
+- **Done (test first):** `/healthz` and `/healthz/live` add `time` (current UTC time, from
+  `MockPms::Clock`, so tests can freeze it) and `started_at` (when the web process loaded, from
+  the system clock). Four new examples failed before the change. The 001 OpenAPI contract and
+  002 host-interface contract describe both; host-interface now says `version` is the full commit
+  SHA the image was built from.
+- **Answered:** `version` is that build SHA, not necessarily `main`'s latest commit.
+- **Tests:** RSpec 175 examples, 0 failures; RuboCop clean (five offenses this change introduced
+  were fixed). Consumers (`rentsync-deploy`, the Deploy workflow) read single fields, so the new
+  fields change nothing for them.
+
+**Next task:** merge, then Deploy to dev-staging and prod-us to see the new fields live.
+- **Added (operator request):** `time_ct` and `started_at_ct`, the same times in US Central
+  (`2026-10-27 07:00:05 CDT`). `MockPms::CentralTime` writes the US daylight-time rule locally
+  (second Sunday of March to first Sunday of November, 2:00 local) instead of adding a time zone
+  gem (constitution VIII). Specs cover both seasons, a date rollover and both switch instants in
+  two years; moving the March switch to the first Sunday fails them. Full suite: 182 examples,
+  0 failures; RuboCop clean. Demo-specific: the zone is fixed to US Central.

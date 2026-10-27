@@ -5,6 +5,7 @@ require "time"
 
 require_relative "../config/settings"
 require_relative "mock_pms/clock"
+require_relative "mock_pms/central_time"
 require_relative "mock_pms/ids"
 require_relative "mock_pms/db"
 require_relative "mock_pms/redis"

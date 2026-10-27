@@ -44,6 +44,44 @@ RSpec.describe "ops endpoints", type: :request do
                                                         "deployment_id" => MockPms::Settings.deployment_id)
     end
 
+    # The server's current time, so a reader can tell the answer is fresh; and when this process
+    # started, which dates the last deploy or restart.
+    it "reports the current time and when the process started, in ISO 8601 UTC" do
+      beat!(1)
+      freeze_time(Time.utc(2026, 10, 27, 12, 0, 5))
+      get "/healthz"
+      body = JSON.parse(last_response.body)
+      expect(body["time"]).to eq("2026-10-27T12:00:05Z")
+      expect(body["started_at"]).to match(/\A\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\z/)
+      expect(Time.iso8601(body["started_at"])).to be <= Time.now.utc
+    end
+
+    it "repeats both times in US Central time, for readers who don't think in UTC" do
+      beat!(1)
+      freeze_time(Time.utc(2026, 10, 27, 12, 0, 5))
+      get "/healthz"
+      body = JSON.parse(last_response.body)
+      expect(body["time_ct"]).to eq("2026-10-27 07:00:05 CDT")
+      expect(body["started_at_ct"]).to eq(MockPms::CentralTime.format(Time.iso8601(body["started_at"])))
+    end
+
+    it "keeps started_at fixed while the time moves on" do
+      beat!(1)
+      get "/healthz"
+      first = JSON.parse(last_response.body)
+      freeze_time(Time.now.utc + 60)
+      get "/healthz"
+      second = JSON.parse(last_response.body)
+      expect(second["started_at"]).to eq(first["started_at"])
+      expect(Time.iso8601(second["time"])).to be > Time.iso8601(first["time"])
+    end
+
+    it "reports the time and started_at on 503 too" do
+      get "/healthz"
+      expect(last_response.status).to eq(503)
+      expect(JSON.parse(last_response.body).keys).to include("time", "started_at")
+    end
+
     it "is 503 when the worker heartbeat is missing" do
       get "/healthz"
       expect(last_response.status).to eq(503)
@@ -57,11 +95,17 @@ RSpec.describe "ops endpoints", type: :request do
   end
 
   describe "GET /healthz/live" do
-    it "reports status, version and deployment_id" do
+    it "reports status, version, deployment_id, the time and when the process started" do
+      freeze_time(Time.utc(2026, 10, 27, 12, 0, 5))
       get "/healthz/live"
       expect(last_response.status).to eq(200)
-      expect(JSON.parse(last_response.body)).to eq("status" => "ok", "version" => MockPms::Settings.service_version,
-                                                   "deployment_id" => MockPms::Settings.deployment_id)
+      body = JSON.parse(last_response.body)
+      expect(body.except("started_at", "started_at_ct"))
+        .to eq("status" => "ok", "version" => MockPms::Settings.service_version,
+               "deployment_id" => MockPms::Settings.deployment_id,
+               "time" => "2026-10-27T12:00:05Z", "time_ct" => "2026-10-27 07:00:05 CDT")
+      expect(body["started_at"]).to match(/\A\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\z/)
+      expect(body["started_at_ct"]).to match(/\A\d{4}-\d\d-\d\d \d\d:\d\d:\d\d C[DS]T\z/)
     end
   end
 

@@ -7,10 +7,20 @@ module MockPms
       include Errors
 
       HEARTBEAT_MAX_AGE_S = 30
+      # When this process loaded the API: dates the last deploy or restart. Process metadata, not
+      # domain time, so it comes from the system clock, not MockPms::Clock.
+      STARTED = Time.now.utc
 
       helpers do
-        # Feature 002 FR-028: releases verify the build and the deployment they reached.
-        def build_info = { version: Settings.service_version, deployment_id: Settings.deployment_id }
+        # Feature 002 FR-028: releases verify the build and the deployment they reached. The time
+        # shows the answer is fresh; started_at, when the process last started. The _ct copies
+        # are for people reading in US Central time.
+        def build_info
+          now = Clock.now
+          { version: Settings.service_version, deployment_id: Settings.deployment_id,
+            time: now.iso8601, started_at: STARTED.iso8601,
+            time_ct: CentralTime.format(now), started_at_ct: CentralTime.format(STARTED) }
+        end
       end
 
       get "/healthz" do
