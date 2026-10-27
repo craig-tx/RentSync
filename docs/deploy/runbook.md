@@ -179,7 +179,7 @@ It needs only Ruby 3 or later, with no gems. On Windows, run it in PowerShell (s
     | `acme_ca` | §DNS, the switch to production certificates |
     | `ami_id` | §Monthly OS patching |
     | `instance_type`, `telemetry_instance_type` | §Changing a host's instance type |
-    | `admin_token`, `openobserve_root_password`, `postgres_password_version` and their `*_version` counters | §Secret rotation (`openobserve_db_password_version` has no procedure yet; see the contract) |
+    | `admin_token`, `openobserve_root_password`, `postgres_password_version`, `openobserve_db_password_version` and their `*_version` counters | §Secret rotation |
     | `data_snapshot_id` | §Backup restore |
 
     To change any other value bootstrap set, such as a hostname after a domain change, edit
@@ -732,10 +732,28 @@ first initializes, so change the password on the OpenObserve root user first:
 4. On the telemetry host, run `sudo systemctl restart rentsync.service`.
 5. Check that telemetry from both environments still arrives (quickstart §5).
 
-**OpenObserve metadata database password**: do this rarely. It is the same as the Postgres
-procedure, run on the telemetry host against `rentsync-shared-us-openobserve-db-1` with user
-`openobserve` and parameter `/rentsync/shared-us/openobserve/db_password`, followed by
-`sudo systemctl restart rentsync.service`.
+**OpenObserve metadata database password** (shared). Terraform generates this password; nobody
+types it. Every time the telemetry host starts, `rentsync-start` sets the `openobserve`
+database user's password to the value in SSM and only then starts OpenObserve, so a restart is
+all the database needs:
+
+1. In `rentsync-shared-us`, increase `openobserve_db_password_version` by 1. Apply (confirm).
+   A new random password is written to `/rentsync/shared-us/openobserve/db_password`.
+2. Restart the telemetry stack, in a session on the telemetry host
+   (`aws ssm start-session --target <instance_id>`):
+
+   ```bash
+   sudo systemctl restart rentsync.service
+   sudo journalctl -u rentsync.service -n 20 --no-pager   # ends with "password matches SSM"
+   ```
+
+   OpenObserve restarts with the new password, so it is down for a few seconds. The
+   environments' Collectors queue telemetry meanwhile and then send it.
+3. Check that `https://telemetry.<domain>/healthz` returns `{"status":"ok"}` and that new
+   telemetry arrives (quickstart §5).
+
+Nothing else uses this password, so the environments need no reload. A host replacement or
+reboot after step 1 has the same effect as step 2.
 
 ## Replaying failed webhooks on a deployed environment
 

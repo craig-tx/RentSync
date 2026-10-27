@@ -1,28 +1,52 @@
 #!/usr/bin/env bash
 # Started by rentsync.service on every boot (feature 002 research R6): brings the host's stack
 # up with no manual step (US5 AC5).
+#
+# Test overrides: RENTSYNC_ETC, RENTSYNC_RUN, RENTSYNC_BIN, RENTSYNC_OPT
+# (infra/host/test/start_test.sh).
 set -euo pipefail
 
+etc="${RENTSYNC_ETC:-/etc/rentsync}"
+run_dir="${RENTSYNC_RUN:-/run/rentsync}"
+bin="${RENTSYNC_BIN:-/usr/local/bin}"
+opt="${RENTSYNC_OPT:-/opt/rentsync}"
+
 # shellcheck source=/dev/null
-. /etc/rentsync/host.env
+. "$etc/host.env"
 
 # A host applied before its stack files exist (US1, ahead of US2/US3) has nothing to start.
 case "$HOST_ROLE" in
   environment)
-    if [ ! -x /usr/local/bin/rentsync-deploy ]; then
+    if [ ! -x "$bin/rentsync-deploy" ]; then
       echo "rentsync-start: no deploy script yet; nothing to start"
       exit 0
     fi
-    exec /usr/local/bin/rentsync-deploy --reload
+    exec "$bin/rentsync-deploy" --reload
     ;;
   telemetry)
-    if [ ! -f /opt/rentsync/compose.yaml ]; then
+    if [ ! -f "$opt/compose.yaml" ]; then
       echo "rentsync-start: no stack file yet; nothing to start"
       exit 0
     fi
-    /usr/local/bin/rentsync-render-env
-    exec docker compose -p "rentsync-$DEPLOYMENT_ID" --project-directory /opt/rentsync \
-      -f /opt/rentsync/compose.yaml --env-file /run/rentsync/env up -d --remove-orphans
+    "$bin/rentsync-render-env"
+    compose() {
+      docker compose -p "rentsync-$DEPLOYMENT_ID" --project-directory "$opt" \
+        -f "$opt/compose.yaml" --env-file "$run_dir/env" "$@"
+    }
+    # Postgres sets its password only when it first creates the database, so set it to the SSM
+    # value on every start (runbook §Secret rotation). Rotating is then: bump
+    # openobserve_db_password_version, apply, restart rentsync.service. psql inside the
+    # container connects over the local socket, which needs no password, and reads the
+    # statement from stdin, so the password never appears in a process list.
+    compose up -d --wait openobserve-db
+    (
+      # shellcheck source=/dev/null
+      . "$run_dir/env"
+      printf "ALTER USER openobserve PASSWORD '%s';\n" "$OPENOBSERVE_DB_PASSWORD"
+    ) | compose exec -T openobserve-db psql -U openobserve -d "$DB_NAME" -q -v ON_ERROR_STOP=1
+    echo "rentsync-start: OpenObserve database password matches SSM"
+    # OpenObserve is recreated if its DSN changed, and left running if not.
+    compose up -d --remove-orphans
     ;;
   *)
     echo "rentsync-start: unknown HOST_ROLE '$HOST_ROLE'" >&2

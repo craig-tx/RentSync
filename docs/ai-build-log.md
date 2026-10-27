@@ -874,6 +874,26 @@ check `free -m` / `swapon --show` on both hosts.
 
 **Next task:** after apply, confirm the event rate in OpenObserve drops to about a quarter.
 
+### 2026-10-27: OpenObserve database password rotation (issue #35)
+
+- **Done:** `infra/host/bin/rentsync-start` (telemetry) now renders secrets, starts only
+  `openobserve-db`, runs `ALTER USER openobserve PASSWORD '<SSM value>'` through `psql` on stdin
+  over the container's local socket, then starts the rest. Rotation is: bump
+  `openobserve_db_password_version`, apply, `systemctl restart rentsync.service`. A reboot or
+  host replacement does the same. Runbook §Secret rotation, the variables contract and research
+  R11 updated; the "don't bump" note is gone.
+- **Tests:** new `infra/host/test/start_test.sh` (stub docker): step order, the statement on
+  stdin, the password never in argv, a failed `ALTER USER` stops the start before OpenObserve,
+  no stack file, environment role, unknown role. Mutations caught: the old script, and the
+  password passed with `-c`. Rehearsed with real Docker Compose and `postgres:16`: first start,
+  rotation (old password refused over the network, new accepted), restart with no change.
+- **Decision:** a failed `ALTER USER` fails the start rather than starting OpenObserve with a
+  DSN Postgres would refuse; systemd shows the failure. The environment Postgres procedure is
+  still manual; the same approach could move into `rentsync-deploy --reload` later.
+
+**Next task:** after merge and apply, the telemetry host is replaced (a host file changed); its
+start runs the new step with the unchanged password, a no-op. Rotate once to prove it live.
+
 ### 2026-10-27: releases wait for a host being replaced
 
 - **Why:** #39's merge started an HCP host replacement and the auto-release together; the
