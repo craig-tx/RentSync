@@ -1029,7 +1029,38 @@ should show "trying again" and then success on the new host.
 
 <!-- PR #53: free -->
 
-<!-- PR #54: free -->
+<!-- PR #54 -->
+### 2026-10-28: 003 Phases 1 and 2, the API foundation (interactive)
+
+- **Done:** T001–T024.
+  - **Phase 1:** a new `api/` service with the mock's six runtime gems, one image for web and
+    worker, Compose services, `.env.example` settings, and a CI `api` job.
+  - **Phase 2:**
+    - test-first settings and AES-256-GCM `Crypto::Box`;
+    - logging, metrics and middleware copied from the mock (R1), with the new secret keys
+      redacted;
+    - migration 001 and models whose encrypted columns are bound to
+      `<table>.<column>:<id>`;
+    - `Pms::Registration` (register, keep, or supersede, under an advisory lock) and
+      `install!` for credentials handed over out of band;
+    - `bin/setup`, `bin/pms_client` and `bin/worker` (metrics on 4003, clean SIGTERM);
+    - `/healthz` and `/metrics`.
+- **Tests:** 110 examples on Ruby 4.0 and 3.3; RuboCop clean. Two mutation checks were
+  caught: removing the advisory lock makes two registrations collide, and the T010/T011
+  specs failed before their code existed. Locally, the API registered with the real mock,
+  a rerun kept the client, and `/healthz` is ok with the worker's heartbeat.
+- **Decisions:**
+  - The image uses `ruby:4.0-slim` like the mock's, not the 3.3 that T002 names.
+  - On a mock reset, only live connections go to `needs_reauth` (as data-model.md says),
+    not disconnected ones.
+  - Worker examples that run threads are `:committed`, because their heartbeats commit on
+    another connection.
+  - `spec_helper` forces its test settings so a developer's `.env` can't change results.
+- **Gotchas:** Ruby text-mode writes on Windows produced CRLF files (fixed; now in memory),
+  and `core.filemode=false` committed the scripts without the executable bit (fixed).
+- **Local setup:** the operator's `.env` gained the 13 new settings from `.env.example`
+  (backup in the session scratchpad).
+- **Next:** Phase 3 (US1, connect a PMS account), T025 onward.
 
 <!-- PR #55: free -->
 
