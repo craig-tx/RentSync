@@ -60,7 +60,8 @@ durable breaks FR-011).
 5. Find the active connection for `(pms_client, operator_id)`. None at all for that operator:
    `unknown_operator`; only disconnected or reauth-needed ones: `no_active_connection`.
 6. `INSERT INTO raw_events ... ON CONFLICT DO NOTHING RETURNING id`, in one transaction with
-   the receipt row. A conflict means a duplicate: if the stored `payload_sha256` equals this
+   the receipt row. The exact bytes go in `payload_raw`; `payload` (`jsonb`) is a parsed copy
+   for queries, because `jsonb` does not keep key order or whitespace (FR-013). A conflict means a duplicate: if the stored `payload_sha256` equals this
    body's, the outcome is `duplicate`; otherwise `conflicting_duplicate` (recorded as a
    rejection, first version stands).
 7. Commit, then answer. `recorded` and `duplicate` get `200`. Signature and timestamp failures
@@ -219,6 +220,15 @@ also accepts them that way (`bin/pms_client --set`). The ADR records this.
 
 **Rationale**: zero manual steps per deployment, and each deployment gets its own client and
 signing secret (FR-025).
+
+**Single runner** (Constitution II): `ensure!` runs under a Postgres advisory lock
+(`pg_advisory_xact_lock` on a fixed key), so concurrent `bin/setup` runs make at most one
+`POST /admin/clients`. One window remains: a crash after the PMS created the client but before
+RentSync stored its secrets. The mock cannot make that call idempotent, because it refuses
+`Idempotency-Key` on a response that carries secrets (001 openapi). The next `ensure!` then
+registers again, leaving an orphan client at the PMS. The orphan holds no grants, so the PMS
+never delivers to it or accepts tokens for it. Its name, `rentsync-<deployment_id>`, makes it
+easy to find and delete. plan.md's Complexity Tracking records this.
 
 ## R10. Health figures come from durable rows, not counters
 
@@ -384,7 +394,8 @@ schema it can't read.
   scrape jobs for `api:4002/metrics` and `api_worker:4003/metrics` (the worker serves a
   minimal metrics endpoint, as the mock's worker does).
 - Service names: `rentsync-api-web` and `rentsync-api-worker`.
-- New metrics: `rentsync_webhook_receipts_total{outcome,reason}`,
+- New metrics: `rentsync_webhook_ack_seconds` (histogram, SC-006),
+  `rentsync_webhook_receipts_total{outcome,reason}`,
   `rentsync_raw_events_total{arrival_path,type}`, `rentsync_token_renewals_total{result}`,
   `rentsync_reconciliation_runs_total{result}`, `rentsync_pms_requests_total{status}`,
   `rentsync_pms_rate_limit_waits_seconds_total`, and the usual HTTP request metrics. Labels never

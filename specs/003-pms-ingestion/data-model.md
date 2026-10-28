@@ -138,8 +138,9 @@ path. A trigger raises on `UPDATE`/`DELETE` as a backstop.
 | occurred_at | timestamptz | from the envelope, or R4's rule for reconciled facts |
 | received_at | timestamptz | arrival time |
 | arrival_path | text | `webhook` or `reconciliation` |
-| payload | jsonb | the envelope as received (webhook) or the `/v1` Payment (reconciliation) |
-| payload_sha256 | bytea | of the exact bytes received, or of the canonical JSON for reconciled facts |
+| payload_raw | bytea | the exact bytes received (webhook) or the canonical JSON bytes (reconciliation); this is the record FR-013 keeps |
+| payload | jsonb | `payload_raw` parsed, for querying; `jsonb` reorders keys, so it is never the source of truth |
+| payload_sha256 | bytea | SHA-256 of `payload_raw` |
 | correlation_id | text | R16 |
 | reconciliation_run_id | FK null | set for reconciled facts |
 
@@ -206,6 +207,15 @@ A run interrupted by a crash stays with `outcome` null; the next claimant marks 
 | name | text PK | `daily_purge` |
 | lease_until | timestamptz | |
 | last_run_at | timestamptz | |
+
+## worker_heartbeats
+
+Adapted from the mock's (001 data-model); `/healthz` reports the newest beat's age.
+
+| Column | Type | Rules |
+|---|---|---|
+| worker_id | text PK | hostname and PID |
+| beat_at | timestamptz | updated every 5 s by `bin/worker` |
 
 ## Requirement traceability
 

@@ -103,7 +103,12 @@ Reset chaos to 0 afterwards.
    ```
 
 4. Repeat §2 (steps 1, 4) and §3 against staging, using the staging hostnames, then reset chaos.
-5. **Memory gate (research R14)**: on each environment host, after §3, record `free -m`,
+   **SC-006**: in OpenObserve, the p95 of `rentsync_webhook_ack_seconds` over the burst is under
+   2 s.
+5. **SC-002**: 24 hours after connecting on staging, the connection is still `active`, and
+   `rentsync_token_renewals_total{result="failed"}` and the PMS's 401 count for RentSync's
+   client are both 0.
+6. **Memory gate (research R14)**: on each environment host, after §3, record `free -m`,
    `docker stats --no-stream`, `vmstat 5 6`, and any `OOMKilled` or restarts. Size up to
    t4g.small only on proven need as R14 defines it (an OOM kill, an SC-006 miss explained by
    swap, or a deploy failing for memory), never on low free memory alone. Record the numbers and

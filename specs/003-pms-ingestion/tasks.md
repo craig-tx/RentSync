@@ -76,7 +76,8 @@ locally and in CI.
   `bundle exec bin/worker`; environment from `.env` per plan.md "Configuration", with the local
   URL values from research R13 (`PMS_PUBLIC_URL=http://localhost:4001`,
   `PMS_API_URL=http://mock_pms:4001`, `APP_PUBLIC_URL=http://localhost:4002`,
-  `WEBHOOK_SUBSCRIBER_URL=http://api:4002/webhooks/pms`).
+  `WEBHOOK_SUBSCRIBER_URL=http://api:4002/webhooks/pms`), and
+  `MOCK_PMS_ADMIN_TOKEN: ${ADMIN_TOKEN}` (the mock's admin token, for registration, R9).
 - [ ] T007 Add every new setting to `.env.example` (plan.md "Configuration") with safe local
   values. The development encryption key is `k1=` plus a clearly fake base64 value, with a
   comment that it must never be used on a host.
@@ -141,15 +142,16 @@ registration, and the shared tables every story uses.
   `"<table>.<column>:<id>"` (R8). Rows are inserted first and their secrets written in the
   same transaction, so the ID exists for the associated data.
 - [ ] T020 Spec then implementation of `Rentsync::Pms::Registration.ensure!`
-  (`api/lib/rentsync/pms/registration.rb`, spec with a fake mock admin API), per research R9:
+  (`api/lib/rentsync/pms/registration.rb`, spec with a fake mock admin API), per research R9.
+  It runs inside `pg_advisory_xact_lock` on a fixed key:
   - no active client: `POST /admin/clients` with name `rentsync-<DEPLOYMENT_ID>`, redirect URI
     `<APP_PUBLIC_URL>/connections/callback`, subscriber URL `<WEBHOOK_SUBSCRIBER_URL>`; store the
     secrets encrypted;
   - active client still in the mock's `GET /admin/clients` list: no change;
   - active client missing (a mock reset): mark it superseded, register again, and set every
     connection under the old client to `needs_reauth`;
-  - two concurrent calls leave exactly one active row (the partial unique index; the loser
-    rereads);
+  - two concurrent calls make exactly one `POST /admin/clients` (the advisory lock) and leave
+    exactly one active row;
   - the client and signing secrets never appear in logs or output.
 - [ ] T021 `api/bin/setup`, adapted from the mock's. It creates the database if missing,
   migrates, seeds operators (T030, once it exists), and runs `Registration.ensure!` (skipped by
@@ -159,8 +161,8 @@ registration, and the shared tables every story uses.
 - [ ] T022 `api/lib/rentsync/api/ops.rb`: `/healthz` with the same fields as the mock's Health
   schema (db, redis, `worker_heartbeat_age_s`, version, deployment_id, time, started_at,
   `*_ct`), `/healthz/live`, and `/metrics`. Request spec `api/spec/requests/ops_spec.rb`.
-- [ ] T023 `api/bin/worker`: a loop with a heartbeat row in a `worker_heartbeats` table (add it
-  to T018's migration), a `/metrics` endpoint on port 4003, graceful stop on SIGTERM, and a job
+- [ ] T023 `api/bin/worker`: a loop with a heartbeat row in the `worker_heartbeats` table from data-model.md
+  (`worker_id` text PK, `beat_at`; add it to T018's migration), a `/metrics` endpoint on port 4003, graceful stop on SIGTERM, and a job
   registry that later phases add to. Spec for the loop's stop behaviour.
 - [ ] T024 `api/lib/rentsync/app.rb`: the Rack builder. Order: correlation ID, request metrics,
   the webhook endpoint mount point (US2), session middleware (US1), Grape API, pages.
@@ -239,7 +241,7 @@ usable through access-token expiry, revocation and disconnection.
   callback) using `Net::HTTP` with a cookie jar. It runs on the developer machine or CI runner,
   not in a container (research R13), and never prints passwords or tokens.
 - [ ] T035 [US1] Purge of `connection_attempts` older than 7 days, as a worker job under the
-  `daily_purge` lease (T048 adds receipts to the same job).
+  `daily_purge` lease (T054 adds receipts to the same job).
 
 **Checkpoint**: quickstart §2 passes locally.
 
@@ -273,7 +275,8 @@ recorded with a reason.
   receipt; `UPDATE` or `DELETE` on `raw_events` raises (the trigger).
 - [ ] T039 [P] [US2] End-to-end spec `api/spec/e2e/webhook_to_raw_event_spec.rb`
   (Constitution III): a real signed HTTP request through the full Rack stack produces the
-  persisted raw event and receipt, the stored `payload` equals the body, `correlation_id`
+  persisted raw event and receipt, the stored `payload_raw` equals the request body byte for
+  byte (and `payload` is its parsed JSON), `correlation_id`
   equals the request's `X-Correlation-Id`, and the response is 200 only after commit (a
   failure injected after the insert returns 500 and leaves no raw event). Also the receiver
   table in contracts/webhook-receiver.md: each reason maps to its HTTP status, and error bodies
@@ -303,8 +306,10 @@ recorded with a reason.
   `--malformed`, `--operator <pms_operator_id>`) and `api/lib/rentsync/api/admin.rb` with
   `/admin/raw_events` and `/admin/receipts` (admin token, constant-time comparison, no payloads),
   with request specs.
-- [ ] T045 [US2] Metrics `rentsync_webhook_receipts_total{outcome,reason}` and
-  `rentsync_raw_events_total{arrival_path,type}` (R16), with an observability spec asserting no
+- [ ] T045 [US2] Metrics `rentsync_webhook_receipts_total{outcome,reason}`,
+  `rentsync_raw_events_total{arrival_path,type}` (R16), and the histogram
+  `rentsync_webhook_ack_seconds` (buckets 0.05–5 s) on `/webhooks/pms`, from which SC-006's p95
+  is read, with an observability spec asserting no
   label carries an operator email, a token or tenant data.
 - [ ] T046 [US2] Write `docs/adr/0011-exactly-once-raw-events.md` (context, decision,
   alternatives, consequences), from research R3, R4 and R10.
@@ -462,9 +467,10 @@ release.
   (contracts/host-changes.md) in `rentsync-dev-staging` and `rentsync-prod-us`; apply
   `rentsync-shared-us` (confirm), then `rentsync-dev-staging`, then `rentsync-prod-us` (confirm).
   The A records come **before** the first release that includes the API (quickstart §5).
-- [ ] T073 After merge, run quickstart §5 steps 2–4 and §6 against staging, then prod
-  (approval needed: **🧑 OPERATOR**). Record results in the build log.
-- [ ] T074 Run quickstart §5 step 5 (memory gate). Size up **only on proven need** as research
+- [ ] T073 After merge, run quickstart §5 steps 2–5 and §6 against staging, then prod
+  (approval needed: **🧑 OPERATOR**), including SC-006's p95 from `rentsync_webhook_ack_seconds`
+  and SC-002's 24-hour check (step 5). Record results in the build log.
+- [ ] T074 Run quickstart §5 step 6 (memory gate). Size up **only on proven need** as research
   R14 defines it, which is the operator's decision. Record the numbers and the decision. This
   needs host access through the RentSync AWS account, so it is **🧑 OPERATOR** unless the
   operator has confirmed the AWS CLI profile in use.
@@ -486,6 +492,9 @@ release.
   deployment running both services.
 - [ ] T078 [P] Update `README.md`: what RentSync does now, the `app-*` URLs, the local
   quickstart, and links to this feature's spec and ADRs.
+- [ ] T078a [P] Add `/api` to `.github/dependabot.yml` for the `bundler` and `docker`
+  ecosystems, on the same schedule and grouping as `/mock_pms` (constitution, Dependency
+  maintenance).
 - [ ] T079 Run quickstart §1–§4 and §7 locally in full; fix anything found through tasks above.
 - [ ] T080 Run the full suites (`api` and `mock_pms` rspec and rubocop, terraform fmt, validate
   and test, shellcheck, `infra/test/run.sh`, build-log check), then open the PR from
@@ -528,7 +537,7 @@ metrics → ADR.
 - US3: T047–T049; T055 alongside T052.
 - US4: T058, T059.
 - Deploy: T062–T064.
-- Polish: T075–T078.
+- Polish: T075–T078a.
 
 ## Parallel Example: User Story 2
 

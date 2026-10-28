@@ -85,7 +85,7 @@ A demo, not a product.
 | — | Scope & data constraints | **PASS** | Synthetic data only: the operators are seeded to match the mock's synthetic operators. Not presented as production-ready; production-differences.md is extended |
 | — | Workflow & quality gates | **PASS** | `/speckit-analyze` runs before `/speckit-implement`. CI gains `api` test and `ingestion-e2e` jobs. Build-log entries go in the PR's slot. The cross-platform rule covers the new scripts (bash 4.4+ or Ruby) |
 
-**Gate result (pre-research)**: PASS, with one tracked deferral (Complexity Tracking).
+**Gate result (pre-research)**: PASS, with two tracked exceptions (Complexity Tracking).
 
 **Gate result (post-design)**: PASS. Re-checked against [data-model.md](data-model.md) and
 [contracts/](contracts/).
@@ -111,7 +111,7 @@ A demo, not a product.
 | `pms_connections (pms_client_id, pms_operator_id)` | Two connections for one PMS operator; a reconnect duplicating history | Unique; reconnect updates the row (FR-008) |
 | `pms_connections.renewal_lease_until` | Two simultaneous renewals burning the single-use refresh token | Conditional `UPDATE` lease (FR-005) |
 | `pms_connections.reconcile_lease_until` + `reconcile_cursor` | Concurrent or repeated runs per connection | `SKIP LOCKED` claim; cursor resume (FR-018, FR-019) |
-| `pms_clients` one active per `pms_key` | Registering twice on concurrent `bin/setup` | Partial unique index; the loser rereads |
+| `pms_clients` one active per `pms_key` | Registering twice on concurrent `bin/setup` | An advisory lock around `ensure!` (one `POST` at a time), plus a partial unique index as a backstop (R9). A crash mid-registration can orphan one PMS client; see Complexity Tracking |
 
 ### Dependencies
 
@@ -134,8 +134,8 @@ Stdlib, no gem: `openssl` (HMAC, AES-256-GCM, digests), `net/http`, `json`, `erb
 
 `.env.example` gains every new setting with a safe local value: `RENTSYNC_DATABASE_URL`,
 `RENTSYNC_REDIS_URL`, `RENTSYNC_ENCRYPTION_KEYS` (a clearly fake development key),
-`RENTSYNC_OPERATOR_SEED_PASSWORD`, `RENTSYNC_SESSION_SECRET`, the four URL settings (research
-R13), `RECONCILE_INTERVAL_S`, `RECONCILE_OVERLAP_S`, and the PMS bucket size. Hosts get the
+`RENTSYNC_OPERATOR_SEED_PASSWORD`, `RENTSYNC_SESSION_SECRET`, `MOCK_PMS_ADMIN_TOKEN` (locally
+the mock's `ADMIN_TOKEN`, for registration, R9), the four URL settings (research R13), `RECONCILE_INTERVAL_S`, `RECONCILE_OVERLAP_S`, and the PMS bucket size. Hosts get the
 same names from `rentsync-render-env` ([host-changes.md](contracts/host-changes.md)).
 
 ### ADRs to write
@@ -230,3 +230,4 @@ pipeline. `/web` is not created until the dashboard feature (R12).
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |---|---|---|
 | Constitution III's end-to-end test stops at the persisted raw event, not a ledger effect | The ledger is the next feature; there is no ledger effect to assert yet | Building a stub ledger only to satisfy the test would be throwaway work. The ledger feature MUST extend this test to the ledger entry (spec, Assumptions) |
+| Constitution II: a crash between the PMS creating RentSync's client and RentSync storing its secrets leaves an orphan client at the PMS when registration is retried | The mock's `POST /admin/clients` returns secrets only once and refuses `Idempotency-Key` for that reason (001 openapi), so the effect cannot be deduplicated | Adding idempotent replay of secret-bearing responses to the mock would store client secrets in its idempotency table, which is worse. The orphan holds no grants, so it receives no events and cannot read data; it is named `rentsync-<deployment_id>` for cleanup (R9). Concurrent runs are prevented by an advisory lock |

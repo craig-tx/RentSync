@@ -228,8 +228,9 @@ reconciliation run, then check that the health view's counts and reasons match e
 **Connection health**
 
 - **FR-021**: For each connection, RentSync MUST show: status, last successful sync (webhook
-  or reconciliation), last reconciliation result, events received, duplicates ignored, events
-  rejected, rejections by reason, and the most recent rejections.
+  or reconciliation), last reconciliation result, events received (all time), duplicates
+  ignored, events rejected and rejections by reason (each over the last 90 days, the receipt
+  retention), and the most recent rejections.
 - **FR-022**: Health figures MUST be correct across several instances and survive restarts.
 - **FR-023**: Operators MUST see only their own connections, events and health; this MUST be
   enforced on the server.
@@ -273,7 +274,8 @@ reconciliation run, then check that the health view's counts and reasons match e
 - **SC-006**: The PMS gets its acknowledgement for 95% of deliveries within 2 seconds, so its
   retries are not triggered by slowness.
 - **SC-007**: Reconciliation never exceeds the PMS's rate limit by more than the requests in
-  flight when a "too many requests" answer arrives, and always completes once allowed.
+  flight when a "too many requests" answer arrives, and always completes once allowed. This is
+  measured from the PMS's own request log for RentSync's client (quickstart §4.3).
 - **SC-008**: Health figures are up to date within 1 minute of the events they count.
 
 ## Assumptions
