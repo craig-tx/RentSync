@@ -659,6 +659,9 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 
   Record the results in `docs/ai-build-log.md`. Stop and log any failure.
 
+  *2026-10-28, agent-run part: `nmap` passed (only 80 and 443 open on all three IPs). The SSM,
+  `chronyc`, tag-audit, state and run-log checks need the operator's AWS and HCP credentials.*
+
 **Checkpoint**: three reachable hosts, with only 80 and 443 open and every resource tagged.
 
 ---
@@ -768,6 +771,10 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
   in full on `dev-staging`, then on `prod-us`. Record each 001 section's result per deployment in
   `docs/ai-build-log.md`, and reset chaos rates to 0 afterwards.
 
+  *2026-10-28, agent-run part: §3 passed on both (Let's Encrypt production certificates, 308 to
+  HTTPS, `/metrics` 404, `/healthz` ok on `c5ccd8d`), and so did §9's `/admin` 401. §4 needs each
+  deployment's `ADMIN_TOKEN` from SSM, so it is still the operator's.*
+
 **Checkpoint**: both deployments pass every feature 001 check.
 
 ---
@@ -824,6 +831,10 @@ Ingest stays inside the VPC.
   - the anonymous visit;
   - the OpenObserve stop and start test;
   - SC-008 timing.
+
+  *2026-10-28, agent-run part: the anonymous visit passed (HTTPS, a Let's Encrypt production
+  certificate, 308 to `/web/`, and the stream and search APIs return 401). The rest needs
+  sign-in or the telemetry host, so it is still the operator's.*
 
 **Checkpoint**: one telemetry UI shows both deployments, separated.
 
@@ -1000,6 +1011,12 @@ Ingest stays inside the VPC.
     Delete that workspace afterwards.
 
   Record the results in `docs/ai-build-log.md`.
+
+  *2026-10-28, agent-run part: `gitleaks detect` (v8.21.2, all 102 commits on `main`) found 11
+  matches, all deliberate test values: dummy `admin_token`s in the `tftest.hcl` files, the
+  webhook signature test vector, and the rehearsal script's password and `curl`. There are no
+  real secrets. The budget and tag audit need AWS credentials, and the token rotation and
+  speculative plan are operator steps.*
 - [X] T090 Remove the Sync Impact Report HTML comment from the top of
   `.specify/memory/constitution.md`, as governance requires before merge.
 - [X] T091 Run the full suite (rspec, rubocop, terraform fmt, validate, and test, shellcheck),
