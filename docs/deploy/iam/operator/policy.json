@@ -1,0 +1,63 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "StartSessionOnRentSyncHosts",
+      "Effect": "Allow",
+      "Action": "ssm:StartSession",
+      "Resource": "arn:aws:ec2:<aws-region>:<aws-account-id>:instance/*",
+      "Condition": {
+        "StringLike": { "ssm:resourceTag/DeploymentId": "*" },
+        "BoolIfExists": { "ssm:SessionDocumentAccessCheck": "true" }
+      }
+    },
+    {
+      "Sid": "StartSessionShellDocument",
+      "Effect": "Allow",
+      "Action": "ssm:StartSession",
+      "Resource": "arn:aws:ssm:<aws-region>:<aws-account-id>:document/SSM-SessionManagerRunShell"
+    },
+    {
+      "Sid": "EndOwnSessions",
+      "Effect": "Allow",
+      "Action": ["ssm:TerminateSession", "ssm:ResumeSession"],
+      "Resource": "arn:aws:ssm:<aws-region>:<aws-account-id>:session/*",
+      "Condition": {
+        "StringLike": { "ssm:resourceTag/aws:ssmmessages:session-id": "${aws:userid}" }
+      }
+    },
+    {
+      "Sid": "RunCommandsOnRentSyncHosts",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ec2:<aws-region>:<aws-account-id>:instance/*",
+      "Condition": {
+        "StringLike": { "ssm:resourceTag/DeploymentId": "*" }
+      }
+    },
+    {
+      "Sid": "RunShellScriptDocument",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ssm:<aws-region>::document/AWS-RunShellScript"
+    },
+    {
+      "Sid": "ReadAdminTokens",
+      "Effect": "Allow",
+      "Action": "ssm:GetParameter",
+      "Resource": "arn:aws:ssm:<aws-region>:<aws-account-id>:parameter/rentsync/*/admin_token"
+    },
+    {
+      "Sid": "DecryptAdminTokensOnly",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "kms:ViaService": "ssm.<aws-region>.amazonaws.com" },
+        "StringLike": {
+          "kms:EncryptionContext:PARAMETER_ARN": "arn:aws:ssm:<aws-region>:<aws-account-id>:parameter/rentsync/*/admin_token"
+        }
+      }
+    }
+  ]
+}

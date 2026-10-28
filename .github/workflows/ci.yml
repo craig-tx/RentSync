@@ -107,7 +107,7 @@ jobs:
       - name: Bootstrap scripts refuse bash older than 4.4 (macOS ships 3.2)
         run: |
           for v in 3.2 4.3; do
-            for s in bootstrap-init.sh bootstrap-iam.sh bootstrap-github.sh; do
+            for s in bootstrap-init.sh bootstrap-iam.sh bootstrap-operator.sh bootstrap-github.sh; do
               if out="$(docker run --rm -v "$PWD":/src -w /src bash:$v bash infra/bootstrap/$s 2>&1)"; then
                 echo "$s ran under bash $v"; exit 1
               fi
