@@ -967,7 +967,27 @@ should show "trying again" and then success on the new host.
 
 <!-- PR #51: free -->
 
-<!-- PR #52: free -->
+<!-- PR #52 -->
+### 2026-10-28: HCP secret audit script (interactive)
+
+- **Why:** #50's "no secret in HCP state or run logs" check (SC-004, FR-024) needs HCP
+  access. HCP Terraform's Free plan has no read-only token (every member is an owner), so
+  the read-only limit has to live in the client.
+- **Done:** `infra/bootstrap/audit-hcp-secrets.rb`. Its transport sends only GET requests,
+  and the token goes only to HCP's hosts. It reads every state version and every plan and
+  apply log of the three workspaces into memory, and reports only names and locations.
+  - **By value:** secrets read from SSM (`--aws-profile`, default `rentsync`, which can
+    decrypt only the admin tokens), searched in state, decoded gzipped user data and logs.
+  - **By attribute:** a SecureString value or a managed random result in state fails.
+  - **Notes, not failures:** other sensitive attributes, and literal secret-looking
+    assignments in the logs.
+  - Linked from quickstart §2 and §9 and from runbook §Secret rotation. CI runs its test.
+- **Decision:** the operator runs it (`! ruby …`) instead of me holding their full-rights
+  `terraform login` token. The script is written so that either is safe to review.
+- **Tests:** 11 minitest cases against a fake HCP. Six mutations of the script were each
+  caught. RSpec 182/0, the infra tests, the bootstrap-HCP test and the build-log check pass.
+- **Blocked / next:** the operator runs it against the real HCP and records the result on
+  #50. Values rotated away before the run can't be searched for by value.
 
 <!-- PR #53: free -->
 
