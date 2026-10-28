@@ -6,6 +6,8 @@ module Rentsync
     # Prometheus text format 0.0.4. Every instance renders the same values.
     module Exposition
       CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
+      # Label values escape backslash, double quote and newline, so one sample stays on one line.
+      LABEL_ESCAPES = { "\\" => "\\\\", "\"" => "\\\"", "\n" => "\\n" }.freeze
 
       class << self
         # Each collector returns [[name, type, help, [[labels_hash, value], ...]], ...].
@@ -74,9 +76,12 @@ module Rentsync
         def fmt(labels)
           return "" if labels.empty?
 
-          inner = labels.sort.map { |k, v| %(#{k}="#{v.to_s.gsub('\\', '\\\\\\\\').gsub('"', '\\"')}") }
+          inner = labels.sort.map { |k, v| %(#{k}="#{escape(v)}") }
           "{#{inner.join(',')}}"
         end
+
+        # A block avoids gsub's own backslash rules in replacement strings.
+        def escape(value) = value.to_s.gsub(/[\\"\n]/) { |c| LABEL_ESCAPES.fetch(c) }
       end
     end
   end
