@@ -60,7 +60,7 @@ within 1 minute (SC-008).
 - Ack only after commit.
 - Signature checked before parsing.
 - No tenant data or secrets in logs or telemetry.
-- Fits beside the mock on a 1 GiB host, or sizes up per the R14 gate.
+- Fits beside the mock on a 1 GiB host; sizes up only on proven need (R14).
 - Expand-only migrations.
 
 **Scale/Scope**: 3 operators, about 1,500 historical payment facts, bursts of about 60 events.

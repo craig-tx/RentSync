@@ -348,8 +348,17 @@ eager loading of unused code. Each new container gets a Compose `mem_limit` (256
 192 MB worker), so a leak kills that container, not the host.
 
 **Gate**: quickstart §5 deploys to `dev-staging` first and records `free -m` and
-`docker stats` after a month-end burst. If available memory stays under 150 MB, or swap use
-keeps growing, both environment workspaces set `instance_type = "t4g.small"` (runbook §Changing
+`docker stats` after a month-end burst. The hosts stay on t4g.micro unless there is **proven need**, not
+a projection (operator decision, 2026-10-28). Proven need means at least one of:
+
+- the kernel OOM killer or a container `mem_limit` kills a process (`dmesg`, `docker inspect`
+  `OOMKilled`, restart counts);
+- SC-006 is missed (webhook acknowledgement over 2 s at p95) and swap activity (`vmstat`
+  `si`/`so`) explains it;
+- a deploy fails its health check because a container could not start for lack of memory.
+
+Low free memory or some swap use alone is not proven need. Only then do both environment
+workspaces set `instance_type = "t4g.small"` (runbook §Changing
 a host's instance type; about +$12.26 a month each). The decision and the numbers go in the
 build log.
 

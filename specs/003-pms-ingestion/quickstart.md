@@ -103,9 +103,10 @@ Reset chaos to 0 afterwards.
    ```
 
 4. Repeat §2 (steps 1, 4) and §3 against staging, using the staging hostnames, then reset chaos.
-5. **Memory gate (research R14)**: on each environment host, after §3, record `free -m` and
-   `docker stats --no-stream`. If available memory is under 150 MB, or swap use keeps growing,
-   set `instance_type = "t4g.small"` for both environment workspaces. Record the numbers and
+5. **Memory gate (research R14)**: on each environment host, after §3, record `free -m`,
+   `docker stats --no-stream`, `vmstat 5 6`, and any `OOMKilled` or restarts. Size up to
+   t4g.small only on proven need as R14 defines it (an OOM kill, an SC-006 miss explained by
+   swap, or a deploy failing for memory), never on low free memory alone. Record the numbers and
    the decision in the build log.
 
 ## 6. Telemetry (FR-024)
