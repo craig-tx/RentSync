@@ -684,6 +684,17 @@ a write-only argument, so it never appears in state or logs. Then the containers
 with a **reload**. Run **Deploy** with the deployment, `image_tag` empty, and **reload**
 ticked. Re-deploying the same SHA would be a no-op.
 
+To confirm that no secret reached HCP state or run logs (SC-004), run this on your machine. It
+only reads, and prints where a secret appears, never the value:
+
+```bash
+ruby infra/bootstrap/audit-hcp-secrets.rb                               # admin tokens by value (rentsync role)
+ruby infra/bootstrap/audit-hcp-secrets.rb --aws-profile rentsync-login  # every secret by value
+```
+
+Secrets the profile can't decrypt are still checked by attribute (a SecureString value or a
+random password in state fails). Exit 0 is PASS, 1 is a finding, 2 is an error.
+
 **Admin token** (per environment):
 
 1. On your machine, run `openssl rand -hex 32`. In the workspace, replace the `admin_token`
