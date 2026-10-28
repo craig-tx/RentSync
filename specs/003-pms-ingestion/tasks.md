@@ -58,33 +58,35 @@ phase after the stories, because it ships all of them.
 **Purpose**: an empty `api` service that builds, boots, lints and runs an empty test suite
 locally and in CI.
 
-- [ ] T001 Create `api/Gemfile` with exactly the gems in plan.md "Dependencies" (runtime:
+- [x] T001 Create `api/Gemfile` with exactly the gems in plan.md "Dependencies" (runtime:
   `grape`, `puma`, `sequel`, `pg`, `bcrypt`, `redis`; dev/test: `rspec`, `rack-test`,
   `rubocop`), the comment pointing at plan.md, `ruby ">= 3.3"`, and generate `api/Gemfile.lock`
   with platforms `x86_64-linux`, `aarch64-linux`, and the developer's platform.
-- [ ] T002 [P] Create `api/Dockerfile` adapted from `mock_pms/Dockerfile` (Ruby 3.3 slim, one
+- [x] T002 [P] Create `api/Dockerfile` adapted from `mock_pms/Dockerfile` (Ruby 3.3 slim, one
   image for web and worker, non-root user, `GIT_SHA` build arg into `SERVICE_VERSION`,
   `ENV MALLOC_ARENA_MAX=2`, `EXPOSE 4002`) and `api/.dockerignore`.
-- [ ] T003 [P] Create `api/.rubocop.yml` (copy the mock's, same cops, including the cop that
+  *Done on `ruby:4.0-slim`, the base the mock's Dockerfile now uses, so both images share one
+  runtime; CI still tests on Ruby 3.3.*
+- [x] T003 [P] Create `api/.rubocop.yml` (copy the mock's, same cops, including the cop that
   forbids direct `Logger` calls outside `logging.rb`) and `api/.rspec`.
-- [ ] T004 [P] Create `api/config/puma.rb`: single mode (no `workers`), `threads 3, 3`,
+- [x] T004 [P] Create `api/config/puma.rb`: single mode (no `workers`), `threads 3, 3`,
   `port ENV.fetch("PORT", 4002)`.
-- [ ] T005 Create `api/config.ru`, `api/lib/rentsync.rb` (requires, `Rentsync::VERSION` from
+- [x] T005 Create `api/config.ru`, `api/lib/rentsync.rb` (requires, `Rentsync::VERSION` from
   `SERVICE_VERSION`), and a placeholder `api/lib/rentsync/app.rb` returning 404 for everything.
-- [ ] T006 Add `api` and `api_worker` services to the root `compose.yaml`: build `./api`,
+- [x] T006 Add `api` and `api_worker` services to the root `compose.yaml`: build `./api`,
   ports `4002:4002`, `depends_on` postgres, redis and mock_pms healthy; the worker runs
   `bundle exec bin/worker`; environment from `.env` per plan.md "Configuration", with the local
   URL values from research R13 (`PMS_PUBLIC_URL=http://localhost:4001`,
   `PMS_API_URL=http://mock_pms:4001`, `APP_PUBLIC_URL=http://localhost:4002`,
   `WEBHOOK_SUBSCRIBER_URL=http://api:4002/webhooks/pms`), and
   `MOCK_PMS_ADMIN_TOKEN: ${ADMIN_TOKEN}` (the mock's admin token, for registration, R9).
-- [ ] T007 Add every new setting to `.env.example` (plan.md "Configuration") with safe local
+- [x] T007 Add every new setting to `.env.example` (plan.md "Configuration") with safe local
   values. The development encryption key is `k1=` plus a clearly fake base64 value, with a
   comment that it must never be used on a host.
-- [ ] T008 [P] Create `api/spec/spec_helper.rb` and `api/spec/support/{db.rb,redis.rb,clock.rb}`
+- [x] T008 [P] Create `api/spec/spec_helper.rb` and `api/spec/support/{db.rb,redis.rb,clock.rb}`
   adapted from the mock's (transaction rollback, Redis prefix, injectable clock), using
   `RENTSYNC_TEST_DATABASE_URL`.
-- [ ] T009 Add an `api` job to `.github/workflows/ci.yml` mirroring the `test` job (Postgres and
+- [x] T009 Add an `api` job to `.github/workflows/ci.yml` mirroring the `test` job (Postgres and
   Redis services, `working-directory: api`, `bin/setup --test-db-only`, rubocop, rspec,
   bundle-audit), with pinned action SHAs as in the existing jobs.
 
@@ -99,34 +101,34 @@ registration, and the shared tables every story uses.
 
 ### Tests for the foundation (write first; they must fail)
 
-- [ ] T010 [P] Unit spec `api/spec/unit/crypto/box_spec.rb` for research R8: round trip; output
+- [x] T010 [P] Unit spec `api/spec/unit/crypto/box_spec.rb` for research R8: round trip; output
   format `v1:<key_id>:<nonce>:<ciphertext+tag>`; a fresh 12-byte nonce each time (two
   encryptions differ); decrypting with a different associated data string (another row ID or
   column) raises; a flipped ciphertext bit raises; the first key in
   `RENTSYNC_ENCRYPTION_KEYS` encrypts and any listed key decrypts; an unknown key ID raises;
   malformed key configuration fails at boot with a message that never contains a key.
-- [ ] T011 [P] Unit spec `api/spec/unit/settings_spec.rb`: required variables fail fast with
+- [x] T011 [P] Unit spec `api/spec/unit/settings_spec.rb`: required variables fail fast with
   their names (never values); `RECONCILE_INTERVAL_S` defaults to 900 and
   `RECONCILE_OVERLAP_S` to 3600; the PMS bucket defaults to 50 per minute; the four URL
   settings are required and must be absolute URLs.
 
 ### Implementation for the foundation
 
-- [ ] T012 [P] `api/lib/rentsync/clock.rb`, `api/lib/rentsync/ids.rb` (prefixed public IDs:
+- [x] T012 [P] `api/lib/rentsync/clock.rb`, `api/lib/rentsync/ids.rb` (prefixed public IDs:
   `opr_`, `con_` + 20 base32 chars), `api/lib/rentsync/central_time.rb`: adapt from the mock.
-- [ ] T013 [P] `api/lib/rentsync/logging.rb`: adapt from the mock (OTel field names,
+- [x] T013 [P] `api/lib/rentsync/logging.rb`: adapt from the mock (OTel field names,
   `code.function.name`, `correlation_id`, redaction). Add `access_token`, `refresh_token`,
   `client_secret`, `signing_secret`, `code_verifier`, `password`, `cookie`, `pms-signature` and
   `payload` to the redacted keys, with a spec proving each is redacted.
-- [ ] T014 [P] `api/lib/rentsync/metrics/{buffer,flusher,exposition}.rb` and
+- [x] T014 [P] `api/lib/rentsync/metrics/{buffer,flusher,exposition}.rb` and
   `api/lib/rentsync/middleware/{correlation_id,request_metrics}.rb`: adapt from the mock, with
   their specs. Redis keys use the `rentsync:` prefix.
-- [ ] T015 `api/config/settings.rb`: ENV → typed config, passing T011.
-- [ ] T016 `api/lib/rentsync/crypto/box.rb`: AES-256-GCM with stdlib `OpenSSL::Cipher`,
+- [x] T015 `api/config/settings.rb`: ENV → typed config, passing T011.
+- [x] T016 `api/lib/rentsync/crypto/box.rb`: AES-256-GCM with stdlib `OpenSSL::Cipher`,
   passing T010.
-- [ ] T017 `api/lib/rentsync/db.rb` and `api/lib/rentsync/redis.rb`: adapt from the mock,
+- [x] T017 `api/lib/rentsync/db.rb` and `api/lib/rentsync/redis.rb`: adapt from the mock,
   including migrations at boot under a Postgres advisory lock. Redis database 1.
-- [ ] T018 Migration `api/db/migrations/001_foundation.rb` creating, exactly as data-model.md
+- [x] T018 Migration `api/db/migrations/001_foundation.rb` creating, exactly as data-model.md
   specifies:
   - `operators`: `email` text with a unique index on `lower(email)`; `password_digest`;
     `public_id` unique.
@@ -137,11 +139,11 @@ registration, and the shared tables every story uses.
     pms_operator_id)`; unique `(operator_id, pms_client_id)`; check
     `status IN ('active','renewal_failing','needs_reauth','disconnected')`.
   - `maintenance_leases`: `name` PK, `lease_until`, `last_run_at`.
-- [ ] T019 [P] `api/lib/rentsync/models/{base,operator,pms_client,pms_connection}.rb`: Sequel
+- [x] T019 [P] `api/lib/rentsync/models/{base,operator,pms_client,pms_connection}.rb`: Sequel
   models with helpers that encrypt and decrypt the **enc** columns, using associated data
   `"<table>.<column>:<id>"` (R8). Rows are inserted first and their secrets written in the
   same transaction, so the ID exists for the associated data.
-- [ ] T020 Spec then implementation of `Rentsync::Pms::Registration.ensure!`
+- [x] T020 Spec then implementation of `Rentsync::Pms::Registration.ensure!`
   (`api/lib/rentsync/pms/registration.rb`, spec with a fake mock admin API), per research R9.
   It runs inside `pg_advisory_xact_lock` on a fixed key:
   - no active client: `POST /admin/clients` with name `rentsync-<DEPLOYMENT_ID>`, redirect URI
@@ -153,18 +155,18 @@ registration, and the shared tables every story uses.
   - two concurrent calls make exactly one `POST /admin/clients` (the advisory lock) and leave
     exactly one active row;
   - the client and signing secrets never appear in logs or output.
-- [ ] T021 `api/bin/setup`, adapted from the mock's. It creates the database if missing,
+- [x] T021 `api/bin/setup`, adapted from the mock's. It creates the database if missing,
   migrates, seeds operators (T030, once it exists), and runs `Registration.ensure!` (skipped by
   `--test-db-only`). `--deploy` is safe to rerun. It prints the PMS client ID and the operator
   emails, never secrets. Plus `api/bin/pms_client` (`--show` prints client ID and registration
   time; `--set` reads credentials from stdin for a real PMS).
-- [ ] T022 `api/lib/rentsync/api/ops.rb`: `/healthz` with the same fields as the mock's Health
+- [x] T022 `api/lib/rentsync/api/ops.rb`: `/healthz` with the same fields as the mock's Health
   schema (db, redis, `worker_heartbeat_age_s`, version, deployment_id, time, started_at,
   `*_ct`), `/healthz/live`, and `/metrics`. Request spec `api/spec/requests/ops_spec.rb`.
-- [ ] T023 `api/bin/worker`: a loop with a heartbeat row in the `worker_heartbeats` table from data-model.md
+- [x] T023 `api/bin/worker`: a loop with a heartbeat row in the `worker_heartbeats` table from data-model.md
   (`worker_id` text PK, `beat_at`; add it to T018's migration), a `/metrics` endpoint on port 4003, graceful stop on SIGTERM, and a job
   registry that later phases add to. Spec for the loop's stop behaviour.
-- [ ] T024 `api/lib/rentsync/app.rb`: the Rack builder. Order: correlation ID, request metrics,
+- [x] T024 `api/lib/rentsync/app.rb`: the Rack builder. Order: correlation ID, request metrics,
   the webhook endpoint mount point (US2), session middleware (US1), Grape API, pages.
 
 **Checkpoint**: `docker compose up` brings `api` and `api_worker` up healthy, `bin/setup`
