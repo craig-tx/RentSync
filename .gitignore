@@ -10,6 +10,9 @@ vendor/bundle/
 mock_pms/log/
 mock_pms/tmp/
 mock_pms/coverage/
+api/log/
+api/tmp/
+api/coverage/
 
 # Terraform
 .terraform/

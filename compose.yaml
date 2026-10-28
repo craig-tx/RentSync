@@ -13,6 +13,23 @@ x-mock-pms: &mock-pms
     postgres: { condition: service_healthy }
     redis: { condition: service_healthy }
 
+# RentSync's API and worker (feature 003): one image, two processes (research R1).
+x-api: &api
+  build:
+    context: ./api
+    target: dev
+    args:
+      GIT_SHA: ${GIT_SHA:-dev}
+  image: rentsync/api:dev
+  env_file: .env
+  environment: &api-env
+    # Registration with the mock uses the mock's own admin token (research R9).
+    MOCK_PMS_ADMIN_TOKEN: ${ADMIN_TOKEN}
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    mock_pms: { condition: service_healthy }
+
 services:
   postgres:
     image: postgres:16
@@ -54,6 +71,26 @@ services:
     command: ["bundle", "exec", "bin/delivery_worker"]
     environment:
       SERVICE_NAME: mock_pms-worker
+
+  api:
+    <<: *api
+    ports:
+      - "4002:4002"
+    environment:
+      <<: *api-env
+      SERVICE_NAME: rentsync-api
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:4002/healthz/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  api_worker:
+    <<: *api
+    command: ["bundle", "exec", "bin/worker"]
+    environment:
+      <<: *api-env
+      SERVICE_NAME: rentsync-worker
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.162.0

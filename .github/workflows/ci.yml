@@ -51,6 +51,50 @@ jobs:
           gem install bundler-audit -v 0.9.2 --no-document
           bundle-audit check --update
 
+  # Feature 003: RentSync's API and worker, tested like the mock PMS.
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    # Service containers are reached on localhost; the other settings take spec_helper's
+    # test values.
+    env:
+      RACK_ENV: test
+      RENTSYNC_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/rentsync_ci_gh_test
+      RENTSYNC_REDIS_URL: redis://localhost:6379/1
+      DEPLOYMENT_ID: ci-gh
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: api
+      - run: bundle exec bin/setup --test-db-only
+      - run: bundle exec rubocop
+      - run: bundle exec rspec
+      - name: Gem vulnerability audit (ruby-advisory-db)
+        run: |
+          gem install bundler-audit -v 0.9.2 --no-document
+          bundle-audit check --update
+
   # Constitution VI: an OTLP backend runs in CI and receives every service's telemetry.
   telemetry-smoke:
     needs: test
