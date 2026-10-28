@@ -961,7 +961,26 @@ should show "trying again" and then success on the new host.
 
 <!-- PR #48: free -->
 
-<!-- PR #49: free -->
+<!-- PR #49 -->
+### 2026-10-28: 002 live quickstart checks, agent-run part (background agent)
+
+- **Done:**
+  - Ran the checks that need no credentials against the live hosts:
+    - `nmap` over all TCP ports on the three public IPs: only 80 and 443 open;
+    - quickstart §3 on dev-staging and prod-us: `/healthz` ok on `c5ccd8d`, 308 to HTTPS, `/metrics` 404, `/admin` 401;
+    - all three certificates from Let's Encrypt production;
+    - anonymous telemetry visit: the API returns 401;
+    - `gitleaks` over `main`: 11 matches, all deliberate test values.
+  - Recorded these as notes on T055, T065, T071 and T089. No task is fully done, so none are ticked.
+- **Blocked:** the local AWS CLI is signed in to a different account, not RentSync's, and there's no HCP token locally. Everything needing AWS, HCP or the admin tokens therefore stays with the operator:
+  - SSM, `chronyc` and the tag audit;
+  - searching the state and run logs for secrets;
+  - the feature 001 §4 checks;
+  - the OpenObserve sign-in checks;
+  - the reboot, DLM snapshots and budget check.
+  No changes were made through the AWS CLI.
+- **Decisions:** none.
+- **Next task:** the operator issues for the remaining live checks; then T091a summarizes the results.
 
 <!-- PR #50: free -->
 
