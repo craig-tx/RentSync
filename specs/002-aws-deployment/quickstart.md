@@ -62,8 +62,8 @@ outputs (data-model §DNS record). Switch `acme_ca` to production and apply.
 - Three instances exist, each with an Elastic IP that matches its output.
 - The DNS check in runbook §DNS shows the staging IP for `pms-staging`, and likewise for the other two
   records.
-- The HCP run logs mask every sensitive value. Searching the state files (download through the
-  HCP UI) for the admin token finds nothing.
+- The HCP run logs mask every sensitive value, and no state version holds a secret:
+  `ruby infra/bootstrap/audit-hcp-secrets.rb` prints PASS (it only reads; see its header).
 
 Check the network surface (SC-003, US1 AC2):
 
@@ -205,6 +205,7 @@ OpenObserve again. **Expected**: telemetry resumes.
 
 ```bash
 gitleaks detect --source . --no-banner         # or GitHub secret scanning: zero findings
+ruby infra/bootstrap/audit-hcp-secrets.rb    # HCP state and run logs: PASS, exit 0
 ```
 
 - Rotate staging's `admin_token` through runbook §Rotate. **Expected**: the old token gets 401,
