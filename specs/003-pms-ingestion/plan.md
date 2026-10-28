@@ -74,7 +74,7 @@ A demo, not a product.
 |---|---|---|---|
 | I | Correctness over cleverness | **PASS** | No ledger yet. Raw events are immutable: no update path, plus a trigger that raises on `UPDATE`/`DELETE` (data-model). A cross-path business key prevents double-counting a payment seen by both webhook and reconciliation (R4). A conflicting duplicate is recorded as a rejection, never silently overwritten |
 | II | Idempotency everywhere | **PASS** | See [Idempotency keys](#idempotency-keys). Both inbound keys are database unique constraints. Reconciliation reruns are idempotent and resumable (R5) |
-| III | Test-first for domain logic | **PASS** | The test-first units are listed in R17: signature, window, envelope, dedup decision, AES-GCM, PKCE/state, renewal lease, backoff, reconciliation window and cursor. The end-to-end spec runs from a signed HTTP request to the persisted raw event; "to the ledger effect" waits for the ledger (spec, Assumptions). CI stays the merge gate |
+| III | Test-first for domain logic | **PASS (one deferral, tracked)** | The test-first units are listed in R17: signature, window, envelope, dedup decision, AES-GCM, PKCE/state, renewal lease, backoff, reconciliation window and cursor. The end-to-end spec runs from a signed HTTP request to the persisted raw event; "to the persisted ledger effect" cannot exist before the ledger, so it is a Complexity Tracking entry, extended by the ledger feature. CI stays the merge gate |
 | IV | Integrations are hostile by default | **PASS** | Out-of-order events are recorded with occurrence and arrival times, and ordering is left to the ledger (FR-014). Malformed and unverifiable deliveries are rejected and recorded with a reason (R3, R10). `429` and `Retry-After` are honored through a shared block plus backoff with jitter (R6). Reconciliation is the second path (R5). Chaos-on coverage comes from the CI `ingestion-e2e` job and quickstart §3–§4 |
 | V | AI agents propose, humans dispose | **N/A** | No agent in this feature |
 | VI | Observable by default | **PASS** | Through the Collector bridge (ADR-0004), with no SDK. JSON logs carry `correlation_id`, taken from the PMS's `X-Correlation-Id` and stored on the raw event for the ledger to carry on (R16). `/healthz` and `/metrics` exist on both processes. Rejections, duplicates, renewals and runs are metrics. Resource attributes come from the existing Collector config. Telemetry redaction is in-process and again at the Collector |
@@ -85,7 +85,7 @@ A demo, not a product.
 | — | Scope & data constraints | **PASS** | Synthetic data only: the operators are seeded to match the mock's synthetic operators. Not presented as production-ready; production-differences.md is extended |
 | — | Workflow & quality gates | **PASS** | `/speckit-analyze` runs before `/speckit-implement`. CI gains `api` test and `ingestion-e2e` jobs. Build-log entries go in the PR's slot. The cross-platform rule covers the new scripts (bash 4.4+ or Ruby) |
 
-**Gate result (pre-research)**: PASS. No Complexity Tracking entries.
+**Gate result (pre-research)**: PASS, with one tracked deferral (Complexity Tracking).
 
 **Gate result (post-design)**: PASS. Re-checked against [data-model.md](data-model.md) and
 [contracts/](contracts/).
@@ -115,7 +115,28 @@ A demo, not a product.
 
 ### Dependencies
 
-No new gems. See research R18 for the table, the same six runtime gems as the mock PMS.
+No new gems: the API uses the same six runtime gems as the mock PMS (research R18).
+
+| Gem | Purpose | Justification |
+|---|---|---|
+| `grape` | HTTP API | The project-standard API framework (kickoff §3) |
+| `puma` | Rack server | The standard threaded server |
+| `sequel` | Database access and migrations | The project-standard ORM |
+| `pg` | Postgres driver | Sequel needs it for Postgres |
+| `bcrypt` | Operator password hashing | A security-sensitive primitive with no stdlib equivalent |
+| `redis` | Rate bucket, `blocked_until`, sign-in throttle, metric totals | The official client; `EVALSHA` and `MULTI` keep shared state atomic (Constitution X) |
+| `rspec`, `rack-test`, `rubocop` *(dev)* | Tests and lint | Project standard |
+
+Stdlib, no gem: `openssl` (HMAC, AES-256-GCM, digests), `net/http`, `json`, `erb`,
+`securerandom`, `uri`.
+
+### Configuration
+
+`.env.example` gains every new setting with a safe local value: `RENTSYNC_DATABASE_URL`,
+`RENTSYNC_REDIS_URL`, `RENTSYNC_ENCRYPTION_KEYS` (a clearly fake development key),
+`RENTSYNC_OPERATOR_SEED_PASSWORD`, `RENTSYNC_SESSION_SECRET`, the four URL settings (research
+R13), `RECONCILE_INTERVAL_S`, `RECONCILE_OVERLAP_S`, and the PMS bucket size. Hosts get the
+same names from `rentsync-render-env` ([host-changes.md](contracts/host-changes.md)).
 
 ### ADRs to write
 
@@ -206,4 +227,6 @@ pipeline. `/web` is not created until the dashboard feature (R12).
 
 ## Complexity Tracking
 
-No constitution violations to justify.
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|---|---|---|
+| Constitution III's end-to-end test stops at the persisted raw event, not a ledger effect | The ledger is the next feature; there is no ledger effect to assert yet | Building a stub ledger only to satisfy the test would be throwaway work. The ledger feature MUST extend this test to the ledger entry (spec, Assumptions) |

@@ -30,7 +30,8 @@ client ID (never its secrets) and the seeded operator emails.
    **Expected**: back on `/connections`, status `active`, the PMS operator's name shown, all in
    under 2 minutes.
 2. Repeat but choose **Deny**. **Expected**: "access was denied", no new connection.
-3. Headless equivalent, used by CI: `docker compose exec -T api bundle exec bin/connect_operator --operator 1`.
+3. Headless equivalent, used by CI. It drives the browser side, so it runs on the host machine,
+   not in a container: `cd api && bundle exec bin/connect_operator --operator 1`.
 4. Wait 6 minutes (past the 5-minute access token), then **Reconcile now**.
    **Expected**: the run succeeds; logs show one `token_renewed` event and no 401 from the PMS.
 5. Revoke the grant (`POST /admin/grants/{id}/revoke` on the mock), then **Reconcile now**.
@@ -88,9 +89,10 @@ Reset chaos to 0 afterwards.
 
 ## 5. Deployed (FR-025)
 
-1. Operator: set the new workspace variables (contracts/host-changes.md) and apply
-   `rentsync-shared-us` (the ECR repository and IAM), then `rentsync-dev-staging`, then
-   `rentsync-prod-us`. Add the two A records.
+1. Operator, **in this order**: add the two `app-*` A records and wait until they resolve; set
+   the new workspace variables (contracts/host-changes.md); apply `rentsync-shared-us` (the ECR
+   repository and IAM), then `rentsync-dev-staging`, then `rentsync-prod-us`. The records come
+   first because the first release with the API checks its public URL.
 2. Merge to `main`; the release deploys both images to staging, then prod after approval.
 3. Check:
 

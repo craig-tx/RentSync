@@ -29,7 +29,9 @@ They become SSM SecureString parameters under the deployment's existing path, in
 | `RENTSYNC_REDIS_URL` | `redis://redis:6379/1` |
 | `RENTSYNC_ENCRYPTION_KEYS`, `RENTSYNC_OPERATOR_SEED_PASSWORD`, `RENTSYNC_SESSION_SECRET` | SSM |
 | `MOCK_PMS_ADMIN_TOKEN` | the existing `admin_token` (research R9) |
-| `PMS_BASE_URL` | `https://<SITE_HOSTNAME>` |
+| `PMS_PUBLIC_URL`, `PMS_API_URL` | both `https://<SITE_HOSTNAME>` (research R13) |
+| `APP_PUBLIC_URL` | `https://<APP_HOSTNAME>` |
+| `WEBHOOK_SUBSCRIBER_URL` | `https://<APP_HOSTNAME>/webhooks/pms` |
 | `API_IMAGE` | set by `rentsync-deploy`, like `MOCK_PMS_IMAGE` |
 
 ## Compose (`infra/host/compose.env.yaml`)
@@ -47,8 +49,10 @@ A second site block for `{$APP_HOSTNAME}`: `respond /metrics* 404`, `reverse_pro
 - Pulls `MOCK_PMS_IMAGE` and `API_IMAGE` at the same tag.
 - Runs `bin/setup --deploy` for both (migrate; seed if empty; for the API, also
   `PmsRegistration.ensure!`).
-- Healthy only when both `https://<SITE_HOSTNAME>/healthz` and `https://<APP_HOSTNAME>/healthz`
-  report the new version; otherwise both roll back to the previous tag.
+- Healthy only when both services' `/healthz` report the new version over the Compose network;
+  otherwise both roll back to the previous tag. `deploy-to.yml`'s external check then verifies
+  both public URLs, so the `app-*` A records **must exist before the first release that
+  includes the API** (quickstart §5 order), or that release goes red.
 
 ## Release and registry
 

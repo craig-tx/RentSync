@@ -203,8 +203,10 @@ checks that the stored client still exists (in the mock's `GET /admin/clients` l
 registers one through `POST /admin/clients` with:
 
 - name `rentsync-<deployment_id>`;
-- redirect URI `https://<APP_HOSTNAME>/connections/callback` (locally `http://localhost:4002/…`);
-- subscriber URL `https://<APP_HOSTNAME>/webhooks/pms`.
+- redirect URI `<APP_PUBLIC_URL>/connections/callback`;
+- subscriber URL `<WEBHOOK_SUBSCRIBER_URL>`.
+
+The four URL settings are in R13.
 
 The returned client secret and signing secret are stored encrypted in `pms_clients`. If the
 client had vanished (a mock `/admin/reset` clears clients), every connection under the old one
@@ -302,6 +304,19 @@ operators could not connect without a browser flow, US1).
 - **Secrets**: three new SSM parameters per deployment, written by Terraform's write-only
   pattern (002 R11, ADR-0007): `rentsync/encryption_keys`, `rentsync/operator_seed_password`,
   and `rentsync/session_secret` (for the CSRF HMAC). `rentsync-render-env` requires them.
+
+- **Two URLs per side.** A browser and a container reach the services by different names, so
+  each side has a public URL and an internal one:
+
+  | Setting | Used by | Hosts | Local and CI |
+  |---|---|---|---|
+  | `PMS_PUBLIC_URL` | the browser, for `/oauth/authorize` | `https://<SITE_HOSTNAME>` | `http://localhost:4001` |
+  | `PMS_API_URL` | the API, for `/oauth/token`, `/v1`, `/admin` | `https://<SITE_HOSTNAME>` | `http://mock_pms:4001` |
+  | `APP_PUBLIC_URL` | redirect URI, cookies, links | `https://<APP_HOSTNAME>` | `http://localhost:4002` |
+  | `WEBHOOK_SUBSCRIBER_URL` | registered with the PMS, called by its worker | `https://<APP_HOSTNAME>/webhooks/pms` | `http://api:4002/webhooks/pms` |
+
+  `bin/connect_operator` (R17) drives the browser side, so it runs on the developer machine or
+  CI runner, where the published ports resolve, not inside a container.
 
 **Rationale**: separate hostnames keep both services' URL spaces intact (the mock owns `/`,
 `/oauth`, `/v1`, `/admin`) and make the demo legible: one name for the vendor, one for the

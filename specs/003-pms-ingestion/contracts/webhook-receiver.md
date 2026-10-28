@@ -5,7 +5,9 @@ Decisions are in research R3, R4 and R10.
 
 ## Endpoint
 
-`POST https://<app hostname>/webhooks/pms` (locally `http://localhost:4002/webhooks/pms`).
+`POST https://<app hostname>/webhooks/pms` on the hosts. Locally and in CI the mock delivers
+from inside its own container, so the subscriber URL is `http://api:4002/webhooks/pms` on the
+Compose network (`WEBHOOK_SUBSCRIBER_URL`, research R13).
 Registered as the PMS client's subscriber URL by `PmsRegistration.ensure!` (R9). No session or
 CSRF: the signature is the authentication.
 
