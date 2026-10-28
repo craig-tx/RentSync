@@ -965,7 +965,26 @@ should show "trying again" and then success on the new host.
 
 <!-- PR #50: free -->
 
-<!-- PR #51: free -->
+<!-- PR #51 -->
+### 2026-10-28: operator CLI role (interactive)
+
+- **Why:** the AWS-side live checks (#44, #45, #50) need AWS CLI access from the operator's
+  machine, whose default profile is a different AWS account. The operator asked whether a
+  temporary access key would do. It would break 002's "no long-lived AWS key" checks, so this
+  adds a role that an `aws login` profile assumes instead.
+- **Done:** `infra/bootstrap/bootstrap-operator.sh` (CloudShell; plan, `--apply`,
+  `--teardown`) creates `rentsync-operator` from `docs/deploy/iam/operator/`. Permissions:
+  `ReadOnlyAccess`, SSM sessions and `AWS-RunShellScript` on `DeploymentId`-tagged hosts, and
+  decryption of `admin_token` parameters only. It trusts exactly the identity running it; an
+  assumed role by its real ARN, and the root user refused. Sessions last at most one hour.
+  Runbook §Operator CLI access, a §Bootstrap teardown step, and a 002 contract section.
+- **Tests:** `bootstrap_operator_test.sh` (stub `aws`) is in `infra/test/run.sh` and CI's
+  bash-version check. Two deliberate mutations failed it as expected: a 12-hour session, and
+  a reboot action in the policy. Full suite green.
+- **Decisions:** the operator chose option B (`aws login` plus a narrow role) over IAM Identity
+  Center. Host shells are root-capable, which the PR and runbook say plainly.
+- **Next:** the operator runs the script in CloudShell. Claude adds the local profiles, and
+  confirms the AWS account with `sts get-caller-identity --profile rentsync`, before any check.
 
 <!-- PR #52: free -->
 
