@@ -1,0 +1,11 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OperatorConsoleIdentity",
+      "Effect": "Allow",
+      "Principal": { "AWS": "<operator-principal>" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}

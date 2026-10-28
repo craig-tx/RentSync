@@ -136,3 +136,23 @@ also covers any future side-by-side deployment.
 Activate `DeploymentId` as a user-defined cost allocation tag. Cost Explorer then shows spend
 per deployment (constitution VI). Tags appear for activation about 24 hours after the first
 tagged resource exists.
+
+## Role `rentsync-operator` (optional, for the operator's AWS CLI)
+
+Created by `infra/bootstrap/bootstrap-operator.sh` in CloudShell (runbook §Operator CLI access),
+from `docs/deploy/iam/operator/`, after the bootstrap. It gives the operator's machine AWS CLI
+access for host checks without an access key.
+
+**Trust**: `sts:AssumeRole` by exactly one IAM user or role, by default the console identity that
+ran the script (never the root user). The session lasts at most one hour.
+
+**Permissions**: AWS's `ReadOnlyAccess`, plus the `rentsync-operator` policy:
+
+| Actions | Resources |
+|---|---|
+| `ssm:StartSession` | instances tagged `DeploymentId`, and `document/SSM-SessionManagerRunShell` |
+| `ssm:SendCommand` | instances tagged `DeploymentId`, and `document/AWS-RunShellScript` |
+| `ssm:TerminateSession`, `ssm:ResumeSession` | the caller's own sessions |
+| `ssm:GetParameter`, and `kms:Decrypt` via SSM | `parameter/rentsync/*/admin_token` only |
+
+A session or command is a root-capable shell on the host. No action changes an AWS resource.

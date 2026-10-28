@@ -298,7 +298,57 @@ gitignored, and the places in the last column are the record.
 `cloud` blocks don't name it. The code blocks that run them set `TF_CLOUD_ORGANIZATION` from
 the settings.
 
-Next: §First apply.
+Next: §First apply. For AWS CLI checks from your machine, see §Operator CLI access.
+
+## Operator CLI access
+
+Some checks run the AWS CLI on your machine: SSM sessions on the hosts, commands sent to them,
+and reading a deployment's `ADMIN_TOKEN`. They use a narrow role, `rentsync-operator`, that your
+console sign-in assumes. No access key is created, and the credentials expire after an hour.
+[`infra/bootstrap/bootstrap-operator.sh`](../../infra/bootstrap/bootstrap-operator.sh) creates
+the role from [`iam/operator/`](iam/operator/).
+
+**What the role can do:**
+- read most of the AWS account, through AWS's `ReadOnlyAccess`. That includes listing
+  resources, tags, snapshots and budgets, and reading the audit log bucket's objects;
+- start SSM sessions on, and send `AWS-RunShellScript` commands to, instances tagged
+  `DeploymentId`. **This is a root-capable shell on every host**, the same access §First apply
+  uses;
+- decrypt each deployment's `admin_token` parameter, and no other secret;
+- nothing else: no reboot, stop, terminate, or change to any AWS resource.
+
+**The trusted identity.** The role trusts exactly one identity: the one you're signed in to the
+console as when you run the script, which is also the one `aws login` uses. The root user can't
+assume roles, so the script refuses it. Sign in as an IAM user with console access, and no
+access keys, instead. To trust a different user or role, pass `--principal <arn>`.
+
+1. In CloudShell, from the repository directory, after `git pull`, print the plan:
+
+   ```bash
+   bash infra/bootstrap/bootstrap-operator.sh
+   ```
+
+   Check the line `The role will trust: …`, then apply:
+
+   ```bash
+   bash infra/bootstrap/bootstrap-operator.sh --apply
+   ```
+
+2. On your machine, add the two profiles the script prints to `~/.aws/config`
+   (`%USERPROFILE%\.aws\config` on Windows). The file is outside the repository, so the AWS
+   account ID in it stays private. Don't put anything in `~/.aws/credentials`.
+3. Each working session, sign in in your browser, then check the identity:
+
+   ```bash
+   aws login --profile rentsync-login
+   aws sts get-caller-identity --profile rentsync
+   ```
+
+   **Expected:** an `assumed-role/rentsync-operator/…` ARN in the RentSync AWS account.
+
+Use `--profile rentsync` for every RentSync command, including Claude's. `rentsync-login` has
+your console identity's full permissions, so it's only the source profile. Removing access is
+`bootstrap-operator.sh --teardown`, then deleting the two profiles.
 
 ## First apply
 
@@ -914,6 +964,13 @@ applied. Then, in this order:
    `rentsync-*` host roles are not touched. It also deactivates the `DeploymentId` cost
    allocation tag, and deletes the OIDC providers the bootstrap created. It refuses if any
    instance or volume tagged `DeploymentId` still exists.
+
+   If you set up §Operator CLI access, also run this, then delete the `rentsync` and
+   `rentsync-login` profiles from `~/.aws/config` on your machine:
+
+   ```bash
+   bash infra/bootstrap/bootstrap-operator.sh --teardown
+   ```
 
 **What stays, and why:**
 - **OIDC providers the bootstrap adopted rather than created**, because something else may use

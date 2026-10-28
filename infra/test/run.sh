@@ -17,6 +17,7 @@ tests=(
   infra/release/test/run_deploy_test.sh
   infra/bootstrap/test/bootstrap_init_test.sh
   infra/bootstrap/test/bootstrap_iam_test.sh
+  infra/bootstrap/test/bootstrap_operator_test.sh
   infra/bootstrap/test/bootstrap_github_test.sh
 )
 
