@@ -1062,6 +1062,55 @@ should show "trying again" and then success on the new host.
   (backup in the session scratchpad).
 - **Next:** Phase 3 (US1, connect a PMS account), T025 onward.
 
+### 2026-10-29: 003 Phase 3, US1 connect a PMS account (interactive)
+
+- **Done:** T025–T035.
+  - **Mock:** token responses now carry `operator_id` and `operator_name`, and 001's
+    `TokenResponse` schema is updated to match.
+  - **API:**
+    - operator sign-in, with sessions, CSRF tokens and a sign-in throttle;
+    - the PKCE connect flow with single-use state;
+    - renewal under a lease;
+    - pages plus the `/v1/connections` JSON alias;
+    - `bin/connect_operator`;
+    - the daily purge.
+- **Tests:** 172 API examples, and the mock suite, pass; RuboCop is clean.
+  - The four new specs failed first: the mock spec on the missing fields, the API specs on the
+    missing code.
+  - **Mutation checks** caught each of these removals:
+    - the renewal lease;
+    - the lease's "still needs renewing" condition;
+    - `invalid_client` sending a connection to reauthorization;
+    - idle expiry;
+    - operator scoping on the list and on single connections;
+    - the state owner check and single use;
+    - CSRF on disconnect;
+    - the `Secure` cookie flag.
+- **Live checks, local:**
+  - `bin/connect_operator` connected operator 1 to the real mock. A deny stored nothing, and
+    a reconnect reused the row.
+  - A forced renewal got a fresh token from the mock.
+  - The logs hold no tokens, codes or passwords.
+  - The purge ran once under its lease.
+- **Decisions:**
+  - **Renewal:** the backoff (5 s doubling to 300 s) is kept in `renewal_lease_until`.
+    Refusals other than `invalid_grant`/`invalid_client` count as temporary.
+  - **A second PMS account:** for the same RentSync operator it is refused as
+    `different_pms_account`, because `(operator_id, pms_client_id)` is unique.
+  - **The pages** are a Grape API, so they get route-template metric labels.
+  - **The seed** mirrors the mock's fixed three operators, because the mock's admin API has no
+    operator list.
+  - **Approvals:** the operator approved T002's Ruby 4.0 image and T020's live-only
+    `needs_reauth`.
+- **Found and fixed:** `api` and `api_worker` ran a stale image with no source mount. That
+  made the suite flaky against the dev database. `compose.override.yaml` now mounts `api/`,
+  as it already does `mock_pms/`.
+- **Not fixed:** the mock suite doesn't load on Ruby 4.0. `chaos/decider_spec.rb` requires
+  `benchmark`, which 4.0 no longer ships by default. CI's 3.3 run is unaffected.
+- **Open from the checkpoint:** quickstart §2 steps 4 and 5 need **Reconcile now** (US3).
+  Step 6's health URL needs US4.
+- **Next:** Phase 4 (US2, record every PMS event exactly once), T036 onward.
+
 <!-- PR #55: free -->
 
 <!-- PR #56: free -->
