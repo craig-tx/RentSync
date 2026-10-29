@@ -46,7 +46,7 @@ module Rentsync
       def register
         response = @admin.create_client(
           name: "rentsync-#{Settings.deployment_id}",
-          redirect_uris: ["#{Settings.app_public_url}/connections/callback"],
+          redirect_uris: [Pms.redirect_uri],
           subscriber_url: Settings.webhook_subscriber_url
         )
         store(response.fetch("client_id"), response.fetch("client_secret"), response.fetch("signing_secret"))

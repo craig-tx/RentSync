@@ -1,0 +1,37 @@
+<h1>PMS connections</h1>
+<% if notice -%>
+<p class="notice"><%= h(notice) %></p>
+<% end -%>
+<% if connections.empty? -%>
+<p class="muted">No PMS account is connected yet.</p>
+<form method="post" action="/connections">
+  <input type="hidden" name="csrf_token" value="<%= h(csrf) %>">
+  <button type="submit">Connect PMS</button>
+</form>
+<% else -%>
+<table>
+  <thead><tr><th>PMS account</th><th>Status</th><th>Connected</th><th></th></tr></thead>
+  <tbody>
+<% connections.each do |con| -%>
+    <tr>
+      <td><%= h(con.pms_operator_name) %></td>
+      <td class="status-<%= h(con.status) %>"><%= h(con.status) %></td>
+      <td><%= h(time(con.connected_at)) %><% if con.disconnected_at %><br><span class="muted">disconnected <%= h(time(con.disconnected_at)) %></span><% end %></td>
+      <td>
+<% if Rentsync::PmsConnection::LIVE.include?(con.status) -%>
+        <form method="post" action="/connections/<%= h(con.public_id) %>/disconnect" class="inline">
+          <input type="hidden" name="csrf_token" value="<%= h(csrf) %>">
+          <button type="submit">Disconnect</button>
+        </form>
+<% else -%>
+        <form method="post" action="/connections" class="inline">
+          <input type="hidden" name="csrf_token" value="<%= h(csrf) %>">
+          <button type="submit">Reconnect</button>
+        </form>
+<% end -%>
+      </td>
+    </tr>
+<% end -%>
+  </tbody>
+</table>
+<% end -%>

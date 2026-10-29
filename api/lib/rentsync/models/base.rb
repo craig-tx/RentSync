@@ -59,16 +59,22 @@ module Rentsync
 
       # Encrypts and stores each { column => plaintext or nil }.
       def write_secrets!(secrets)
+        envelopes = seal(secrets)
+        this.update(envelopes)
+        envelopes.each { |column, envelope| values[column] = envelope }
+        self
+      end
+
+      # The column values for { column => plaintext or nil }, without writing them, for callers
+      # that must change secrets and other columns in one statement.
+      def seal(secrets)
         raise ArgumentError, "save the row before writing its secrets" unless id
 
-        envelopes = secrets.to_h do |column, plaintext|
+        secrets.to_h do |column, plaintext|
           raise ArgumentError, "#{column} is not an encrypted column" unless self.class.encrypted.include?(column)
 
           [column, plaintext.nil? ? nil : Crypto::Box.default.encrypt(plaintext, aad: aad(column))]
         end
-        this.update(envelopes)
-        envelopes.each { |column, envelope| values[column] = envelope }
-        self
       end
 
       private

@@ -25,17 +25,31 @@ module Rentsync
     metrics/exposition
     middleware/correlation_id
     middleware/request_metrics
+    middleware/session
     models/base
     models/operator
     models/pms_client
     models/pms_connection
+    models/session
+    models/connection_attempt
+    rate_limit/bucket
+    auth/passwords
+    auth/sessions
+    auth/csrf
+    auth/sign_in_throttle
+    seed/operators
     pms/admin_api
+    pms/oauth
+    pms/connect
     pms/registration
     metrics/heartbeat_collector
     api/errors
     api/ops
     worker
+    jobs/daily_purge
     app
+    web/page
+    api/pages
   ].freeze
 
   # Fails fast on bad configuration, connects, optionally migrates, then loads the rest.

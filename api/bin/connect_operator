@@ -1,0 +1,110 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Connects a seeded RentSync operator to the mock PMS through the real OAuth flow, playing the
+# browser's part (T034, research R17): sign in to RentSync, start a connection, approve on the
+# mock's form, follow the callback. It runs on the developer machine or CI runner, not in a
+# container, because the redirects carry the public URLs.
+#
+#   bin/connect_operator --operator <n> [--deny]
+#
+# n is 1 to 3 (Rentsync::Seed::Operators). Settings come from the environment, else the repo's
+# .env: APP_PUBLIC_URL and RENTSYNC_OPERATOR_SEED_PASSWORD. The mock's seeded operators use the
+# mock's development passwords. Passwords, tokens, codes and states are never printed.
+
+require "json"
+require "net/http"
+require "optparse"
+require "uri"
+require_relative "../lib/rentsync/seed/operators"
+
+# A browser in miniature: one cookie per name and host, no redirects followed automatically.
+class Browser
+  def initialize
+    @cookies = Hash.new { |h, k| h[k] = {} }
+  end
+
+  def get(url, accept: nil) = send_request(Net::HTTP::Get.new(URI(url)), accept)
+
+  def post(url, form)
+    req = Net::HTTP::Post.new(URI(url))
+    req.set_form_data(form)
+    send_request(req, nil)
+  end
+
+  private
+
+  def send_request(req, accept)
+    uri = req.uri
+    req["Accept"] = accept if accept
+    jar = @cookies[uri.host]
+    req["Cookie"] = jar.map { |k, v| "#{k}=#{v}" }.join("; ") unless jar.empty?
+    res = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: 10,
+                                              read_timeout: 30) { |http| http.request(req) }
+    Array(res.get_fields("set-cookie")).each do |header|
+      name, value = header.split(";", 2).first.split("=", 2)
+      value.to_s.empty? ? jar.delete(name) : jar[name] = value
+    end
+    res
+  end
+end
+
+def setting(name)
+  ENV.fetch(name) do
+    env_file = File.expand_path("../../.env", __dir__)
+    line = File.exist?(env_file) && File.foreach(env_file).find { |l| l.start_with?("#{name}=") }
+    line ? line.split("=", 2).last.strip : abort("#{name} is not set (environment or .env)")
+  end
+end
+
+def expect_status(res, codes, step)
+  return res if Array(codes).include?(res.code.to_i)
+
+  abort "#{step}: unexpected HTTP #{res.code}"
+end
+
+options = { deny: false }
+OptionParser.new do |o|
+  o.banner = "usage: bin/connect_operator --operator <n> [--deny]"
+  o.on("--operator N", Integer, "seeded operator number (1 to #{Rentsync::Seed::Operators::LIST.size})") do |n|
+    options[:operator] = n
+  end
+  o.on("--deny", "deny access on the PMS instead of approving") { options[:deny] = true }
+end.parse!
+abort "usage: bin/connect_operator --operator <n> [--deny]" unless options[:operator]
+
+number = options[:operator]
+pms_login = begin
+  Rentsync::Seed::Operators.pms_login(number)
+rescue ArgumentError => e
+  abort e.message
+end
+app = setting("APP_PUBLIC_URL").chomp("/")
+browser = Browser.new
+
+res = browser.post("#{app}/sign-in", email: Rentsync::Seed::Operators.email(number),
+                                     password: setting("RENTSYNC_OPERATOR_SEED_PASSWORD"))
+abort "sign-in to RentSync failed (HTTP #{res.code}); check RENTSYNC_OPERATOR_SEED_PASSWORD" unless res.code == "303"
+
+page = expect_status(browser.get("#{app}/connections"), 200, "connections page").body
+csrf = page[/name="csrf_token" value="([^"]+)"/, 1] || abort("no CSRF token on /connections")
+authorize = expect_status(browser.post("#{app}/connections", csrf_token: csrf), 303, "start connection")["location"]
+
+# The mock's approval form posts back to /oauth/authorize with the query's fields.
+fields = URI.decode_www_form(URI(authorize).query).to_h
+decision = if options[:deny]
+             { decision: "deny" }
+           else
+             { decision: "approve", login: pms_login, password: "#{pms_login}-pass" }
+           end
+form_url = authorize.split("?", 2).first
+callback = expect_status(browser.post(form_url, fields.merge(decision)), 302, "PMS approval")["location"]
+
+result_url = expect_status(browser.get(callback), 303, "callback")["location"]
+result = URI.decode_www_form(URI(result_url).query.to_s).to_h["result"]
+connections = JSON.parse(expect_status(browser.get("#{app}/v1/connections", accept: "application/json"), 200,
+                                       "connections JSON").body).fetch("data")
+summary = connections.map { |c| "#{c['pms_operator_name']} (#{c['status']}, #{c['id']})" }.join(", ")
+puts "operator #{number}: #{result}; connections: #{summary.empty? ? 'none' : summary}"
+wanted = options[:deny] ? "access_denied" : "connected"
+exit(result == wanted ? 0 : 1)

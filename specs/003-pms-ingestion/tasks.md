@@ -190,11 +190,11 @@ usable through access-token expiry, revocation and disconnection.
   responses for both grant types include `operator_id` and `operator_name`, and
   `operator_id` equals the operator in that grant's webhook envelopes
   (contracts/pms-changes.md).
-- [ ] T026 [P] [US1] Unit spec `api/spec/unit/auth/passwords_and_sessions_spec.rb`: bcrypt
+- [x] T026 [P] [US1] Unit spec `api/spec/unit/auth/passwords_and_sessions_spec.rb`: bcrypt
   verify; the session cookie token is 32 random bytes and only its SHA-256 is stored; idle
   expiry 12 h and absolute 7 days; sign-out sets `revoked_at`; CSRF tokens are per session and
   compared in constant time.
-- [ ] T027 [P] [US1] Unit spec `api/spec/unit/pms/oauth_spec.rb`:
+- [x] T027 [P] [US1] Unit spec `api/spec/unit/pms/oauth_spec.rb`:
   - the authorize URL carries `response_type=code`, `client_id`, the redirect URI, `scope=read`,
     `state`, `code_challenge` (S256 of the verifier) and `code_challenge_method=S256`, built on
     `PMS_PUBLIC_URL`;
@@ -206,7 +206,7 @@ usable through access-token expiry, revocation and disconnection.
   - `invalid_grant` or `invalid_client` → `needs_reauth`; a timeout, `5xx` or connection error
     → `renewal_failing` with `renewal_failures` incremented and a backoff, then `active` again on
     success.
-- [ ] T028 [P] [US1] Request spec `api/spec/requests/connections_spec.rb`:
+- [x] T028 [P] [US1] Request spec `api/spec/requests/connections_spec.rb`:
   - sign-in success, generic failure for unknown email and wrong password alike, the 6th attempt
     in a minute → 429 (per email and per IP);
   - `POST /connections` without a CSRF token → 403;
@@ -218,37 +218,62 @@ usable through access-token expiry, revocation and disconnection.
   - disconnect nulls both tokens, sets `disconnected`, and keeps raw events (AC5);
   - operator B gets 404 for operator A's connection pages and JSON (AC6, FR-023).
 
+  *Two assertions wait for later tables: "keeps raw events" needs `raw_events` (T040), and the
+  health page's 404 for another operator needs the health page (US4). The spec covers
+  disconnect and the 404 on another operator's disconnect now. Requests use
+  `https://app.test`, because the cookie is `Secure` off localhost. The spec also covers a
+  second, different PMS account for the same operator: refused as `different_pms_account`,
+  since `(operator_id, pms_client_id)` is unique.*
+
 ### Implementation for User Story 1
 
 - [x] T029 [US1] Mock PMS: add `operator_id` and `operator_name` to both token responses in
   `mock_pms/lib/mock_pms/oauth/service.rb` and `mock_pms/lib/mock_pms/api/oauth.rb`; update the
   `TokenResponse` schema in `specs/001-mock-pms/contracts/openapi.yaml`. Passes T025.
-- [ ] T030 [US1] Migration `api/db/migrations/002_auth_and_attempts.rb`: `sessions`
+- [x] T030 [US1] Migration `api/db/migrations/002_auth_and_attempts.rb`: `sessions`
   (`token_sha256` bytea unique, `csrf_secret`, `created_at`, `last_seen_at`, `revoked_at`) and
   `connection_attempts` (`state_sha256` bytea unique, `code_verifier` enc, `expires_at` =
   created + 10 min, `used_at`, `outcome` in `connected|denied|failed|expired`, `error_code`).
   Operator seeding in `api/lib/rentsync/seed/operators.rb`: one operator per mock PMS operator,
   synthetic emails `operator<n>@example.test`, password from
   `RENTSYNC_OPERATOR_SEED_PASSWORD`, idempotent.
-- [ ] T031 [US1] `api/lib/rentsync/auth/{passwords,sessions,csrf,sign_in_throttle}.rb` and the
+  *Both tables also have `operator_id`, and `connection_attempts` has `created_at` for the
+  purge. The mock's admin API has no operator list, so `Seed::Operators::LIST` mirrors the
+  mock's fixed seed (three operators, by name and mock login). `bin/connect_operator` uses the
+  same list. Existing operators are left unchanged.*
+- [x] T031 [US1] `api/lib/rentsync/auth/{passwords,sessions,csrf,sign_in_throttle}.rb` and the
   session middleware: cookie `rentsync_session`, `HttpOnly`, `Secure` unless `APP_PUBLIC_URL`
   is `http://localhost…`, `SameSite=Lax`. The throttle uses the mock's Redis token-bucket script,
   copied now into `api/lib/rentsync/rate_limit/token_bucket.lua`, at 5 per minute.
   Passes T026.
-- [ ] T032 [US1] `api/lib/rentsync/pms/oauth.rb`: the authorize URL, code exchange and renewal
+- [x] T032 [US1] `api/lib/rentsync/pms/oauth.rb`: the authorize URL, code exchange and renewal
   lease, with the state machine transitions in data-model.md. Passes T027.
-- [ ] T033 [US1] Pages and routes in `api/lib/rentsync/web/` (ERB views, one small stylesheet,
+  *The renewal backoff (5 s doubling to a 300 s cap) is kept in `renewal_lease_until`, so
+  nobody retries before it ends. A refusal other than `invalid_grant` or `invalid_client` counts
+  as temporary (FR-006). The connect flow is in `pms/connect.rb`, and `Pms.redirect_uri` is
+  shared with `Registration`. The live check against the mock renewed a real token.*
+- [x] T033 [US1] Pages and routes in `api/lib/rentsync/web/` (ERB views, one small stylesheet,
   no JavaScript): `/sign-in`, `/sign-out`, `/connections` (list, connect, reconnect, disconnect),
   `/connections/callback`, and the `/v1/connections` JSON alias, per contracts/openapi.yaml.
   Every query is scoped by the session's operator. Passes T028.
-- [ ] T034 [US1] `api/bin/connect_operator --operator <n>`: a headless driver of the browser
+  *The pages are a Grape API (`api/lib/rentsync/api/pages.rb`), so they get route-template
+  metric labels; the views and renderer are in `web/`. The stylesheet is inline in the layout.*
+- [x] T034 [US1] `api/bin/connect_operator --operator <n>`: a headless driver of the browser
   side (sign in to RentSync, follow the redirect, post the mock's approval form, follow the
   callback) using `Net::HTTP` with a cookie jar. It runs on the developer machine or CI runner,
   not in a container (research R13), and never prints passwords or tokens.
-- [ ] T035 [US1] Purge of `connection_attempts` older than 7 days, as a worker job under the
+- [x] T035 [US1] Purge of `connection_attempts` older than 7 days, as a worker job under the
   `daily_purge` lease (T054 adds receipts to the same job).
 
 **Checkpoint**: quickstart §2 passes locally.
+*2026-10-29, partly met. Passing locally:*
+- *steps 1 to 3: connect, deny, and the headless driver, with a reconnect that reuses the row;*
+- *a forced live renewal against the mock;*
+- *step 6's scoping, in the request spec.*
+
+*Still to come:*
+- *steps 4 and 5 need **Reconcile now** (US3);*
+- *step 6's health URL needs US4.*
 
 ---
 

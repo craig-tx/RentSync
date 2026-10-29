@@ -58,6 +58,7 @@ One try at connecting (research R7). Short-lived.
 | operator_id | FK operators | |
 | state_sha256 | bytea unique | |
 | code_verifier | text **enc** | PKCE |
+| created_at | timestamptz | the purge's age |
 | expires_at | timestamptz | created + 10 min |
 | used_at | timestamptz null | single use: `UPDATE … WHERE used_at IS NULL` |
 | outcome | text null | `connected`, `denied`, `failed`, `expired` |

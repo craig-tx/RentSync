@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= h(title) %> - RentSync</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d2433; --muted: #5b6475; --bg: #fff; --line: #d8dce4; --accent: #1f5fbf; --bad: #a32020; --good: #1d6b3a; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e6e9ef; --muted: #a3abba; --bg: #14171c; --line: #2c323c; --accent: #7aa7ff; --bad: #ff8a8a; --good: #7fd69c; } }
+  body { font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); max-width: 50rem; margin: 0 auto; padding: 1rem; }
+  header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: .5rem; margin-bottom: 1.5rem; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { text-align: left; padding: .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  form.inline { display: inline; }
+  label { display: block; margin: .75rem 0 .25rem; }
+  input[type=email], input[type=password] { width: 100%; max-width: 22rem; padding: .4rem; font: inherit; }
+  button { font: inherit; padding: .35rem .9rem; border: 1px solid var(--accent); background: transparent; color: var(--accent); border-radius: 4px; cursor: pointer; }
+  .notice { padding: .6rem .8rem; border-left: 4px solid var(--accent); }
+  .error { color: var(--bad); }
+  .status-active { color: var(--good); }
+  .status-needs_reauth, .status-renewal_failing { color: var(--bad); }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <strong>RentSync</strong>
+<% if signed_in -%>
+  <form method="post" action="/sign-out" class="inline">
+    <input type="hidden" name="csrf_token" value="<%= h(csrf) %>">
+    <button type="submit">Sign out</button>
+  </form>
+<% end -%>
+</header>
+<main>
+<%= body %>
+</main>
+</body>
+</html>
