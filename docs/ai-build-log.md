@@ -1035,13 +1035,14 @@ should show "trying again" and then success on the new host.
   - **T055:** SSM, `chronyc` and the tag audit pass. The HCP secret search
     (`audit-hcp-secrets.rb`, #52) passes for all 7 secrets by value. The security groups allow
     only 80 and 443 from anywhere, port 22 is closed, and isolation holds both ways.
+    On 2026-10-29 the operator installed the Session Manager plugin and opened an interactive
+    `ssm start-session` to a host shell, so T055 is ticked.
   - **T065:** `dev-staging` passes 001 §4 to §9 in full, including a public HTTPS webhook to
     a throwaway receiver on the operator's server, with both signatures valid.
     `prod-us` passes the non-disruptive checks.
   - **T071:** the operator ran quickstart §5 (OpenObserve) and reports all passed. Ticked.
 - **Decisions:** the operator chose not to run the disruptive checks on prod (stopping Redis,
-  chaos, the harness reset and scenarios), so T065 stays open for them. T055 stays open for
-  an interactive `ssm start-session`, which needs the Session Manager plugin.
+  chaos, the harness reset and scenarios), so T065 stays open for them.
 - **Findings (#50, not fixed):**
   - `/run/rentsync/env`'s `IMAGE_TAG` goes stale after a deploy.
   - `/healthz` is degraded for up to 5 s after `/admin/reset`.

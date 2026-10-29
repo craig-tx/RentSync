@@ -648,7 +648,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   are the record of the IPs). Record the elapsed time from the first apply to three hosts
   serving HTTPS, excluding DNS propagation, in `docs/ai-build-log.md`, against SC-001's 60
   minutes.
-- [ ] T055 [US1] Run quickstart §2 and §9a's tag audit:
+- [X] T055 [US1] Run quickstart §2 and §9a's tag audit:
   - `nmap` against each IP;
   - `aws ssm start-session`;
   - search the downloaded state for each admin token;
@@ -668,6 +668,9 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   all seven secrets by value; the security groups allow only 80 and 443 from anywhere (plus 5080
   on telemetry from the two environment subnets); and the §2 isolation curls pass both ways.
   Left: an interactive `aws ssm start-session`, which needs the Session Manager plugin.*
+
+  *2026-10-29: the operator installed the Session Manager plugin, and an interactive
+  `aws ssm start-session` through the `rentsync` profile reached a host shell. All of T055 passes.*
 
 **Checkpoint**: three reachable hosts, with only 80 and 443 open and every resource tagged.
 
