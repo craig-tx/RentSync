@@ -6,8 +6,9 @@
 # mock's form, follow the callback. It runs on the developer machine or CI runner, not in a
 # container, because the redirects carry the public URLs.
 #
-#   bin/connect_operator --operator <n> [--deny]
+#   ruby bin/connect_operator --operator <n> [--deny]
 #
+# Standard library only, so it runs without `bundle install` on the host.
 # n is 1 to 3 (Rentsync::Seed::Operators). Settings come from the environment, else the repo's
 # .env: APP_PUBLIC_URL and RENTSYNC_OPERATOR_SEED_PASSWORD. The mock's seeded operators use the
 # mock's development passwords. Passwords, tokens, codes and states are never printed.

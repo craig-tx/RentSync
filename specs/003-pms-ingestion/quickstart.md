@@ -31,7 +31,8 @@ client ID (never its secrets) and the seeded operator emails.
    under 2 minutes.
 2. Repeat but choose **Deny**. **Expected**: "access was denied", no new connection.
 3. Headless equivalent, used by CI. It drives the browser side, so it runs on the host machine,
-   not in a container: `cd api && bundle exec bin/connect_operator --operator 1`.
+   not in a container: `cd api && ruby bin/connect_operator --operator 1`. It uses only Ruby's
+   standard library, so it needs no `bundle install` on the host.
 4. Wait 6 minutes (past the 5-minute access token), then **Reconcile now**.
    **Expected**: the run succeeds; logs show one `token_renewed` event and no 401 from the PMS.
 5. Revoke the grant (`POST /admin/grants/{id}/revoke` on the mock), then **Reconcile now**.
