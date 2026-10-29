@@ -135,13 +135,15 @@ components:
 
     TokenResponse:
       type: object
-      required: [access_token, token_type, expires_in, refresh_token, scope]
+      required: [access_token, token_type, expires_in, refresh_token, scope, operator_id, operator_name]
       properties:
         access_token: { type: string }
         token_type: { type: string, const: Bearer }
         expires_in: { type: integer, description: Seconds; default 300 }
         refresh_token: { type: string, description: Single-use; rotated on every refresh }
         scope: { type: string, const: read }
+        operator_id: { type: string, description: "The grant's operator; the same value as its webhook envelopes' operator_id (feature 003 contracts/pms-changes.md)" }
+        operator_name: { type: string, description: The operator's display name }
 
     Money:
       type: object

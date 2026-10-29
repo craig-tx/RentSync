@@ -66,7 +66,7 @@ locally and in CI.
   image for web and worker, non-root user, `GIT_SHA` build arg into `SERVICE_VERSION`,
   `ENV MALLOC_ARENA_MAX=2`, `EXPOSE 4002`) and `api/.dockerignore`.
   *Done on `ruby:4.0-slim`, the base the mock's Dockerfile now uses, so both images share one
-  runtime; CI still tests on Ruby 3.3.*
+  runtime; CI still tests on Ruby 3.3. Approved by the operator on 2026-10-29.*
 - [x] T003 [P] Create `api/.rubocop.yml` (copy the mock's, same cops, including the cop that
   forbids direct `Logger` calls outside `logging.rb`) and `api/.rspec`.
 - [x] T004 [P] Create `api/config/puma.rb`: single mode (no `workers`), `threads 3, 3`,
@@ -155,6 +155,9 @@ registration, and the shared tables every story uses.
   - two concurrent calls make exactly one `POST /admin/clients` (the advisory lock) and leave
     exactly one active row;
   - the client and signing secrets never appear in logs or output.
+
+  *Only live connections (`active`, `renewal_failing`) go to `needs_reauth`, per data-model.md's
+  state machine; disconnected ones stay disconnected. Approved by the operator on 2026-10-29.*
 - [x] T021 `api/bin/setup`, adapted from the mock's. It creates the database if missing,
   migrates, seeds operators (T030, once it exists), and runs `Registration.ensure!` (skipped by
   `--test-db-only`). `--deploy` is safe to rerun. It prints the PMS client ID and the operator
@@ -183,7 +186,7 @@ usable through access-token expiry, revocation and disconnection.
 
 ### Tests for User Story 1 (write first; they must fail) ⚠️
 
-- [ ] T025 [P] [US1] Mock PMS request spec `mock_pms/spec/requests/oauth_spec.rb`: token
+- [x] T025 [P] [US1] Mock PMS request spec `mock_pms/spec/requests/oauth_spec.rb`: token
   responses for both grant types include `operator_id` and `operator_name`, and
   `operator_id` equals the operator in that grant's webhook envelopes
   (contracts/pms-changes.md).
@@ -217,7 +220,7 @@ usable through access-token expiry, revocation and disconnection.
 
 ### Implementation for User Story 1
 
-- [ ] T029 [US1] Mock PMS: add `operator_id` and `operator_name` to both token responses in
+- [x] T029 [US1] Mock PMS: add `operator_id` and `operator_name` to both token responses in
   `mock_pms/lib/mock_pms/oauth/service.rb` and `mock_pms/lib/mock_pms/api/oauth.rb`; update the
   `TokenResponse` schema in `specs/001-mock-pms/contracts/openapi.yaml`. Passes T025.
 - [ ] T030 [US1] Migration `api/db/migrations/002_auth_and_attempts.rb`: `sessions`
