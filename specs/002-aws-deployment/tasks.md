@@ -648,7 +648,7 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
   are the record of the IPs). Record the elapsed time from the first apply to three hosts
   serving HTTPS, excluding DNS propagation, in `docs/ai-build-log.md`, against SC-001's 60
   minutes.
-- [ ] T055 [US1] Run quickstart §2 and §9a's tag audit:
+- [X] T055 [US1] Run quickstart §2 and §9a's tag audit:
   - `nmap` against each IP;
   - `aws ssm start-session`;
   - search the downloaded state for each admin token;
@@ -661,6 +661,16 @@ are 80 and 443, and no long-lived AWS key exists anywhere.
 
   *2026-10-28, agent-run part: `nmap` passed (only 80 and 443 open on all three IPs). The SSM,
   `chronyc`, tag-audit, state and run-log checks need the operator's AWS and HCP credentials.*
+
+  *2026-10-28, through the `rentsync` operator role (#50): SSM run-command works on all three
+  hosts; `chronyc` is synchronized on each; the tag audit finds every volume and Elastic IP
+  tagged; `audit-hcp-secrets.rb` (#52) finds no secret in any state version or run log, searching
+  all seven secrets by value; the security groups allow only 80 and 443 from anywhere (plus 5080
+  on telemetry from the two environment subnets); and the §2 isolation curls pass both ways.
+  Left: an interactive `aws ssm start-session`, which needs the Session Manager plugin.*
+
+  *2026-10-29: the operator installed the Session Manager plugin, and an interactive
+  `aws ssm start-session` through the `rentsync` profile reached a host shell. All of T055 passes.*
 
 **Checkpoint**: three reachable hosts, with only 80 and 443 open and every resource tagged.
 
@@ -775,6 +785,12 @@ public webhook verifies, and a client from one deployment doesn't exist on the o
   HTTPS, `/metrics` 404, `/healthz` ok on `c5ccd8d`), and so did §9's `/admin` 401. §4 needs each
   deployment's `ADMIN_TOKEN` from SSM, so it is still the operator's.*
 
+  *2026-10-28, through the operator role (#50): §4 passed in full on `dev-staging` (001 §4 to
+  §9, plus one public HTTPS webhook with a valid signature), and chaos is back to 0. On
+  `prod-us` only the non-disruptive checks ran, all passing: connect, signed webhooks with
+  retries, replay, rate limit, 401s, chaos rates 0, and logs. The operator chose not to stop
+  Redis, inject chaos, reset the harness or run scenarios on production. Left: those, if wanted.*
+
 **Checkpoint**: both deployments pass every feature 001 check.
 
 ---
@@ -825,7 +841,7 @@ Ingest stays inside the VPC.
   Re-run the terraform tests.
 - [ ] T070 [US3] **🧑 OPERATOR**: apply `rentsync-shared-us` (confirm; this replaces the
   telemetry host). Sign in to `https://telemetry.rentsync.org` once.
-- [ ] T071 [US3] Run quickstart §5 and record the results in `docs/ai-build-log.md`:
+- [x] T071 [US3] Run quickstart §5 and record the results in `docs/ai-build-log.md`:
   - the `deployment.environment` and `deployment.id` filters;
   - the correlation ID search;
   - the anonymous visit;
@@ -835,6 +851,10 @@ Ingest stays inside the VPC.
   *2026-10-28, agent-run part: the anonymous visit passed (HTTPS, a Let's Encrypt production
   certificate, 308 to `/web/`, and the stream and search APIs return 401). The rest needs
   sign-in or the telemetry host, so it is still the operator's.*
+
+  *2026-10-28: the operator ran the rest and reports all passed: the `deployment.environment`
+  and `deployment.id` filters, the correlation ID search, the stop and start test, and SC-008
+  timing (the measured time was not recorded). See #50.*
 
 **Checkpoint**: one telemetry UI shows both deployments, separated.
 
