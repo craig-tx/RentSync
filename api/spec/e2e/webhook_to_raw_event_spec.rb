@@ -168,6 +168,29 @@ RSpec.describe "POST /webhooks/pms end to end", :committed do
     end
   end
 
+  describe "attributing rejections to an operator (US4)" do
+    it "attributes a validly signed but malformed delivery from its authenticated body, never its headers" do
+      dropped = JSON.generate(JSON.parse(body_for).except("data"))
+      deliver(dropped, "PMS-Event-Id" => "evt_FROM_HEADER", "PMS-Event-Type" => "x-header")
+      long = body_for(object: { "id" => "pay_1", "pad" => "x" * 400 })
+      deliver(long.byteslice(0, long.bytesize / 2), event_id: "evt_1")
+      rows = receipts.order(:id).all
+      expect(rows.map { |r| r[:reason] }).to eq(%w[malformed_body malformed_body])
+      expect(rows.map { |r| [r[:operator_id], r[:connection_id]] }.uniq)
+        .to eq([[connection.operator_id, connection.id]])
+      expect(rows.first).to include(event_id: "evt_1", event_type: "payment.created")
+    end
+
+    it "attributes a stale but genuine delivery, and never one whose signature failed" do
+      body = body_for
+      deliver(body, "PMS-Signature" => signature(body, t: Time.now.to_i - 600))
+      deliver(body, "PMS-Signature" => signature(body, secret: "wrong"))
+      rows = receipts.order(:id).all
+      expect(rows.map { |r| [r[:reason], r[:operator_id]] })
+        .to eq([["stale_timestamp", connection.operator_id], ["bad_signature", nil]])
+    end
+  end
+
   describe "other requests to the path" do
     it "answers 405 to anything but POST, and 404 below the path, without receipts" do
       expect(deliver(body_for, method: Net::HTTP::Get).code).to eq("405")

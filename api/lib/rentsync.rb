@@ -50,6 +50,7 @@ module Rentsync
     jobs/daily_purge
     reconciliation/run
     reconciliation/scheduler
+    health/report
     app
     webhooks/signature
     webhooks/envelope

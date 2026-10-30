@@ -14,7 +14,7 @@
   <tbody>
 <% connections.each do |con| -%>
     <tr>
-      <td><%= h(con.pms_operator_name) %></td>
+      <td><a href="/connections/<%= h(con.public_id) %>/health"><%= h(con.pms_operator_name) %></a></td>
       <td class="status-<%= h(con.status) %>"><%= h(con.status) %></td>
       <td><%= h(time(con.connected_at)) %><% if con.disconnected_at %><br><span class="muted">disconnected <%= h(time(con.disconnected_at)) %></span><% end %></td>
       <td>

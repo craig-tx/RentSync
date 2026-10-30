@@ -10,7 +10,7 @@ module Rentsync
       include ERB::Util
 
       VIEWS = File.expand_path("views", __dir__)
-      TEMPLATES = %w[layout sign_in connections message].to_h do |name|
+      TEMPLATES = %w[layout sign_in connections health message].to_h do |name|
         [name, ERB.new(File.read(File.join(VIEWS, "#{name}.html.erb")), trim_mode: "-")]
       end.freeze
 

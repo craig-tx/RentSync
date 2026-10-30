@@ -552,7 +552,7 @@ reconciliation, then compare the health page with `/admin/receipts`.
 
 ### Tests for User Story 4 (write first; they must fail) ⚠️
 
-- [ ] T058 [P] [US4] Unit spec `api/spec/unit/health/report_spec.rb`: with fixed rows, the
+- [X] T058 [P] [US4] Unit spec `api/spec/unit/health/report_spec.rb`: with fixed rows, the
   report returns the Health schema in contracts/openapi.yaml exactly:
   - received total, by path and by type; duplicates and rejections over 90 days, by reason;
   - `last_successful_sync_at` is the later of the newest webhook-recorded event and the newest
@@ -560,16 +560,31 @@ reconciliation, then compare the health page with `/admin/receipts`.
   - the last run with `last_succeeded_at` and `next_due_at`;
   - at most 50 recent rejections, with only time, reason, event type and event ID;
   - `unknown_operator` receipts never appear in any operator's report.
-- [ ] T059 [P] [US4] Request spec `api/spec/requests/health_spec.rb`: the HTML and JSON views
+- [X] T059 [P] [US4] Request spec `api/spec/requests/health_spec.rb`: the HTML and JSON views
   agree; operator B gets 404 for operator A's connection; failed runs show their error code and
   last success (US4 AC3); no payload content, header value or tenant name appears in the HTML.
 
 ### Implementation for User Story 4
 
-- [ ] T060 [US4] `api/lib/rentsync/health/report.rb`: SQL aggregates, scoped by operator.
+- [X] T060 [US4] `api/lib/rentsync/health/report.rb`: SQL aggregates, scoped by operator.
   Passes T058.
-- [ ] T061 [US4] The health page and `/v1/connections/{id}/health` JSON in
+- [X] T061 [US4] The health page and `/v1/connections/{id}/health` JSON in
   `api/lib/rentsync/web/` and `api/lib/rentsync/api/`. Passes T059.
+
+  *2026-10-29 (T058–T061):*
+  - *T058, T059 and the new receiver examples were seen failing first. Two T059 examples, the
+    404 and "never shows", passed early only because the route did not exist yet; they test
+    the real route now.*
+  - *Attribution (a design change):* a stale or malformed delivery whose signature verified is
+    now attributed to its operator and connection. The operator, event ID and type are read
+    from the authenticated body, by parsing it or, for a truncated one, matching the first
+    fields. They never come from headers. So, as quickstart §3 and US4's independent test
+    expect, every malformed delivery shows on the operator's health page. Deliveries that
+    fail the signature check stay unattributed.
+  - *Health is scoped by connection. Times are shown in UTC, as on the connections page.
+    Reconcile now redirects to the health page, as the contract says.*
+  - *Mutation checks, each caught: unscoped receipts, unscoped events, no 90-day window, and
+    looking the connection up without the operator.*
 
 **Checkpoint**: all four stories work locally; quickstart §2–§4 pass.
 

@@ -69,10 +69,11 @@ module Rentsync
         envelope = Envelope.parse(body, event_id: env["HTTP_PMS_EVENT_ID"])
         Recorder.record!(pms_client: clients[index], envelope: envelope, body: body, delivery: delivery)
       rescue Signature::Failure => e
-        Recorder.reject!(e.reason, body: body, delivery: delivery,
-                                   pms_client_id: e.secret_index && clients[e.secret_index].id)
+        # Only a stale delivery passed the signature; anything else is not attributed to anyone.
+        known = e.secret_index ? Recorder.attribution(clients[e.secret_index], body) : {}
+        Recorder.reject!(e.reason, body: body, delivery: delivery, **known)
       rescue Envelope::Invalid => e
-        Recorder.reject!(e.reason, body: body, delivery: delivery, pms_client_id: clients[index].id)
+        Recorder.reject!(e.reason, body: body, delivery: delivery, **Recorder.attribution(clients[index], body))
       end
 
       # At most MAX_BYTES + 1 bytes, whatever Content-Length claims.

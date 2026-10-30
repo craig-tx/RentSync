@@ -68,10 +68,19 @@ module Rentsync
 
         def not_registered = message(503, "Not ready", "RentSync is not registered with the PMS yet. Run bin/setup.")
 
-        def connection_json(con)
-          { id: con.public_id, pms: con.pms_client.pms_key, pms_operator_name: con.pms_operator_name,
-            status: con.status, connected_at: con.connected_at&.utc&.iso8601,
-            disconnected_at: con.disconnected_at&.utc&.iso8601 }
+        def connection_json(con) = Health::Report.connection_json(con)
+
+        # The health report as HTML, or as JSON when asked for (US4).
+        def health(public_id, json:)
+          con = own_connection(public_id)
+          api_error!("not_found", "no such connection", 404) if con.nil? && json
+          return not_found unless con
+
+          report = Health::Report.new(con).to_h
+          return report if json
+
+          notice = params[:result] && RESULTS[params[:result].to_s]
+          html("health", title: "Connection health", report: report, connection: con, notice: notice)
         end
 
         def own_connections = PmsConnection.where(operator_id: operator.id).order(:id).eager(:pms_client).all
@@ -172,7 +181,19 @@ module Rentsync
 
         now = Clock.now
         con.this.update(reconcile_requested_at: now, next_reconcile_at: now)
-        see_other("/connections?result=reconcile_requested")
+        see_other("/connections/#{con.public_id}/health?result=reconcile_requested")
+      end
+
+      get "connections/:id/health" do
+        next see_other("/sign-in") unless operator
+
+        health(params[:id], json: wants_json?)
+      end
+
+      get "v1/connections/:id/health" do
+        api_error!("unauthenticated", "sign in first", 401) unless operator
+
+        health(params[:id], json: true)
       end
 
       get "v1/connections" do

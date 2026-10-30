@@ -47,6 +47,32 @@ module Rentsync
         end
       end
 
+      # Receipt columns for a delivery whose signature verified but which was still refused
+      # (stale, or malformed): the operator, event ID and type read from the authenticated body,
+      # never from headers, so the rejection shows on that operator's health page (US4).
+      def attribution(pms_client, body)
+        found = fields_in(body)
+        connection = found["operator_id"] &&
+                     PmsConnection.where(pms_client_id: pms_client.id, pms_operator_id: found["operator_id"]).first
+        { pms_client_id: pms_client.id, connection_id: connection&.id, operator_id: connection&.operator_id,
+          event_id: found["id"], event_type: Envelope::TYPES.include?(found["type"]) ? found["type"] : nil }
+      end
+
+      # Top-level id, type and operator_id from a body that may not parse (a truncated body still
+      # starts with them).
+      def fields_in(body)
+        text = body.to_s.dup.force_encoding(Encoding::UTF_8).scrub("")
+        parsed = begin
+          JSON.parse(text)
+        rescue JSON::ParserError
+          nil
+        end
+        %w[id type operator_id].to_h do |key|
+          value = parsed.is_a?(Hash) ? parsed[key] : text[/"#{key}"\s*:\s*"([^"\\]{1,100})"/, 1]
+          [key, value.is_a?(String) && !value.empty? ? value[0, 100] : nil]
+        end
+      end
+
       # A rejection's receipt, with whatever is known about the delivery.
       def reject!(reason, body:, delivery:, **known)
         raise ArgumentError, "unknown reason #{reason}" unless REASONS.include?(reason)
