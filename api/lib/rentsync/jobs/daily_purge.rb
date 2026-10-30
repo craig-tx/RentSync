@@ -3,8 +3,8 @@
 module Rentsync
   module Jobs
     # Once a day, whichever worker claims the daily_purge lease deletes short-lived rows past
-    # their retention (data-model.md): connection attempts after 7 days. T054 adds webhook
-    # receipts after 90 days to the same run.
+    # their retention (data-model.md): connection attempts after 7 days and webhook receipts after
+    # 90 days. Raw events are never purged.
     class DailyPurge
       include Logging::Loggable
 
@@ -12,16 +12,18 @@ module Rentsync
       EVERY_S = 86_400
       LEASE_S = 600
       ATTEMPTS_KEEP_S = 7 * 86_400
+      RECEIPTS_KEEP_S = 90 * 86_400
 
       # Returns the rows deleted (0 when the run was not due or another worker has it).
       def run_once
         now = Clock.now
         return 0 unless claim(now)
 
-        deleted = Rentsync.db[:connection_attempts].where { created_at < now - ATTEMPTS_KEEP_S }.delete
+        attempts = Rentsync.db[:connection_attempts].where { created_at < now - ATTEMPTS_KEEP_S }.delete
+        receipts = Rentsync.db[:webhook_receipts].where { received_at < now - RECEIPTS_KEEP_S }.delete
         Rentsync.db[:maintenance_leases].where(name: LEASE).update(last_run_at: now, lease_until: nil)
-        log.info("daily purge finished", connection_attempts: deleted)
-        deleted
+        log.info("daily purge finished", connection_attempts: attempts, webhook_receipts: receipts)
+        attempts + receipts
       end
 
       private

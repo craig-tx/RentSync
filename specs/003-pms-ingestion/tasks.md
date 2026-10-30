@@ -481,8 +481,12 @@ within the PMS's rate limit, resumably.
   - *Mutation checks, each caught: dropping `SKIP LOCKED`, dropping the status filter, not
     saving the cursor, not reading the shared block, and not setting it.*
 
-- [ ] T054 [US3] Extend the daily purge (T035) to delete `webhook_receipts` older than 90 days.
+- [X] T054 [US3] Extend the daily purge (T035) to delete `webhook_receipts` older than 90 days.
   Spec: raw events are untouched and the job runs once a day across two workers.
+
+  *2026-10-29: the two new examples were seen failing first. "Across two workers" uses two job
+  instances against one lease; the lease spec from T035 already covers a held lease. Raw events
+  are kept even when the receipts that point to them are purged.*
 - [ ] T055 [P] [US3] `api/bin/compare_with_pms [--wait <s>] [--reconcile]`: lists the mock's
   true events (`GET /admin/events`) for connected operators, optionally triggers and waits for
   one reconciliation, lists RentSync's (`/admin/raw_events`), and prints missing, duplicated and
