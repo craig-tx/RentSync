@@ -142,8 +142,10 @@ configuration, defaulting to 50 a minute against the mock's 60, so normal runs n
 
 When a `429` does arrive anyway:
 
-- RentSync stores `pms:<client>:blocked_until = now + Retry-After` in Redis (`SET … PXAT`,
-  keeping the later value), so **every** instance waits, not only the one that was refused;
+- RentSync stores `pms:<client>:blocked_until = now + Retry-After` in Redis, keeping the later
+  value, so **every** instance waits, not only the one that was refused. Small Lua scripts
+  set and read it by the Redis server's clock (`TIME`), as the bucket does, so hosts whose
+  clocks differ still agree on when the block ends;
 - the call is retried after at least `Retry-After`, then with exponential backoff and full
   jitter (base 1 s, cap 60 s) on further `429`s, `5xx` and timeouts;
 - after 6 failed attempts the run fails and is retried by R5's backoff.

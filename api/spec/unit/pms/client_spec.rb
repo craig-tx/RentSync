@@ -31,9 +31,13 @@ RSpec.describe Rentsync::Pms::Client do
     freeze_time(now)
   end
 
+  # The frozen clock in milliseconds, standing in for Redis's clock so these examples can move it.
+  def frozen_ms = (Rentsync::Clock.now.to_f * 1000).round
+
   # Sleeping advances the frozen clock, so shared blocks expire as they would in real time.
   def client(on_sleep: nil, random: -> { 1.0 })
     described_class.new(connection, base_url: pms.base_url, renewal: renewal, random: random, read_timeout: 0.5,
+                                    clock_ms: -> { frozen_ms },
                                     sleeper: lambda { |s|
                                       sleeps << s
                                       advance(s)
@@ -88,11 +92,19 @@ RSpec.describe Rentsync::Pms::Client do
   end
 
   it "keeps the later block when a shorter Retry-After arrives" do
+    described_class.block!("client_A", seconds: 30, now_ms: frozen_ms)
+    described_class.block!("client_A", seconds: 1, now_ms: frozen_ms)
+    expect(described_class.blocked_remaining_s("client_A", now_ms: frozen_ms)).to eq(30)
+    described_class.block!("client_A", seconds: 45, now_ms: frozen_ms)
+    expect(described_class.blocked_remaining_s("client_A", now_ms: frozen_ms)).to eq(45)
+    expect(described_class.blocked_remaining_s("client_A", now_ms: frozen_ms + 50_000)).to eq(0)
+  end
+
+  it "times blocks by the Redis server's clock, so hosts whose clocks differ agree" do
+    freeze_time(Time.now.utc + 3600) # this host's clock an hour ahead of Redis's
     described_class.block!("client_A", seconds: 30)
-    described_class.block!("client_A", seconds: 1)
-    expect(described_class.blocked_until("client_A")).to eq(now + 30)
-    described_class.block!("client_A", seconds: 45)
-    expect(described_class.blocked_until("client_A")).to eq(now + 45)
+    freeze_time(Time.now.utc - 3600) # another host's, an hour behind
+    expect(described_class.blocked_remaining_s("client_A")).to be_within(1).of(30)
   end
 
   it "retries 5xx with full jitter, base 1 s, and raises on the 6th failure" do

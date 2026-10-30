@@ -449,8 +449,11 @@ within the PMS's rate limit, resumably.
   *2026-10-29: T047–T049 were seen failing first: none could load
   (`uninitialized constant Rentsync::Pms::Client` and `Rentsync::Reconciliation`). Choices
   they pin:*
-  - *the shared Retry-After block keeps its time (`Rentsync::Clock`) as the value, set by a
-    small Lua compare-and-set that keeps the later block;*
+  - *the shared Retry-After block is set by a small Lua compare-and-set that keeps the later
+    block. It first used each host's clock. At the operator's request (2026-10-29) it now uses
+    the Redis server's clock, as the bucket does, so hosts whose clocks differ agree. The spec
+    for that was seen failing first, and a live run at 3 a minute waited out 4 blocks (40 s)
+    and succeeded;*
   - *a 401 forces one renewal and retries once, so a revoked grant ends in `needs_reauth`
     through the refresh's `invalid_grant`;*
   - *a reconciled `payment.created` takes the payment's own `received_at` as `occurred_at`,

@@ -30,7 +30,6 @@ module Rentsync
       MAX_ATTEMPTS = 6
       BACKOFF_BASE_S = 1
       BACKOFF_CAP_S = 60
-      BLOCK_SCRIPT = File.expand_path("block_until.lua", __dir__)
       RETRYABLE = [429, 500, 502, 503, 504].freeze
 
       attr_reader :rate_limit_waits, :rate_limit_wait_s
@@ -40,22 +39,22 @@ module Rentsync
 
       def self.block_key(client_id) = Rentsync::Redis.key("pms", client_id, "blocked_until")
 
-      # Blocks every instance for seconds, keeping a later block already set. The time is
-      # Rentsync::Clock's, stored as the value; the key's own expiry only cleans up.
-      def self.block!(client_id, seconds:)
-        until_ms = ((Clock.now.to_f + seconds) * 1000).round
+      # Blocks every instance for seconds, keeping a later block already set. Times come from the
+      # Redis server's clock, so hosts whose clocks differ agree; now_ms replaces it in specs only.
+      def self.block!(client_id, seconds:, now_ms: nil)
         Rentsync::Redis.evalsha(:pms_block_until, keys: [block_key(client_id)],
-                                                  argv: [until_ms, ((seconds + 60) * 1000).round])
+                                                  argv: [(seconds * 1000).round, now_ms.to_s])
       end
 
-      def self.blocked_until(client_id)
-        value = Rentsync::Redis.client.get(block_key(client_id))
-        value && Time.at(Rational(value.to_i, 1000)).utc
+      # Seconds left on the shared block, by the clock that set it; 0 when not blocked.
+      def self.blocked_remaining_s(client_id, now_ms: nil)
+        Rentsync::Redis.evalsha(:pms_block_remaining, keys: [block_key(client_id)], argv: [now_ms.to_s]) / 1000.0
       end
 
       def initialize(connection, base_url: Settings.pms_api_url, renewal: Renewal.new,
-                     sleeper: ->(s) { sleep s }, random: -> { rand }, read_timeout: 10)
+                     sleeper: ->(s) { sleep s }, random: -> { rand }, read_timeout: 10, clock_ms: nil)
         @connection = connection
+        @clock_ms = clock_ms # specs only: replaces Redis's clock for the shared block
         @client_id = connection.pms_client.client_id
         @base_url = base_url.chomp("/")
         @renewal = renewal
@@ -88,7 +87,7 @@ module Rentsync
           raise Failed, status if attempt >= MAX_ATTEMPTS
 
           retry_after = status == 429 ? Integer(headers["retry-after"].to_s, 10, exception: false).to_i : 0
-          self.class.block!(@client_id, seconds: retry_after) if retry_after.positive?
+          self.class.block!(@client_id, seconds: retry_after, now_ms: @clock_ms&.call) if retry_after.positive?
           wait(status == 429, [retry_after, self.class.backoff_s(attempt, @random.call)].max)
         end
       end
@@ -99,9 +98,9 @@ module Rentsync
       # attempts; the PMS is never called without a token.
       def meter!(attempt)
         loop do
-          blocked = self.class.blocked_until(@client_id)
-          if blocked && blocked > Clock.now
-            wait(true, blocked - Clock.now)
+          remaining = self.class.blocked_remaining_s(@client_id, now_ms: @clock_ms&.call)
+          if remaining.positive?
+            wait(true, remaining)
             next
           end
           take = RateLimit::Bucket.take("pms", @client_id, capacity: Settings.pms_rate_limit_per_minute)
@@ -152,6 +151,7 @@ module Rentsync
       end
     end
 
-    Rentsync::Redis.load_script(:pms_block_until, Client::BLOCK_SCRIPT)
+    Rentsync::Redis.load_script(:pms_block_until, File.expand_path("block_until.lua", __dir__))
+    Rentsync::Redis.load_script(:pms_block_remaining, File.expand_path("block_remaining.lua", __dir__))
   end
 end

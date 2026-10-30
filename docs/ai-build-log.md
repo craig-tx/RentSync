@@ -1178,7 +1178,7 @@ should show "trying again" and then success on the new host.
     under a lease.
   - **Also:** the **Reconcile now** button and route, the 90-day receipt purge,
     `bin/compare_with_pms`, four metrics, and ADR 0009.
-- **Tests:** 277 API examples pass; RuboCop is clean.
+- **Tests:** 278 API examples pass; RuboCop is clean.
   - Every new spec was seen failing first.
   - **Mutation checks** caught each of these:
     - dropping `SKIP LOCKED`;
@@ -1210,6 +1210,7 @@ should show "trying again" and then success on the new host.
   - all three seeded operators are connected, with their histories backfilled permanently;
   - one worker again;
   - chaos is 0, and the mock client's rate limit is back to the default.
+- **Clock fix (the operator asked for it):** the shared Retry-After block now uses the Redis  server's clock, as the bucket does, so containers on hosts whose clocks differ agree on when  it ends. Specs can still drive it through an optional `now_ms`. Checked live: at 3 a minute,  a backfill waited out 4 blocks (40 s) and succeeded.
 - **Next:** Phase 6 (US4, connection health), T058 onward.
 
 <!-- PR #55: free -->
