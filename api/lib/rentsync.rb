@@ -54,6 +54,7 @@ module Rentsync
     webhooks/receiver
     web/page
     api/pages
+    api/admin
   ].freeze
 
   # Fails fast on bad configuration, connects, optionally migrates, then loads the rest.

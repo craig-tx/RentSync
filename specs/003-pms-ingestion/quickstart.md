@@ -64,9 +64,13 @@ operators, triggers one reconciliation, then lists RentSync's raw events (`/admi
 
 Also:
 
-- a delivery signed with a wrong secret (`bin/send_test_webhook --bad-signature`) gets 401 and
+- a delivery signed with a wrong secret
+  (`docker compose exec -T api bundle exec bin/send_test_webhook --bad-signature`) gets 401 and
   shows as `bad_signature`;
 - one sent with `--timestamp-offset -600` shows as `stale_timestamp`.
+
+`bin/send_test_webhook` refuses to send a valid delivery unless given `--record`, because a raw
+event can never be removed.
 
 Reset chaos to 0 afterwards.
 

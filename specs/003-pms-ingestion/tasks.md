@@ -351,10 +351,22 @@ recorded with a reason.
     event-ID conflict.*
   - *Mutation checks, each caught: dropping the digest comparison, accepting any connection
     status, and skipping the size limit.*
-- [ ] T044 [P] [US2] `api/bin/send_test_webhook` (`--bad-signature`, `--timestamp-offset <s>`,
+- [X] T044 [P] [US2] `api/bin/send_test_webhook` (`--bad-signature`, `--timestamp-offset <s>`,
   `--malformed`, `--operator <pms_operator_id>`) and `api/lib/rentsync/api/admin.rb` with
   `/admin/raw_events` and `/admin/receipts` (admin token, constant-time comparison, no payloads),
   with request specs.
+
+  *2026-10-29: `admin_spec.rb` was seen failing first (7 of 7). Decisions:*
+  - *`/admin` takes the mock's `ADMIN_TOKEN` value (`Settings.admin_token` reads
+    `MOCK_PMS_ADMIN_TOKEN`), so the hosts need no new secret. The token is compared as SHA-256
+    digests with `OpenSSL.fixed_length_secure_compare`; an empty token never matches.*
+  - *`/admin/raw_events` also returns each event's `pms_operator_id`, and pages by an opaque
+    `next_cursor`.*
+  - *`bin/send_test_webhook` runs in the `api` container, where the signing secret can be
+    decrypted. It refuses a valid delivery without `--record`, because a test raw event would
+    be permanent.*
+  - *Checked live against the local stack: each flag got its contract status, and
+    `/admin/receipts` counted them.*
 - [ ] T045 [US2] Metrics `rentsync_webhook_receipts_total{outcome,reason}`,
   `rentsync_raw_events_total{arrival_path,type}` (R16), and the histogram
   `rentsync_webhook_ack_seconds` (buckets 0.05–5 s) on `/webhooks/pms`, from which SC-006's p95

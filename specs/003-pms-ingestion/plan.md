@@ -135,7 +135,9 @@ Stdlib, no gem: `openssl` (HMAC, AES-256-GCM, digests), `net/http`, `json`, `erb
 `.env.example` gains every new setting with a safe local value: `RENTSYNC_DATABASE_URL`,
 `RENTSYNC_REDIS_URL`, `RENTSYNC_ENCRYPTION_KEYS` (a clearly fake development key),
 `RENTSYNC_OPERATOR_SEED_PASSWORD`, `RENTSYNC_SESSION_SECRET`, `MOCK_PMS_ADMIN_TOKEN` (locally
-the mock's `ADMIN_TOKEN`, for registration, R9), the four URL settings (research R13), `RECONCILE_INTERVAL_S`, `RECONCILE_OVERLAP_S`, and the PMS bucket size. Hosts get the
+the mock's `ADMIN_TOKEN`, for registration, R9; RentSync's own `/admin` endpoints take the same
+value, so no new secret), the four URL settings (research R13), `RECONCILE_INTERVAL_S`,
+`RECONCILE_OVERLAP_S`, and the PMS bucket size. Hosts get the
 same names from `rentsync-render-env` ([host-changes.md](contracts/host-changes.md)).
 
 ### ADRs to write

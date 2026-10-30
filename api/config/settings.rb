@@ -46,6 +46,9 @@ module Rentsync
       def session_secret = required("RENTSYNC_SESSION_SECRET")
       # Only registration with the mock needs it (research R9).
       def mock_pms_admin_token = required("MOCK_PMS_ADMIN_TOKEN")
+      # RentSync's own /admin (contracts/openapi.yaml) takes the same ADMIN_TOKEN value, so the
+      # hosts need no new secret (plan.md "Configuration").
+      def admin_token = mock_pms_admin_token
 
       def pms_public_url = required("PMS_PUBLIC_URL").chomp("/")
       def pms_api_url = required("PMS_API_URL").chomp("/")
