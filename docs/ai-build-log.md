@@ -1253,6 +1253,66 @@ should show "trying again" and then success on the new host.
 - **Next:** Phase 7 (deploy to staging and production, FR-025), which needs the operator's
   steps from quickstart §5.
 
+### 2026-10-30: 003 Phase 7, repo side of the deploy (interactive)
+
+- **Done:** T062–T071. The operator steps (T072) and the deployed checks (T073, T074) remain.
+  - **Terraform:** `app_hostname` and RentSync's three write-only secrets, stored as SSM
+    SecureStrings under `<deployment>/rentsync/`, validated, and refusing the `.env.example`
+    values. The host depends on them. A `shared-us/api` repository uses the mock's lifecycle
+    policy, and hosts pull from both repositories.
+  - **Host:**
+    - render-env renders RentSync's keys;
+    - Compose runs `api` and `api_worker` behind an `api` profile, with memory limits;
+    - Caddy serves the app hostname;
+    - the Collector scrapes `api:4002`.
+  - **`rentsync-deploy`:**
+    - the ref is now `<sha>@sha256:<mock>+sha256:<api>`;
+    - the mock starts first, because the API registers through the mock's public URL;
+    - both images report healthy, or both roll back.
+  - **Release:** builds the API only once `API_ECR_REPOSITORY_URL` is set, and checks
+    `APP_URL` when the release carries the API. `bootstrap-github.sh` sets both, and the build
+    role's policy can now push to `*/api`.
+  - **CI:** a new `ingestion-e2e` job.
+- **Tests:**
+  - Every new test was seen failing first.
+  - All Terraform tests pass, and so do the infra shell tests, the bootstrap Ruby tests and
+    actionlint. The 295 API examples still pass, and RuboCop is clean.
+  - **Mutation checks** on `rentsync-deploy` caught each of these:
+    - no API health check;
+    - no API stop for an earlier ref;
+    - the two setups swapped.
+- **Found and fixed:**
+  - **The workspaces track `main`,** so the order T072 gave (apply shared, then merge) was
+    impossible, and the first release would have pushed to a repository that didn't exist yet.
+    These changes handle the transition instead:
+    - releases skip the API until `API_ECR_REPOSITORY_URL` is set;
+    - the environments derive the API repository from the mock's until the shared output
+      exists;
+    - a ref without an API digest runs the mock alone, which also covers rollbacks to earlier
+      releases and a replaced host booting on an old `image_tag`.
+
+    Runbook §Releasing RentSync's API gives the order that works.
+  - **User data too big:** the new host files took the gzipped user data to 17.9 KB, over
+    EC2's 16 KB limit, because cloud-init carried each file as base64. Plain YAML blocks bring
+    it to 12.2 KB. A module test decodes the user data and compares every file byte for byte.
+    This also changes the telemetry host's user data, so the shared apply replaces it.
+  - **Logs dropped:** the Collector's log filter kept only lines from the mock, so RentSync's
+    logs never reached OpenObserve. Both now arrive locally.
+  - **Duplicate metrics:** research R16 planned a scrape of `api_worker:4003` too, but the
+    worker renders the same Redis totals, which would store every series twice. Only `api` is
+    scraped.
+  - **`ingestion-e2e`, first local run:**
+    - The connect's backfill raced the burst and recorded every fact first, so no webhook
+      path was tested. The job now finishes the backfill first and requires at least one fact
+      by webhook.
+    - Retries running to exhaustion (about 254 s) used up `compare_with_pms`'s shared
+      deadline. Reconciliation now gets its own `--wait`.
+    - From a clean stack, 22 facts arrived by webhook, 1 was recovered by reconciliation, and
+      none were missing or duplicated.
+- **Not run locally:** the mock's specs, because the local image runs Ruby 4.0, which no
+  longer bundles `benchmark`; CI runs them on 3.3. This phase didn't touch `mock_pms/`.
+- **Next:** T072 (operator), then T073 and T074 after the merge, then Phase 8.
+
 <!-- PR #55: free -->
 
 <!-- PR #56: free -->
