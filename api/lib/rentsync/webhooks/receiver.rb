@@ -36,14 +36,28 @@ module Rentsync
       private
 
       def receive(env)
-        delivery = Delivery.from_env(env, correlation_id: Thread.current[:correlation_id], received_at: Clock.now)
-        body = read_body(env)
-        result = process(env, body, delivery)
-        respond(result, delivery)
-      rescue StandardError => e
-        log.error("webhook not recorded", error: e.class.name)
-        record_failure(body, delivery)
-        error(500, "internal_error")
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        begin
+          delivery = Delivery.from_env(env, correlation_id: Thread.current[:correlation_id], received_at: Clock.now)
+          body = read_body(env)
+          result = process(env, body, delivery)
+          count(result)
+          respond(result, delivery)
+        rescue StandardError => e
+          log.error("webhook not recorded", error: e.class.name)
+          record_failure(body, delivery)
+          error(500, "internal_error")
+        end
+      ensure
+        Metrics.observe("rentsync_webhook_ack_seconds", {}, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started)
+      end
+
+      # Labels come only from fixed lists (FR-024): outcomes, reason codes and the four types.
+      def count(result)
+        Metrics.increment("rentsync_webhook_receipts_total", outcome: result.outcome, reason: result.reason || "none")
+        return unless result.outcome == "recorded"
+
+        Metrics.increment("rentsync_raw_events_total", arrival_path: "webhook", type: result.event_type)
       end
 
       def process(env, body, delivery)
@@ -80,7 +94,7 @@ module Rentsync
       def record_failure(body, delivery)
         return unless delivery
 
-        Recorder.reject!("internal_error", body: body.to_s, delivery: delivery)
+        count(Recorder.reject!("internal_error", body: body.to_s, delivery: delivery))
       rescue StandardError => e
         log.error("webhook failure receipt not written", error: e.class.name)
       end

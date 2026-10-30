@@ -367,11 +367,19 @@ recorded with a reason.
     be permanent.*
   - *Checked live against the local stack: each flag got its contract status, and
     `/admin/receipts` counted them.*
-- [ ] T045 [US2] Metrics `rentsync_webhook_receipts_total{outcome,reason}`,
+- [X] T045 [US2] Metrics `rentsync_webhook_receipts_total{outcome,reason}`,
   `rentsync_raw_events_total{arrival_path,type}` (R16), and the histogram
   `rentsync_webhook_ack_seconds` (buckets 0.05–5 s) on `/webhooks/pms`, from which SC-006's p95
   is read, with an observability spec asserting no
   label carries an operator email, a token or tenant data.
+
+  *2026-10-29: `spec/requests/webhook_metrics_spec.rb` was seen failing first (3 of 4; the
+  no-leak example passed only because nothing was counted yet). The shared histogram buckets
+  gain a boundary at 2 s, so SC-006's p95 is read off a bucket rather than interpolated between
+  1 and 2.5. `buffer_spec`'s pinned bucket list was updated to match on purpose; this is a
+  deliberate change, not a weakened test. A `raw_events_total` type comes from the verified
+  envelope, never from the `PMS-Event-Type` header. The ack histogram has no labels and times
+  every answer, including 500s. Checked live on `/metrics`.*
 - [ ] T046 [US2] Write `docs/adr/0011-exactly-once-raw-events.md` (context, decision,
   alternatives, consequences), from research R3, R4 and R10.
 

@@ -16,7 +16,7 @@ RSpec.describe Rentsync::Metrics::Buffer do
     buffer.observe("h_seconds", { route: "/x" }, 0.02)
     buffer.observe("h_seconds", { route: "/x" }, 3.0)
     hist = buffer.swap![:histograms]["h_seconds"]["route=/x"]
-    expect(Rentsync::Metrics::BUCKETS).to eq([0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10])
+    expect(Rentsync::Metrics::BUCKETS).to eq([0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 2.5, 5, 10])
     expect(hist[:buckets][Rentsync::Metrics::BUCKETS.index(0.025)]).to eq(1)
     expect(hist[:buckets][Rentsync::Metrics::BUCKETS.index(5)]).to eq(1)
     expect(hist[:sum]).to be_within(1e-9).of(3.02)

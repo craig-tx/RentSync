@@ -23,8 +23,9 @@ module Rentsync
       REASONS = %w[missing_signature bad_signature stale_timestamp body_too_large malformed_body
                    unknown_operator no_active_connection conflicting_duplicate internal_error].freeze
 
-      Result = Data.define(:outcome, :reason, :raw_event_id, :duplicate_of_path) do
-        def initialize(outcome:, reason: nil, raw_event_id: nil, duplicate_of_path: nil) = super
+      # event_type: the verified envelope's type, once the body has been read.
+      Result = Data.define(:outcome, :reason, :raw_event_id, :duplicate_of_path, :event_type) do
+        def initialize(outcome:, reason: nil, raw_event_id: nil, duplicate_of_path: nil, event_type: nil) = super
       end
 
       module_function
@@ -39,7 +40,7 @@ module Rentsync
                                  **receipt, connection_id: connection&.id, operator_id: connection&.operator_id)
           end
 
-          result = insert(pms_client, connection, envelope, body, delivery)
+          result = insert(pms_client, connection, envelope, body, delivery).with(event_type: envelope.type)
           write_receipt(result, body: body, delivery: delivery, **receipt,
                                 connection_id: connection.id, operator_id: connection.operator_id)
           result
