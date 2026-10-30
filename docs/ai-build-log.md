@@ -1123,7 +1123,7 @@ should show "trying again" and then success on the new host.
   - **Tools:** `/admin/raw_events`, `/admin/receipts` and `bin/send_test_webhook`.
   - **Metrics:** receipts, raw events, and the acknowledgement-time histogram.
   - **ADR 0011.**
-- **Tests:** 236 API examples pass; RuboCop is clean.
+- **Tests:** 238 API examples pass; RuboCop is clean.
   - Every new spec was seen failing first.
   - The end-to-end spec is `:committed` and runs on a real local Puma, so "200 only after
     commit" is a real commit.
@@ -1154,7 +1154,9 @@ should show "trying again" and then success on the new host.
     because raw events are permanent.
   - **Histogram buckets:** the shared buckets gain 2 s, so SC-006's p95 is read off a bucket.
     `buffer_spec`'s pinned list was updated on purpose.
-- **Still open:** login CSRF on `POST /sign-in` awaits the operator's decision.
+- **Login CSRF (the operator asked for it):** `POST /sign-in` refuses cross-site posts
+  (by `Sec-Fetch-Site` or `Origin`) with 403, before the throttle. Clients that send neither
+  header are still allowed. Checked live; research R11 updated.
 - **Next:** Phase 5 (US3, reconciliation), T047 onward.
 
 <!-- PR #55: free -->

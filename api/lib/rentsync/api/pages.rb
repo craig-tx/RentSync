@@ -31,6 +31,17 @@ module Rentsync
 
         def csrf_ok? = Auth::Csrf.valid?(current_session, params[Auth::Csrf::FIELD])
 
+        # Login CSRF: sign-in has no session to hold a token, so a browser post from another site
+        # is refused by its Fetch Metadata and Origin headers. Clients sending neither (scripts,
+        # bin/connect_operator) are allowed; the password still has to be right.
+        def same_site_post?
+          site = env["HTTP_SEC_FETCH_SITE"]
+          return false if site && !%w[same-origin none].include?(site)
+
+          origin = env["HTTP_ORIGIN"]
+          origin.nil? || origin == URI(Settings.app_public_url).then { |u| "#{u.scheme}://#{u.authority}" }
+        end
+
         def wants_json? = env["HTTP_ACCEPT"].to_s.include?("application/json")
 
         def html(name, title:, code: 200, **locals)
@@ -72,6 +83,8 @@ module Rentsync
       end
 
       post "sign-in" do
+        next forbidden unless same_site_post?
+
         email = params[:email].to_s
         unless Auth::SignInThrottle.allow?(email: email, address: request.ip)
           next message(429, "Too many attempts", "Too many sign-in attempts. Wait a minute and try again.",

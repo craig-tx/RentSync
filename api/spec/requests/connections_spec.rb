@@ -72,6 +72,34 @@ RSpec.describe "connections", type: :request do
       expect(cookie).to match(/httponly/i).and match(/secure/i).and match(/samesite=lax/i)
     end
 
+    describe "refusing cross-site sign-in posts (login CSRF)" do
+      def sign_in_with(headers)
+        post "#{base}/sign-in", { email: "ann@example.test", password: password },
+             { "REMOTE_ADDR" => "203.0.113.5" }.merge(headers)
+      end
+
+      it "refuses a post from another site with 403, without a session or a throttle token" do
+        [{ "HTTP_ORIGIN" => "https://evil.test" }, { "HTTP_ORIGIN" => "null" },
+         { "HTTP_SEC_FETCH_SITE" => "cross-site" }, { "HTTP_SEC_FETCH_SITE" => "same-site" },
+         { "HTTP_ORIGIN" => "http://app.test", "HTTP_SEC_FETCH_SITE" => "cross-site" }].each do |headers|
+          sign_in_with(headers)
+          expect(last_response.status).to eq(403), headers.inspect
+          expect(last_response.headers["set-cookie"].to_s).not_to include("rentsync_session=")
+        end
+        expect(Rentsync.db[:sessions].count).to eq(0)
+        sign_in
+        expect(last_response.status).to eq(303)
+      end
+
+      it "accepts the app's own origin, same-origin and direct requests, and clients that send neither" do
+        [{ "HTTP_ORIGIN" => "http://app.test", "HTTP_SEC_FETCH_SITE" => "same-origin" },
+         { "HTTP_SEC_FETCH_SITE" => "none" }, {}].each do |headers|
+          sign_in_with(headers)
+          expect(last_response.status).to eq(303), headers.inspect
+        end
+      end
+    end
+
     it "gives the same generic error for an unknown email and a wrong password" do
       sign_in("nobody@example.test")
       unknown = [last_response.status, last_response.body[/<p class="error">[^<]*/]]

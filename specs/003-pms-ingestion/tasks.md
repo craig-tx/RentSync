@@ -249,6 +249,11 @@ usable through access-token expiry, revocation and disconnection.
   is `http://localhost…`, `SameSite=Lax`. The throttle uses the mock's Redis token-bucket script,
   copied now into `api/lib/rentsync/rate_limit/token_bucket.lua`, at 5 per minute.
   Passes T026.
+
+  *2026-10-29: at the operator's request, `POST /sign-in` now refuses login CSRF (research
+  R11). The check runs before the throttle, so a refused post never spends a throttle token.
+  The spec was seen failing first. Checked live: a forged `Origin` gets 403, and
+  `bin/connect_operator`, which sends neither header, still connects.*
 - [x] T032 [US1] `api/lib/rentsync/pms/oauth.rb`: the authorize URL, code exchange and renewal
   lease, with the state machine transitions in data-model.md. Passes T027.
   *The renewal backoff (5 s doubling to a 300 s cap) is kept in `renewal_lease_until`, so

@@ -266,6 +266,11 @@ updated in place (a hot row, and no per-delivery audit).
   `localhost`), `SameSite=Lax` (`Lax` lets the OAuth callback, a top-level GET from the PMS,
   carry the session). Sessions expire after 12 hours idle and 7 days absolute.
 - Every state-changing form carries a per-session CSRF token, checked in constant time.
+- Sign-in, which has no session to carry a token, refuses login CSRF by its request headers:
+  a `Sec-Fetch-Site` other than `same-origin` or `none`, or an `Origin` other than
+  `APP_PUBLIC_URL`'s, gets `403`. Clients that send neither header, such as scripts, are
+  allowed, because they cannot plant a session in someone else's browser. (Added 2026-10-29 at
+  the operator's request.)
 - Sign-in attempts are rate limited per email and per IP with the same Redis bucket (5 per
   minute), returning the same generic error for unknown email and wrong password.
 - Every query for connections, events, receipts and runs is scoped by `operator_id` from the
