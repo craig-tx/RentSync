@@ -93,6 +93,10 @@ grep -q 'arn:aws:iam::123456789012:oidc-provider/app.terraform.io' "$work/out/hc
   || fail "trust policy lacks the AWS account ID"
 grep -q '"aws:RequestedRegion": "eu-west-2"' "$work/out/hcp-terraform-policy.json" || fail "region not filled in"
 grep -q '"organization:example-org:project:RentSync:' "$work/out/hcp-terraform-trust.json" || fail "HCP Terraform organization not filled in"
+# The build role pushes exactly the two images a release ships (feature 003 research R15).
+[ "$(jq -c '[.Statement[] | select(.Sid == "PushImages") | .Resource] | flatten' "$work/out/github-build-policy.json")" \
+  = '["arn:aws:ecr:eu-west-2:123456789012:repository/*/mock_pms","arn:aws:ecr:eu-west-2:123456789012:repository/*/api"]' ] \
+  || fail "the build role may not push exactly the mock's and the API's images"
 # Each GitHub trust matches the subject prefix GitHub reported (contracts/bootstrap-iam.md).
 for f in "$work/out"/github-*-trust.json; do
   grep -q "\"$SUBJECT:" "$f" || fail "$(basename "$f") lacks the settings' GitHub subject"

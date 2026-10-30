@@ -1,0 +1,20 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+ruby ">= 3.3"
+
+# Each gem is justified in specs/003-pms-ingestion/plan.md "Dependencies" (Constitution VIII):
+# the same six runtime gems as the mock PMS, nothing new (research R18).
+gem "bcrypt"
+gem "grape"
+gem "pg"
+gem "puma"
+gem "redis"
+gem "sequel"
+
+group :development, :test do
+  gem "rack-test"
+  gem "rspec"
+  gem "rubocop"
+end

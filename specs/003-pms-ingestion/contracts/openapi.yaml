@@ -1,0 +1,201 @@
+openapi: 3.1.0
+info:
+  title: RentSync API (feature 003)
+  version: 0.3.0
+  description: |
+    RentSync's operator-facing pages, JSON endpoints and ops endpoints for feature 003.
+    The webhook receiver is specified in webhook-receiver.md. Pages (text/html) are
+    server-rendered (research R12); JSON endpoints serve the same data for the later dashboard.
+    Every operator-scoped route requires a session cookie and returns only the signed-in
+    operator's data (FR-023). State-changing forms require the session's CSRF token.
+
+servers:
+  - url: https://app.rentsync.org
+  - url: https://app-staging.rentsync.org
+  - url: http://localhost:4002
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: rentsync_session
+      description: HttpOnly, Secure (except localhost), SameSite=Lax; server stores only SHA-256 (R11)
+    adminToken:
+      type: http
+      scheme: bearer
+      description: ADMIN_TOKEN, constant-time compare; ops and test tooling only
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+
+    Connection:
+      type: object
+      required: [id, pms, pms_operator_name, status, connected_at]
+      properties:
+        id: { type: string, pattern: '^con_' }
+        pms: { type: string, const: mock_pms }
+        pms_operator_name: { type: string }
+        status: { type: string, enum: [active, renewal_failing, needs_reauth, disconnected] }
+        connected_at: { type: string, format: date-time }
+        disconnected_at: { type: [string, 'null'], format: date-time }
+
+    Health:
+      type: object
+      required: [connection, access_status, last_successful_sync_at, events_received, duplicates_ignored_90d, rejected_90d, rejected_by_reason_90d, last_reconciliation, recent_rejections]
+      properties:
+        connection: { $ref: '#/components/schemas/Connection' }
+        access_status:
+          type: object
+          properties:
+            status: { type: string, enum: [active, renewal_failing, needs_reauth, disconnected] }
+            access_expires_at: { type: [string, 'null'], format: date-time }
+            last_renewal_error: { type: [string, 'null'], description: A code only }
+        last_successful_sync_at: { type: [string, 'null'], format: date-time }
+        events_received:
+          type: object
+          properties:
+            total: { type: integer }
+            webhook: { type: integer }
+            reconciliation: { type: integer }
+            by_type: { type: object, additionalProperties: { type: integer } }
+        duplicates_ignored_90d: { type: integer }
+        rejected_90d: { type: integer }
+        rejected_by_reason_90d: { type: object, additionalProperties: { type: integer } }
+        last_reconciliation:
+          type: [object, 'null']
+          properties:
+            started_at: { type: string, format: date-time }
+            finished_at: { type: [string, 'null'], format: date-time }
+            outcome: { type: [string, 'null'], enum: [succeeded, failed, null] }
+            facts_added: { type: integer }
+            error_code: { type: [string, 'null'] }
+            last_succeeded_at: { type: [string, 'null'], format: date-time }
+            next_due_at: { type: string, format: date-time }
+        recent_rejections:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            properties:
+              received_at: { type: string, format: date-time }
+              reason: { type: string }
+              event_type: { type: [string, 'null'] }
+              event_id: { type: [string, 'null'] }
+          description: No tenant data, payload content, or header values (US4 AC2)
+
+paths:
+  # ---------------- Pages ----------------
+  /sign-in:
+    get:
+      summary: Sign-in page (HTML)
+      responses: { '200': { description: HTML form } }
+    post:
+      summary: Sign in
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string } } }
+      responses:
+        '303': { description: Signed in; Set-Cookie; redirect to /connections }
+        '200': { description: Form re-rendered with one generic error for any failure }
+        '429': { description: Too many attempts for this email or IP (R11) }
+  /sign-out:
+    post:
+      security: [{ session: [] }]
+      responses: { '303': { description: Session revoked; redirect to /sign-in } }
+
+  /connections:
+    get:
+      security: [{ session: [] }]
+      summary: Connections page (HTML), or JSON with Accept application/json
+      responses:
+        '200':
+          description: The operator's connections
+          content:
+            text/html: {}
+            application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Connection' } } } } }
+        '303': { description: No session; redirect to /sign-in }
+    post:
+      security: [{ session: [] }]
+      summary: Start connecting (CSRF)
+      responses: { '303': { description: Redirect to the PMS /oauth/authorize with state and S256 challenge } }
+
+  /connections/callback:
+    get:
+      security: [{ session: [] }]
+      summary: OAuth redirect target
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses:
+        '303': { description: Redirect to /connections with a result message (connected, denied, failed, expired, pms_operator_taken) }
+        '400': { description: Unknown, used, expired, or other operator's state; nothing stored }
+
+  /connections/{id}/disconnect:
+    post:
+      security: [{ session: [] }]
+      summary: Disconnect (CSRF); deletes credentials, keeps events (FR-007)
+      responses: { '303': { description: Redirect to /connections }, '404': { description: Not this operator's connection } }
+
+  /connections/{id}/reconcile:
+    post:
+      security: [{ session: [] }]
+      summary: Reconcile now (CSRF; FR-020); sets next_reconcile_at = now
+      responses: { '303': { description: Redirect to the health page }, '409': { description: Connection not active } }
+
+  /connections/{id}/health:
+    get:
+      security: [{ session: [] }]
+      summary: Health page (HTML), or JSON with Accept application/json
+      responses:
+        '200': { description: Health, content: { text/html: {}, application/json: { schema: { $ref: '#/components/schemas/Health' } } } }
+        '404': { description: Not this operator's connection }
+
+  # ---------------- JSON aliases for the later dashboard ----------------
+  /v1/connections:
+    get:
+      security: [{ session: [] }]
+      responses: { '200': { description: Same as /connections JSON }, '401': { description: No session } }
+  /v1/connections/{id}/health:
+    get:
+      security: [{ session: [] }]
+      responses: { '200': { description: Health JSON }, '401': { description: No session }, '404': { description: Not found } }
+
+  # ---------------- Admin (ops, tests) ----------------
+  /admin/raw_events:
+    get:
+      security: [{ adminToken: [] }]
+      summary: Raw event IDs and metadata for comparison with the PMS (quickstart SC-003); no payloads
+      parameters:
+        - { name: pms_operator_id, in: query, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses: { '200': { description: Page of {event_id, business_key, event_type, occurred_at, arrival_path} } }
+  /admin/receipts:
+    get:
+      security: [{ adminToken: [] }]
+      summary: Receipt counts by outcome and reason, all operators, including unknown_operator
+      responses: { '200': { description: Counts } }
+
+  # ---------------- Ops ----------------
+  /healthz:
+    get:
+      summary: Same fields as the mock PMS's Health (db, redis, worker_heartbeat_age_s, version, deployment_id, time, started_at, *_ct)
+      responses: { '200': { description: ok }, '503': { description: degraded } }
+  /healthz/live:
+    get:
+      responses: { '200': { description: process up } }
+  /metrics:
+    get:
+      summary: Prometheus text; blocked at Caddy (404 publicly), scraped over the Compose network
+      responses: { '200': { description: metrics } }

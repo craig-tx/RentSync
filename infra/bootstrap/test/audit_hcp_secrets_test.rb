@@ -235,7 +235,8 @@ class AuditHcpSecretsTest < Minitest::Test
     assert_equal({ "dev-staging admin_token" => ADMIN, "prod-us admin_token" => ADMIN }, values)
     assert_equal "AccessDenied", missing["prod-us postgres_password"]
     assert_equal "too short to search for", missing["shared-us openobserve/root_password"]
-    assert_equal 7, calls.size
+    assert_equal "AccessDenied", missing["prod-us rentsync/encryption_keys"] # feature 003
+    assert_equal 13, calls.size
     assert(calls.all? { |c| c.first(3) == %w[aws ssm get-parameter] && c.include?("--with-decryption") })
     assert(calls.all? { |c| c[c.index("--profile") + 1] == "rentsync" })
 

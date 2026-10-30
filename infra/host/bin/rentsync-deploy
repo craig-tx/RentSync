@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# Deploys a mock PMS image on an environment host and proves it healthy, or puts the previous
-# image back (feature 002 research R9; contracts/host-interface.md §rentsync-deploy).
+# Deploys a release on an environment host and proves it healthy, or puts the previous release
+# back (feature 002 research R9; contracts/host-interface.md §rentsync-deploy). A release is the
+# mock PMS image and, from feature 003, RentSync's API image at the same commit (003 research
+# R15): both start, both report the commit, or both go back.
 #
-#   rentsync-deploy <ref>         deploy <sha>@sha256:<digest> (releases always pin the digest,
-#                                 so the host pulls exactly the image CI built), or a bare <sha>
+#   rentsync-deploy <ref>         deploy <sha>@sha256:<mock digest>[+sha256:<api digest>]
+#                                 (releases always pin the digests, so the host pulls exactly the
+#                                 images CI built), or a bare <sha> (the mock only). A ref without
+#                                 an API digest, like every release before feature 003, runs the
+#                                 mock alone and stops the API.
 #   rentsync-deploy --rollback    deploy previous_image_tag
 #   rentsync-deploy --reload      re-render secrets and restart image_tag (boot, secret rotation);
 #                                 with no image deployed yet, starts only Caddy
@@ -26,12 +31,17 @@ health_interval="${RENTSYNC_HEALTH_INTERVAL_S:-3}"
 # shellcheck source=/dev/null
 . "$etc/host.env"
 
-usage() { echo "usage: rentsync-deploy <40-char git sha>[@sha256:<64 hex>] | --rollback | --reload" >&2; exit 64; }
+usage() { echo "usage: rentsync-deploy <40-char git sha>[@sha256:<64 hex>[+sha256:<64 hex>]] | --rollback | --reload" >&2; exit 64; }
 [ $# -eq 1 ] || usage
 case "$1" in
   --rollback | --reload) mode="$1" ;;
-  *) [[ "$1" =~ ^[0-9a-f]{40}(@sha256:[0-9a-f]{64})?$ ]] || usage; mode=deploy ;;
+  *) [[ "$1" =~ ^[0-9a-f]{40}(@sha256:[0-9a-f]{64}(\+sha256:[0-9a-f]{64})?)?$ ]] || usage; mode=deploy ;;
 esac
+api_repo="${API_ECR_REPOSITORY_URL:-}" # absent on a host from before feature 003
+if [ "$mode" = deploy ] && [[ "$1" == *+* ]] && [ -z "$api_repo" ]; then
+  echo "rentsync-deploy: $1 has an API image, but this host has no API_ECR_REPOSITORY_URL" >&2
+  exit 64
+fi
 
 mkdir -p "$run_dir"
 exec 9> "$run_dir/deploy.lock"
@@ -57,32 +67,56 @@ put_param() {
   return 1
 }
 
-# Prints "status version deployment_id" from the running web container, or nothing.
+# Prints "status version deployment_id" from a running web container (mock_pms 4001 or api
+# 4002), or nothing. The API's /healthz is ok only with a live worker heartbeat, so it covers
+# api_worker too.
 health() {
-  compose exec -T mock_pms curl -sS --max-time 5 http://localhost:4001/healthz 2> /dev/null \
+  compose --profile api exec -T "$1" curl -sS --max-time 5 "http://localhost:$2/healthz" 2> /dev/null \
     | jq -r '"\(.status) \(.version) \(.deployment_id)"' 2> /dev/null || true
 }
 
 healthy_as() {
-  local tag="$1" i
+  local service="$1" port="$2" tag="$3" i
   for ((i = 1; i <= health_tries; i++)); do
-    [ "$(health)" = "ok ${tag%%@*} $DEPLOYMENT_ID" ] && return 0 # the version is the SHA part
+    [ "$(health "$service" "$port")" = "ok ${tag%%@*} $DEPLOYMENT_ID" ] && return 0 # the version is the SHA part
     sleep "$health_interval"
   done
-  echo "rentsync-deploy: /healthz did not report ok for $tag within $((health_tries * health_interval)) s: $(health)"
+  echo "rentsync-deploy: $service /healthz did not report ok for ${tag%%@*} within $((health_tries * health_interval)) s: $(health "$service" "$port")"
   return 1
 }
 
-# Pulls, migrates and starts one tag, then waits for it to report healthy.
+has_api() { [[ "$1" == *+* ]]; }
+
+# True when the release is already serving: the mock, and the API when the ref carries one.
+serving() {
+  [ "$(health mock_pms 4001)" = "ok ${1%%@*} $DEPLOYMENT_ID" ] || return 1
+  ! has_api "$1" || [ "$(health api 4002)" = "ok ${1%%@*} $DEPLOYMENT_ID" ]
+}
+
+# Pulls, migrates and starts one release, then waits for it to report healthy. The mock comes
+# first: RentSync's setup registers with it through its public URL.
 start() {
-  local tag="$1"
-  export MOCK_PMS_IMAGE="$ECR_REPOSITORY_URL:$tag"
+  local tag="$1" sha="${1%%@*}"
+  export MOCK_PMS_IMAGE="$ECR_REPOSITORY_URL:${tag%%+*}"
+  if has_api "$tag"; then
+    [ -n "$api_repo" ] || { echo "rentsync-deploy: $tag has an API image, but this host has no API_ECR_REPOSITORY_URL"; return 1; }
+    export API_IMAGE="$api_repo:$sha@${tag##*+}"
+  else
+    unset API_IMAGE
+  fi
   aws ecr get-login-password --region "$AWS_REGION" \
     | docker login --username AWS --password-stdin "${ECR_REPOSITORY_URL%%/*}" > /dev/null
-  compose pull --quiet || return 1
+  if has_api "$tag"; then compose --profile api pull --quiet || return 1; else compose pull --quiet || return 1; fi
   compose run --rm mock_pms bundle exec bin/setup --deploy || return 1
   compose up -d --remove-orphans || return 1
-  healthy_as "$tag"
+  healthy_as mock_pms 4001 "$tag" || return 1
+  if has_api "$tag"; then
+    compose --profile api run --rm api bundle exec bin/setup --deploy || return 1
+    compose --profile api up -d api api_worker || return 1
+    healthy_as api 4002 "$tag"
+  else
+    compose --profile api rm -sf api api_worker || return 1
+  fi
 }
 
 "$render"
@@ -104,7 +138,7 @@ case "$mode" in
     ;;
   deploy)
     target="$1"
-    if [ "$target" = "$current" ] && [ "$(health)" = "ok ${target%%@*} $DEPLOYMENT_ID" ]; then
+    if [ "$target" = "$current" ] && serving "$target"; then
       echo "already running $target"
       exit 0
     fi

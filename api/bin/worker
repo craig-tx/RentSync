@@ -1,0 +1,23 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# RentSync's background process: heartbeat, registered jobs, and /metrics on port 4003.
+# TERM or INT finishes the job in hand, then flushes metrics and exits.
+ENV["SERVICE_NAME"] ||= "rentsync-worker"
+require_relative "../lib/rentsync"
+require "puma"
+require "puma/server"
+
+Rentsync.boot!(migrate: true)
+Rentsync::Metrics::Flusher.start!
+
+metrics = Puma::Server.new(Rentsync::Worker.metrics_app)
+metrics.add_tcp_listener("0.0.0.0", Integer(ENV.fetch("WORKER_METRICS_PORT", 4003)))
+metrics.run
+
+worker = Rentsync::Worker.new
+%w[TERM INT].each { |signal| trap(signal) { worker.stop! } }
+worker.run
+
+metrics.stop(true)
+Rentsync::Metrics::Flusher.final_flush!

@@ -113,3 +113,66 @@ variable "protected" {
   default     = false
   description = "true for production: the host is tagged rentsync:deployable=protected, which only the prod-us release role may run commands on (contracts/bootstrap-iam.md)."
 }
+
+# --- RentSync's API (feature 003, contracts/host-changes.md) -----------------------------------
+
+variable "app_hostname" {
+  type        = string
+  description = "RentSync's public hostname, e.g. app-staging.example.com, on the same Elastic IP as hostname (DNS set by hand)."
+}
+
+variable "rentsync_encryption_keys" {
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  description = "key_id=base64(32 random bytes)[,...]; the first encrypts, every listed key decrypts. Generate: printf 'k1=%s' \"$(openssl rand -base64 32)\"."
+
+  # Key IDs as Crypto::Box accepts them; each key exactly 32 bytes of base64.
+  validation {
+    condition = (can(regex("^[A-Za-z0-9_-]{1,32}=[A-Za-z0-9+/]{43}=(,[A-Za-z0-9_-]{1,32}=[A-Za-z0-9+/]{43}=)*$", var.rentsync_encryption_keys))
+    && !strcontains(var.rentsync_encryption_keys, "REVWLU9OTFktS0VZLU5FVkVSLVVTRS1PTi1BLUhPU1Q="))
+    error_message = "rentsync_encryption_keys must be key_id=<32 bytes of base64>[,...] (printf 'k1=%s' \"$(openssl rand -base64 32)\") and must not contain the .env.example key."
+  }
+}
+
+variable "rentsync_encryption_keys_version" {
+  type        = number
+  default     = 1
+  description = "Bump to write a changed rentsync_encryption_keys to SSM (ADR-0007)."
+}
+
+variable "rentsync_operator_seed_password" {
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  description = "Sign-in password given to the seeded operators when they are first created. Generate: openssl rand -base64 24."
+
+  validation {
+    condition     = length(var.rentsync_operator_seed_password) >= 16 && var.rentsync_operator_seed_password != "local-dev-operator-pass"
+    error_message = "rentsync_operator_seed_password must be at least 16 characters and not the .env.example value."
+  }
+}
+
+variable "rentsync_operator_seed_password_version" {
+  type        = number
+  default     = 1
+  description = "Bump to write a changed rentsync_operator_seed_password to SSM. Existing operators keep their password."
+}
+
+variable "rentsync_session_secret" {
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  description = "Keys the CSRF HMAC. Generate: openssl rand -hex 32."
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._~-]{32,}$", var.rentsync_session_secret)) && var.rentsync_session_secret != "local-dev-session-secret-change-me-0123456789"
+    error_message = "rentsync_session_secret must be at least 32 URL-safe characters (openssl rand -hex 32) and not the .env.example value."
+  }
+}
+
+variable "rentsync_session_secret_version" {
+  type        = number
+  default     = 1
+  description = "Bump to write a changed rentsync_session_secret to SSM."
+}

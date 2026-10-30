@@ -14,3 +14,13 @@ services:
     environment:
       SERVICE_NAME: mock_pms-worker
       RACK_ENV: development
+  api:
+    volumes:
+      - ./api:/app
+    environment:
+      RACK_ENV: development
+  api_worker:
+    volumes:
+      - ./api:/app
+    environment:
+      RACK_ENV: development

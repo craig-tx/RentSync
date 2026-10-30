@@ -35,9 +35,11 @@ module HcpSecretAudit
   Abort = HcpBootstrap::Abort
   WORKSPACES = HcpBootstrap::WORKSPACES.map { |ws| ws[:name] }.freeze
   # SecureString parameters (infra/terraform/*/secrets.tf), by deployment.
+  ENVIRONMENT_SECRETS = %w[admin_token postgres_password rentsync/encryption_keys rentsync/operator_seed_password
+                           rentsync/session_secret].freeze
   SECRETS = {
-    "dev-staging" => %w[admin_token postgres_password],
-    "prod-us" => %w[admin_token postgres_password],
+    "dev-staging" => ENVIRONMENT_SECRETS,
+    "prod-us" => ENVIRONMENT_SECRETS,
     "shared-us" => %w[openobserve/root_password openobserve/ingest/password openobserve/db_password]
   }.freeze
   TOKEN_HOSTS = %w[app.terraform.io archivist.terraform.io].freeze

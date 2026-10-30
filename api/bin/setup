@@ -1,0 +1,46 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Creates RentSync's databases if missing, migrates them, seeds the operators, and registers
+# RentSync with the PMS (research R9). Prints the PMS client ID and operator emails, never a
+# secret.
+#
+#   bin/setup                 local: RENTSYNC_DATABASE_URL and RENTSYNC_TEST_DATABASE_URL
+#   bin/setup --test-db-only  CI: only the test database; no seed, no registration
+#   bin/setup --deploy        a release on a host: RENTSYNC_DATABASE_URL only; safe to rerun
+require "sequel"
+require_relative "../config/settings"
+require_relative "../lib/rentsync/db"
+
+ENV["SERVICE_NAME"] ||= "rentsync-tool"
+test_only = ARGV.include?("--test-db-only")
+deploy = ARGV.include?("--deploy")
+
+def migrate!(url)
+  Rentsync.ensure_database!(url)
+  Sequel.extension :migration
+  Sequel.connect(url) { |db| Sequel::Migrator.run(db, Rentsync::MIGRATIONS_DIR) }
+end
+
+# Seeds operators when the seeder exists (tasks T030), then makes sure of the PMS client.
+def seed_and_register!
+  require_relative "../lib/rentsync"
+  Rentsync.boot!
+  Rentsync::Seed::Operators.ensure! if defined?(Rentsync::Seed::Operators)
+  emails = Rentsync::Operator.order(:id).select_map(:email)
+  puts "operators: #{emails.empty? ? '(none yet)' : emails.join(', ')}"
+  result = Rentsync::Pms::Registration.new.ensure!
+  puts "PMS client: #{result[:client_id]} (#{result[:action]})"
+end
+
+if test_only
+  migrate!(ENV.fetch("RENTSYNC_TEST_DATABASE_URL"))
+  puts "setup complete (test database only)"
+  exit
+end
+
+urls = [ENV.fetch("RENTSYNC_DATABASE_URL")]
+urls << ENV.fetch("RENTSYNC_TEST_DATABASE_URL") unless deploy || ENV.fetch("RENTSYNC_TEST_DATABASE_URL", "").empty?
+urls.each { |url| migrate!(url) }
+seed_and_register!
+puts "setup complete (#{deploy ? 'deploy' : 'all databases'})"

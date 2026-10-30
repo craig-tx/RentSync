@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Test for rentsync-render-env (feature 002 research R11). A stub `aws` on PATH serves SSM
 # parameters, so no cloud access is needed. Proves:
-#   1. a complete parameter set renders a 0600 env file with every required key;
+#   1. a complete parameter set renders a 0600 env file with every required key, including
+#      RentSync's (feature 003 contracts/host-changes.md "Rendered environment additions");
 #   2. a missing required parameter fails the script and leaves no env file behind, so a host
-#      never starts with an empty ADMIN_TOKEN (the admin API would fail open).
+#      never starts with an empty ADMIN_TOKEN (the admin API would fail open). Each of
+#      RentSync's three secrets is required too, and the error names it but never a value.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -18,6 +20,8 @@ HOST_ROLE="environment"
 DEPLOYMENT_ID="pr-42"
 DEPLOYMENT_ENVIRONMENT="staging"
 DB_NAME="mock_pms_pr_42"
+SITE_HOSTNAME="pms-pr-42.example.test"
+APP_HOSTNAME="app-pr-42.example.test"
 AWS_REGION="us-east-1"
 SSM_READ_PATHS="/rentsync/pr-42 /rentsync/shared-us/openobserve/ingest"
 ENV
@@ -29,7 +33,9 @@ path=""
 while [ $# -gt 0 ]; do [ "$1" = "--path" ] && path="$2"; shift; done
 case "$path" in
   /rentsync/pr-42)
-    for kv in admin_token=tok-123 postgres_password=pw-456 image_tag=abc previous_image_tag=none; do
+    for kv in admin_token=tok-123 postgres_password=pw-456 image_tag=abc previous_image_tag=none \
+              rentsync/encryption_keys=k1=key-AAA rentsync/operator_seed_password=seed-BBB \
+              rentsync/session_secret=sess-CCC; do
       [ "${kv%%=*}" = "${OMIT:-}" ] && continue
       printf '%s/%s\t%s\n' "$path" "${kv%%=*}" "${kv#*=}"
     done ;;
@@ -54,10 +60,28 @@ if grep -q "SSM_READ_PATHS\|VOLUME_ID" "$env_file"; then fail "script-only keys 
 out="$(render 2>&1 || true)"
 if grep -q "tok-123" <<< "$out"; then fail "a secret value was printed"; fi
 
+# 1b. RentSync's keys: its own database on the same Postgres, Redis database 1, its secrets, the
+#     mock's admin token for registration, and public URLs derived from the two hostnames.
+for line in APP_HOSTNAME=app-pr-42.example.test \
+            "RENTSYNC_DATABASE_URL=postgres://postgres:pw-456@postgres:5432/rentsync_pr_42" \
+            RENTSYNC_REDIS_URL=redis://redis:6379/1 RENTSYNC_ENCRYPTION_KEYS=k1=key-AAA \
+            RENTSYNC_OPERATOR_SEED_PASSWORD=seed-BBB RENTSYNC_SESSION_SECRET=sess-CCC \
+            MOCK_PMS_ADMIN_TOKEN=tok-123 PMS_PUBLIC_URL=https://pms-pr-42.example.test \
+            PMS_API_URL=https://pms-pr-42.example.test APP_PUBLIC_URL=https://app-pr-42.example.test \
+            WEBHOOK_SUBSCRIBER_URL=https://app-pr-42.example.test/webhooks/pms; do
+  grep -qxF "${line%%=*}='${line#*=}'" "$env_file" || fail "env file lacks $line"
+done
+
 # 2. Missing required parameter.
 rm -f "$env_file"
 if OMIT=admin_token render > /dev/null 2>&1; then fail "render succeeded without admin_token"; fi
 [ ! -e "$env_file" ] || fail "an env file was written despite a missing parameter"
+for key in rentsync/encryption_keys rentsync/operator_seed_password rentsync/session_secret; do
+  if out="$(OMIT=$key render 2>&1)"; then fail "render succeeded without $key"; fi
+  grep -q "missing SSM parameter $key" <<< "$out" || fail "the error does not name $key: $out"
+  if grep -q "key-AAA\|seed-BBB\|sess-CCC\|tok-123" <<< "$out"; then fail "a secret value was printed without $key"; fi
+  [ ! -e "$env_file" ] || fail "an env file was written without $key"
+done
 
 # 3. Telemetry role: OpenObserve settings from the shared deployment's own path.
 cat > "$work/etc/host.env" <<'ENV'

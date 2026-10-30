@@ -1029,7 +1029,289 @@ should show "trying again" and then success on the new host.
 
 <!-- PR #53: free -->
 
-<!-- PR #54: free -->
+<!-- PR #54 -->
+### 2026-10-28: 003 Phases 1 and 2, the API foundation (interactive)
+
+- **Done:** T001–T024.
+  - **Phase 1:** a new `api/` service with the mock's six runtime gems, one image for web and
+    worker, Compose services, `.env.example` settings, and a CI `api` job.
+  - **Phase 2:**
+    - test-first settings and AES-256-GCM `Crypto::Box`;
+    - logging, metrics and middleware copied from the mock (R1), with the new secret keys
+      redacted;
+    - migration 001 and models whose encrypted columns are bound to
+      `<table>.<column>:<id>`;
+    - `Pms::Registration` (register, keep, or supersede, under an advisory lock) and
+      `install!` for credentials handed over out of band;
+    - `bin/setup`, `bin/pms_client` and `bin/worker` (metrics on 4003, clean SIGTERM);
+    - `/healthz` and `/metrics`.
+- **Tests:** 110 examples on Ruby 4.0 and 3.3; RuboCop clean. Two mutation checks were
+  caught: removing the advisory lock makes two registrations collide, and the T010/T011
+  specs failed before their code existed. Locally, the API registered with the real mock,
+  a rerun kept the client, and `/healthz` is ok with the worker's heartbeat.
+- **Decisions:**
+  - The image uses `ruby:4.0-slim` like the mock's, not the 3.3 that T002 names.
+  - On a mock reset, only live connections go to `needs_reauth` (as data-model.md says),
+    not disconnected ones.
+  - Worker examples that run threads are `:committed`, because their heartbeats commit on
+    another connection.
+  - `spec_helper` forces its test settings so a developer's `.env` can't change results.
+- **Gotchas:** Ruby text-mode writes on Windows produced CRLF files (fixed; now in memory),
+  and `core.filemode=false` committed the scripts without the executable bit (fixed).
+- **Local setup:** the operator's `.env` gained the 13 new settings from `.env.example`
+  (backup in the session scratchpad).
+- **Next:** Phase 3 (US1, connect a PMS account), T025 onward.
+
+### 2026-10-29: 003 Phase 3, US1 connect a PMS account (interactive)
+
+- **Done:** T025–T035.
+  - **Mock:** token responses now carry `operator_id` and `operator_name`, and 001's
+    `TokenResponse` schema is updated to match.
+  - **API:**
+    - operator sign-in, with sessions, CSRF tokens and a sign-in throttle;
+    - the PKCE connect flow with single-use state;
+    - renewal under a lease;
+    - pages plus the `/v1/connections` JSON alias;
+    - `bin/connect_operator`;
+    - the daily purge.
+- **Tests:** 172 API examples, and the mock suite, pass; RuboCop is clean.
+  - The four new specs failed first: the mock spec on the missing fields, the API specs on the
+    missing code.
+  - **Mutation checks** caught each of these removals:
+    - the renewal lease;
+    - the lease's "still needs renewing" condition;
+    - `invalid_client` sending a connection to reauthorization;
+    - idle expiry;
+    - operator scoping on the list and on single connections;
+    - the state owner check and single use;
+    - CSRF on disconnect;
+    - the `Secure` cookie flag.
+- **Live checks, local:**
+  - `bin/connect_operator` connected operator 1 to the real mock. A deny stored nothing, and
+    a reconnect reused the row.
+  - A forced renewal got a fresh token from the mock.
+  - The logs hold no tokens, codes or passwords.
+  - The purge ran once under its lease.
+- **Decisions:**
+  - **Renewal:** the backoff (5 s doubling to 300 s) is kept in `renewal_lease_until`.
+    Refusals other than `invalid_grant`/`invalid_client` count as temporary.
+  - **A second PMS account:** for the same RentSync operator it is refused as
+    `different_pms_account`, because `(operator_id, pms_client_id)` is unique.
+  - **The pages** are a Grape API, so they get route-template metric labels.
+  - **The seed** mirrors the mock's fixed three operators, because the mock's admin API has no
+    operator list.
+  - **Approvals:** the operator approved T002's Ruby 4.0 image and T020's live-only
+    `needs_reauth`.
+- **Found and fixed:** `api` and `api_worker` ran a stale image with no source mount. That
+  made the suite flaky against the dev database. `compose.override.yaml` now mounts `api/`,
+  as it already does `mock_pms/`.
+- **Not fixed:** the mock suite doesn't load on Ruby 4.0. `chaos/decider_spec.rb` requires
+  `benchmark`, which 4.0 no longer ships by default. CI's 3.3 run is unaffected.
+- **Open from the checkpoint:** quickstart §2 steps 4 and 5 need **Reconcile now** (US3).
+  Step 6's health URL needs US4.
+- **Next:** Phase 4 (US2, record every PMS event exactly once), T036 onward.
+
+### 2026-10-29: 003 Phase 4, US2 record every PMS event exactly once (interactive)
+
+- **Done:** T036–T046.
+  - **Receiver:** `POST /webhooks/pms` is a plain Rack endpoint. It reads at most 256 KiB, checks
+    the signature (constant time, then the 300 s window) before reading the body, then the
+    envelope.
+  - **Recording:** the raw event and its receipt are written in one transaction.
+    `ON CONFLICT DO NOTHING` covers the event-ID key and the partial business-key key, and a
+    trigger refuses `UPDATE` and `DELETE` on `raw_events`.
+  - **Tools:** `/admin/raw_events`, `/admin/receipts` and `bin/send_test_webhook`.
+  - **Metrics:** receipts, raw events, and the acknowledgement-time histogram.
+  - **ADR 0011.**
+- **Tests:** 238 API examples pass; RuboCop is clean.
+  - Every new spec was seen failing first.
+  - The end-to-end spec is `:committed` and runs on a real local Puma, so "200 only after
+    commit" is a real commit.
+  - **Mutation checks** caught each of these:
+    - dropping the digest comparison;
+    - accepting any connection status;
+    - skipping the size limit.
+- **Live check, local, chaos on (quickstart §3 settings) with a `month_end_burst`:**
+  - 22 events reached RentSync across 28 deliveries; 21 were recorded, with 0 duplicated;
+  - all 27 malformed deliveries were rejected, and 4 repeats got `duplicate`;
+  - the one event still missing had only a malformed delivery, and US3's reconciliation will
+    recover it.
+  - Chaos was reset to 0 afterwards.
+- **Decisions:**
+  - **500 receipts:** a 500 writes an `internal_error` receipt after the rollback. This is a
+    new reason; data-model.md and the contract are updated.
+  - **Signing secret:** only the active PMS client's secret is accepted, so a superseded
+    registration's deliveries get `bad_signature`.
+  - **Correlation ID:** `X-Correlation-Id` now wins over `X-Request-Id`, so a proxy's ID
+    can't replace the PMS's. The ID is stored before any authentication, so only short
+    plain tokens (`\A[\w.:-]{1,128}\z`) are kept; anything else gets a generated ID. The
+    mock's middleware keeps the old order.
+  - **Disconnect:** the Phase 3 spec now asserts that disconnecting keeps raw events. The
+    assertion passed when first run.
+  - **Admin token:** `/admin` reuses the mock's `ADMIN_TOKEN` value, so the hosts need no new
+    secret (plan.md).
+  - **Test sender:** `bin/send_test_webhook` refuses a valid delivery without `--record`,
+    because raw events are permanent.
+  - **Histogram buckets:** the shared buckets gain 2 s, so SC-006's p95 is read off a bucket.
+    `buffer_spec`'s pinned list was updated on purpose.
+- **Login CSRF (the operator asked for it):** `POST /sign-in` refuses cross-site posts
+  (by `Sec-Fetch-Site` or `Origin`) with 403, before the throttle. Clients that send neither
+  header are still allowed. Checked live; research R11 updated.
+- **Next:** Phase 5 (US3, reconciliation), T047 onward.
+
+### 2026-10-29: 003 Phase 5, US3 catch what webhooks missed (interactive)
+
+- **Done:** T047–T057.
+  - **`Pms::Client`:**
+    - every call takes a token from a Redis bucket keyed on the PMS client;
+    - a 429 sets a `blocked_until` that every instance obeys (a Lua compare-and-set);
+    - full-jitter backoff on 429s, 5xx and timeouts, giving up after 6 attempts;
+    - it fails closed without Redis;
+    - a 401 forces one renewal.
+  - **`Reconciliation::Run`:**
+    - walks `/v1/payments` from the watermark minus the overlap, or everything the first time;
+    - records `payment.created` and `payment.reversed` facts with synthetic IDs;
+    - saves the cursor with each page's facts;
+    - resumes after a kill;
+    - backs off 30 s, doubling up to the interval.
+  - **`Reconciliation::Scheduler`:** claims due connections with `FOR UPDATE SKIP LOCKED`
+    under a lease.
+  - **Also:** the **Reconcile now** button and route, the 90-day receipt purge,
+    `bin/compare_with_pms`, four metrics, and ADR 0009.
+- **Tests:** 278 API examples pass; RuboCop is clean.
+  - Every new spec was seen failing first.
+  - **Mutation checks** caught each of these:
+    - dropping `SKIP LOCKED`;
+    - dropping the status filter;
+    - not saving the cursor;
+    - not reading the shared block, and not setting it.
+- **Checkpoint, local (details in tasks.md):**
+  - §3 with chaos on: clean (0 missing, 0 duplicated).
+  - §4.1: lost webhooks were recovered by reconciliation, and replays of them came back as
+    `duplicate` with `reconciliation`.
+  - §4.3: ten 429s at a 10-a-minute limit, all honoured, and every run succeeded.
+  - §4.5: two workers never ran one connection at once.
+  - Quickstart §2 steps 4 and 5 now pass: a revoked grant goes to `needs_reauth`, and
+    reconnecting keeps the row.
+  - §4.4 was covered only by `run_spec`, because a backfill takes 0.67 s.
+- **Decisions:**
+  - **Reconcile now:** migration 004 adds `pms_connections.reconcile_requested_at`, so a run
+    is named `manual` and a press during a run is not lost. The foreign key that 003 promised
+    is added too.
+  - **Payment time:** a reconciled `payment.created` uses the payment's own `received_at` as
+    `occurred_at`, the same time as the PMS's webhook.
+  - **Watermark after a resumed walk:** it is the earliest start since the last success.
+  - **409:** only for `needs_reauth` and `disconnected`. `renewal_failing` is still reconciled.
+  - **`compare_with_pms`:** compares payments by business key, and lease events only when they
+    were delivered to RentSync. It reads RentSync's side from the database.
+  - **Redirect:** Reconcile now redirects to `/connections` until the health page (US4)
+    exists.
+- **Local state:**
+  - all three seeded operators are connected, with their histories backfilled permanently;
+  - one worker again;
+  - chaos is 0, and the mock client's rate limit is back to the default.
+- **Clock fix (the operator asked for it):** the shared Retry-After block now uses the Redis
+  server's clock, as the bucket does, so containers on hosts whose clocks differ agree on when
+  it ends. Specs can still drive it through an optional `now_ms`. Checked live: at 3 a minute,
+  a backfill waited out 4 blocks (40 s) and succeeded.
+- **Next:** Phase 6 (US4, connection health), T058 onward.
+
+### 2026-10-29: 003 Phase 6, US4 connection health (interactive)
+
+- **Done:** T058–T061.
+  - **`Health::Report`:** built from durable rows and scoped to one connection. It reports:
+    - access status and the last successful sync;
+    - events received, by path and by type;
+    - duplicates and rejections by reason, over 90 days;
+    - the last run, with its error, the last success and when the next is due;
+    - the 50 latest rejections, with only time, reason, type and event ID.
+  - **Served at:** `/connections/:id/health` (HTML, or JSON on request) and
+    `/v1/connections/:id/health`.
+  - **Navigation:** the connections page links to each health page, and Reconcile now returns
+    there.
+- **Tests:** 295 API examples pass; RuboCop is clean.
+  - Every new spec was seen failing first.
+  - **Mutation checks** caught each of these:
+    - unscoped receipts;
+    - unscoped events;
+    - no 90-day window;
+    - looking the connection up without the operator.
+- **Checkpoint, local:** US4's independent test passed.
+  - The run used 50% duplicates, 30% malformed and a burst, then one reconciliation.
+  - Summed across operators, the health figures equalled the change in `/admin/receipts`:
+    5 duplicates, 120 malformed, and 26 received (19 by webhook, 7 by reconciliation).
+  - Quickstart §2 step 6 passes.
+  - Quickstart §2–§4 now pass locally, except §4.4, which is covered by its unit spec only.
+- **Decisions:**
+  - **Attribution:** validly signed but stale or malformed deliveries are now attributed to
+    their operator. The operator, event ID and type are read from the authenticated body,
+    never from headers, so they appear on that operator's health page. Deliveries that fail
+    the signature check are never attributed.
+  - **Times** are shown in UTC, as on the connections page.
+  - **Older receipts:** Phase 4's 35 malformed receipts predate attribution and appear only
+    in `/admin/receipts`.
+- **Next:** Phase 7 (deploy to staging and production, FR-025), which needs the operator's
+  steps from quickstart §5.
+
+### 2026-10-30: 003 Phase 7, repo side of the deploy (interactive)
+
+- **Done:** T062–T071. The operator steps (T072) and the deployed checks (T073, T074) remain.
+  - **Terraform:** `app_hostname` and RentSync's three write-only secrets, stored as SSM
+    SecureStrings under `<deployment>/rentsync/`, validated, and refusing the `.env.example`
+    values. The host depends on them. A `shared-us/api` repository uses the mock's lifecycle
+    policy, and hosts pull from both repositories.
+  - **Host:**
+    - render-env renders RentSync's keys;
+    - Compose runs `api` and `api_worker` behind an `api` profile, with memory limits;
+    - Caddy serves the app hostname;
+    - the Collector scrapes `api:4002`.
+  - **`rentsync-deploy`:**
+    - the ref is now `<sha>@sha256:<mock>+sha256:<api>`;
+    - the mock starts first, because the API registers through the mock's public URL;
+    - both images report healthy, or both roll back.
+  - **Release:** builds the API only once `API_ECR_REPOSITORY_URL` is set, and checks
+    `APP_URL` when the release carries the API. `bootstrap-github.sh` sets both, and the build
+    role's policy can now push to `*/api`.
+  - **CI:** a new `ingestion-e2e` job.
+- **Tests:**
+  - Every new test was seen failing first.
+  - All Terraform tests pass, and so do the infra shell tests, the bootstrap Ruby tests and
+    actionlint. The 295 API examples still pass, and RuboCop is clean.
+  - **Mutation checks** on `rentsync-deploy` caught each of these:
+    - no API health check;
+    - no API stop for an earlier ref;
+    - the two setups swapped.
+- **Found and fixed:**
+  - **The workspaces track `main`,** so the order T072 gave (apply shared, then merge) was
+    impossible, and the first release would have pushed to a repository that didn't exist yet.
+    These changes handle the transition instead:
+    - releases skip the API until `API_ECR_REPOSITORY_URL` is set;
+    - the environments derive the API repository from the mock's until the shared output
+      exists;
+    - a ref without an API digest runs the mock alone, which also covers rollbacks to earlier
+      releases and a replaced host booting on an old `image_tag`.
+
+    Runbook §Releasing RentSync's API gives the order that works.
+  - **User data too big:** the new host files took the gzipped user data to 17.9 KB, over
+    EC2's 16 KB limit, because cloud-init carried each file as base64. Plain YAML blocks bring
+    it to 12.2 KB. A module test decodes the user data and compares every file byte for byte.
+    This also changes the telemetry host's user data, so the shared apply replaces it.
+  - **Logs dropped:** the Collector's log filter kept only lines from the mock, so RentSync's
+    logs never reached OpenObserve. Both now arrive locally.
+  - **Duplicate metrics:** research R16 planned a scrape of `api_worker:4003` too, but the
+    worker renders the same Redis totals, which would store every series twice. Only `api` is
+    scraped.
+  - **`ingestion-e2e`, first local run:**
+    - The connect's backfill raced the burst and recorded every fact first, so no webhook
+      path was tested. The job now finishes the backfill first and requires at least one fact
+      by webhook.
+    - Retries running to exhaustion (about 254 s) used up `compare_with_pms`'s shared
+      deadline. Reconciliation now gets its own `--wait`.
+    - From a clean stack, 22 facts arrived by webhook, 1 was recovered by reconciliation, and
+      none were missing or duplicated.
+- **Not run locally:** the mock's specs, because the local image runs Ruby 4.0, which no
+  longer bundles `benchmark`; CI runs them on 3.3. This phase didn't touch `mock_pms/`.
+- **Next:** T072 (operator), then T073 and T074 after the merge, then Phase 8.
 
 <!-- PR #55: free -->
 

@@ -12,13 +12,17 @@
 # Options:
 #   --aws-account ID          override the settings' AWS account ID
 #   --ecr-repository-url URL  also set ECR_REPOSITORY_URL (rerun after the first shared-us apply)
+#   --api-ecr-repository-url URL
+#                             also set API_ECR_REPOSITORY_URL, the shared-us output
+#                             api_ecr_repository_url (feature 003; releases build the API image
+#                             only once it is set)
 #   --prod-reviewer LOGIN     add a GitHub user as the prod-us required reviewer (task T074)
 #
 # Only non-secret values are set: role ARNs, the AWS region and URLs. Safe to rerun: what already
 # matches is left alone, a value that differs is set again, and an existing reviewer is kept.
 set -euo pipefail
 
-usage="usage: $0 [--aws-account AWS_ACCOUNT_ID] [--ecr-repository-url URL] [--prod-reviewer LOGIN] [--apply | --teardown]"
+usage="usage: $0 [--aws-account AWS_ACCOUNT_ID] [--ecr-repository-url URL] [--api-ecr-repository-url URL] [--prod-reviewer LOGIN] [--apply | --teardown]"
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -28,11 +32,12 @@ load_settings
 require_settings RENTSYNC_GITHUB_REPO RENTSYNC_AWS_REGION RENTSYNC_DOMAIN
 repo="$RENTSYNC_GITHUB_REPO" region="$RENTSYNC_AWS_REGION" domain="$RENTSYNC_DOMAIN"
 
-mode="plan" aws_account_id="${RENTSYNC_AWS_ACCOUNT_ID:-}" ecr_url="" reviewer=""
+mode="plan" aws_account_id="${RENTSYNC_AWS_ACCOUNT_ID:-}" ecr_url="" api_ecr_url="" reviewer=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --aws-account) aws_account_id="${2:-}"; shift ;;
     --ecr-repository-url) ecr_url="${2:-}"; shift ;;
+    --api-ecr-repository-url) api_ecr_url="${2:-}"; shift ;;
     --prod-reviewer) reviewer="${2:-}"; shift ;;
     --apply) mode="apply" ;;
     --teardown) mode="teardown" ;;
@@ -43,6 +48,9 @@ done
 [[ "$aws_account_id" =~ ^[0-9]{12}$ ]] || die "the AWS account ID (settings or --aws-account) must be 12 digits"
 if [ -n "$ecr_url" ] && ! [[ "$ecr_url" =~ ^$aws_account_id\.dkr\.ecr\.$region\.amazonaws\.com/[a-z0-9._/-]+$ ]]; then
   die "--ecr-repository-url must be an ECR repository URL in AWS account $aws_account_id ($region)"
+fi
+if [ -n "$api_ecr_url" ] && ! [[ "$api_ecr_url" =~ ^$aws_account_id\.dkr\.ecr\.$region\.amazonaws\.com/[a-z0-9._/-]+$ ]]; then
+  die "--api-ecr-repository-url must be an ECR repository URL in AWS account $aws_account_id ($region)"
 fi
 role() { echo "arn:aws:iam::$aws_account_id:role/rentsync-$1"; }
 
@@ -131,7 +139,7 @@ if [ "$mode" = "teardown" ]; then
   todo=()
   plan() { echo "- $1"; shift; todo+=("$(printf '%q ' "$@")"); }
   echo "Teardown plan for $repo:"
-  for name in AWS_BUILD_ROLE_ARN AWS_ROLE_ARN AWS_REGION ECR_REPOSITORY_URL; do
+  for name in AWS_BUILD_ROLE_ARN AWS_ROLE_ARN AWS_REGION ECR_REPOSITORY_URL API_ECR_REPOSITORY_URL; do
     found=""
     api_get found "repos/$repo/actions/variables/$name" .name || continue
     plan "delete repository variable $name" gh variable delete "$name" --repo "$repo"
@@ -163,14 +171,17 @@ ensure_var AWS_BUILD_ROLE_ARN "$(role github-build)"
 ensure_var AWS_ROLE_ARN "$(role github-actions)"
 ensure_var AWS_REGION "$region"
 [ -z "$ecr_url" ] || ensure_var ECR_REPOSITORY_URL "$ecr_url"
+[ -z "$api_ecr_url" ] || ensure_var API_ECR_REPOSITORY_URL "$api_ecr_url"
 
 ensure_environment dev-staging
 ensure_main_only dev-staging
 ensure_var SITE_URL "https://pms-staging.$domain" dev-staging
+ensure_var APP_URL "https://app-staging.$domain" dev-staging
 
 ensure_environment prod-us "$reviewer_id"
 ensure_main_only prod-us
 ensure_var SITE_URL "https://pms.$domain" prod-us
+ensure_var APP_URL "https://app.$domain" prod-us
 ensure_var AWS_ROLE_ARN "$(role github-actions-prod)" prod-us
 
 security=""
@@ -194,3 +205,4 @@ else
   echo "$changes changes planned. Rerun with --apply to make them."
 fi
 [ -n "$ecr_url" ] || echo "ECR_REPOSITORY_URL not set: rerun with --ecr-repository-url after the first rentsync-shared-us apply."
+[ -n "$api_ecr_url" ] || echo "API_ECR_REPOSITORY_URL not set: rerun with --api-ecr-repository-url once rentsync-shared-us has applied it (runbook §Releasing RentSync's API)."

@@ -22,6 +22,7 @@ runbook procedure:
 | `openobserve_root_password`, `openobserve_root_password_version`, `postgres_password_version` | as listed below | §Secret rotation | the same |
 | `openobserve_db_password_version` | `rentsync-shared-us` | §Secret rotation | bumping it writes a new password to SSM; the next start of the telemetry stack (`rentsync-start`) sets it on OpenObserve's Postgres |
 | `data_snapshot_id` | environments | §Backup restore | set to restore a data volume from a snapshot |
+| `rentsync_encryption_keys`, `rentsync_operator_seed_password`, `rentsync_session_secret` and their `_version` counters | environments | §Secret rotation, §Releasing RentSync's API | feature 003; set by hand before the merge that adds them (they have no defaults) |
 
 Every other variable describes the deployment itself (its ID, network, hostnames, emails). It
 changes only by editing it in the workspace, for example after moving to a new domain.
@@ -62,6 +63,7 @@ changes only by editing it in the workspace, for example after moving to a new d
 | `vpc_id`, `vpc_cidr`, `route_table_id`, `telemetry_security_group_id` | environment root, via `terraform_remote_state`. Each environment peers its own VPC with `vpc_id`, routes to `vpc_cidr`, adds its return route to `route_table_id`, and admits its subnet to the telemetry group on 5080, all from its own state, so adding a deployment never edits shared code (ADR-0008) |
 | `availability_zone`, `ami_id` | environment root (one place to pin them) |
 | `ecr_repository_url` | environment root (host env), release workflow (repository variable) |
+| `api_ecr_repository_url`, `api_ecr_repository_arn` | feature 003: release workflow (`API_ECR_REPOSITORY_URL`); environment root, which derives both from the mock's until they exist |
 | `otlp_endpoint` (`http://10.40.1.10:5080/api/default`) | environment root |
 | `telemetry_public_ip` | DNS record (runbook) |
 
@@ -84,13 +86,22 @@ changes only by editing it in the workspace, for example after moving to a new d
 | `admin_token_version` | number | `1` | `1` | no |
 | `postgres_password_version` | number | `1` | `1` | no |
 | `protected` | bool | `false` | `true` | no |
+| `app_hostname` | string (feature 003) | `app-staging.<domain>` | `app.<domain>` | no |
+| `rentsync_encryption_keys` | string (validated: `key_id=<32 bytes base64>[,…]`, not the `.env.example` key) | random, per environment | different random | **yes** |
+| `rentsync_operator_seed_password` | string (validated: ≥ 16 characters, not the `.env.example` value) | random | different random | **yes** |
+| `rentsync_session_secret` | string (validated: ≥ 32 URL-safe characters, not the `.env.example` value) | random | different random | **yes** |
+| `rentsync_encryption_keys_version`, `rentsync_operator_seed_password_version`, `rentsync_session_secret_version` | number | `1` (default) | `1` (default) | no |
 | `data_snapshot_id` | string | `null` | `null` | no |
 
 `data_snapshot_id` is used only by the restore procedure (research R14). `protected = true`
 tags the host `rentsync:deployable = protected`, so only `rentsync-github-actions-prod` can
 deploy to it.
 
-**Outputs**: `public_ip` (for DNS), `instance_id`, `url` (`https://<hostname>`).
+**Outputs**: `public_ip` (for DNS), `instance_id`, `url` (`https://<hostname>`), `app_url`
+(`https://<app_hostname>`, feature 003).
+
+The feature 003 variables are not set by `bootstrap-hcp.rb`: the operator adds them (runbook
+§Releasing RentSync's API).
 
 ## GitHub repository configuration (not Terraform)
 
@@ -99,9 +110,10 @@ deploy to it.
 | `AWS_BUILD_ROLE_ARN` | Actions variable | `arn:aws:iam::<aws-account-id>:role/rentsync-github-build` (the only role that can push images; trusted for `main` only) |
 | `AWS_ROLE_ARN` | Actions variable | `arn:aws:iam::<aws-account-id>:role/rentsync-github-actions` (non-production deploys; trusted for `environment:dev-staging` only) |
 | `ECR_REPOSITORY_URL` | Actions variable | shared output `ecr_repository_url` |
+| `API_ECR_REPOSITORY_URL` | Actions variable | shared output `api_ecr_repository_url` (feature 003); releases build the API image only once it is set |
 | `AWS_REGION` | Actions variable | the AWS region from the settings |
-| `dev-staging` | Environment (named by DeploymentId) | no protection rules; branch `main` only; Environment variable `SITE_URL = https://pms-staging.<domain>` |
-| `prod-us` | Environment (named by DeploymentId) | required reviewer: the operator; branch `main` only; `SITE_URL = https://pms.<domain>`; `AWS_ROLE_ARN = arn:aws:iam::<aws-account-id>:role/rentsync-github-actions-prod` (overrides the repository variable) |
+| `dev-staging` | Environment (named by DeploymentId) | no protection rules; branch `main` only; Environment variables `SITE_URL = https://pms-staging.<domain>` and `APP_URL = https://app-staging.<domain>` (feature 003) |
+| `prod-us` | Environment (named by DeploymentId) | required reviewer: the operator; branch `main` only; `SITE_URL = https://pms.<domain>`; `APP_URL = https://app.<domain>`; `AWS_ROLE_ARN = arn:aws:iam::<aws-account-id>:role/rentsync-github-actions-prod` (overrides the repository variable) |
 
 None of these values are secrets. GitHub Actions authenticates to AWS through OIDC, so there is
 no access key anywhere.

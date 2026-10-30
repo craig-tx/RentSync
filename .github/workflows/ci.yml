@@ -51,6 +51,50 @@ jobs:
           gem install bundler-audit -v 0.9.2 --no-document
           bundle-audit check --update
 
+  # Feature 003: RentSync's API and worker, tested like the mock PMS.
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    # Service containers are reached on localhost; the other settings take spec_helper's
+    # test values.
+    env:
+      RACK_ENV: test
+      RENTSYNC_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/rentsync_ci_gh_test
+      RENTSYNC_REDIS_URL: redis://localhost:6379/1
+      DEPLOYMENT_ID: ci-gh
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: api
+      - run: bundle exec bin/setup --test-db-only
+      - run: bundle exec rubocop
+      - run: bundle exec rspec
+      - name: Gem vulnerability audit (ruby-advisory-db)
+        run: |
+          gem install bundler-audit -v 0.9.2 --no-document
+          bundle-audit check --update
+
   # Constitution VI: an OTLP backend runs in CI and receives every service's telemetry.
   telemetry-smoke:
     needs: test
@@ -68,6 +112,47 @@ jobs:
             -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{}'
       - name: Telemetry reaches OpenObserve
         run: docker compose exec -T mock_pms bundle exec bin/telemetry_smoke
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+
+  # Feature 003 research R17: the whole ingestion path under chaos. A real connect through the
+  # mock's OAuth, a month-end burst delivered with every fault turned on, then one
+  # reconciliation; every true PMS fact must be recorded exactly once (SC-003, SC-005).
+  ingestion-e2e:
+    needs: api
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: cp .env.example .env
+      - name: Start the stack
+        run: docker compose up -d --build --wait postgres redis mock_pms mock_pms_worker api api_worker
+      - run: docker compose exec -T mock_pms bundle exec bin/setup
+      - run: docker compose exec -T api bundle exec bin/setup
+      # bin/connect_operator plays the browser, so it runs on the runner, where the public
+      # localhost URLs resolve. Standard library only: no bundle install.
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
+        with:
+          ruby-version: "3.3"
+      - name: Connect the first operator
+        working-directory: api
+        run: ruby bin/connect_operator --operator 1
+      # The connect starts a full backfill. Finish it first, so the burst below reaches RentSync
+      # by webhook rather than racing the backfill (which would record it all by reconciliation).
+      - name: Backfill matches the PMS
+        run: docker compose exec -T api bundle exec bin/compare_with_pms --wait 120 --reconcile
+      - name: Month-end burst under chaos (quickstart §3)
+        run: |
+          set -a; . ./.env; set +a
+          curl -fsS -X PUT localhost:4001/admin/chaos -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"duplicate_rate":0.3,"out_of_order_rate":0.3,"delay_rate":0.2,"delay_min_s":1,"delay_max_s":5,"malformed_rate":0.1,"server_error_rate":0.1,"seed":7}'
+          curl -fsS -X POST localhost:4001/admin/scenarios/month_end_burst -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H 'Content-Type: application/json' -d '{}'
+      - name: Every PMS fact recorded exactly once
+        run: |
+          docker compose exec -T api bundle exec bin/compare_with_pms --wait 180 --reconcile | tee compare.out
+          grep -q '"webhook" =>' compare.out || { echo "no fact arrived by webhook"; exit 1; }
       - name: Logs on failure
         if: failure()
         run: docker compose logs

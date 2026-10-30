@@ -89,6 +89,25 @@ RSpec.describe "OAuth endpoints", type: :request do
       expect(JSON.parse(last_response.body)["error"]).to eq("invalid_grant")
     end
 
+    # Feature 003 contracts/pms-changes.md: the token response names the grant's operator, with
+    # the same operator_id that the grant's webhook envelopes carry.
+    it "names the operator in both grants' responses, as webhook envelopes do" do
+      approve!
+      basic_authorize client.id, secret
+      post "/oauth/token", grant_type: "authorization_code", code: code_from_redirect, redirect_uri: redirect
+      issued = JSON.parse(last_response.body)
+      post "/oauth/token", grant_type: "refresh_token", refresh_token: issued["refresh_token"]
+      renewed = JSON.parse(last_response.body)
+
+      event = Struct.new(:id, :type, :occurred_at, :operator, :payload)
+                    .new("evt_1", "payment.created", Time.utc(2026, 2, 1), operator, {})
+      envelope_operator = MockPms::Events::Serializer.envelope(event)[:operator_id]
+      [issued, renewed].each do |body|
+        expect(body).to include("operator_id" => operator.id, "operator_name" => "Operator lonestar")
+        expect(body["operator_id"]).to eq(envelope_operator)
+      end
+    end
+
     it "is 401 invalid_client for a bad secret" do
       approve!
       basic_authorize client.id, "wrong"

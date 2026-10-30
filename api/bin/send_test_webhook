@@ -1,0 +1,68 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Sends one signed delivery to RentSync's webhook receiver, as the PMS would (T044, quickstart §3).
+# Runs in the api container, where the signing secret can be decrypted:
+#
+#   docker compose exec -T api bundle exec bin/send_test_webhook --bad-signature
+#
+#   --bad-signature         sign with a wrong secret (expect 401 bad_signature)
+#   --timestamp-offset S    sign with a time S seconds from now, e.g. -600 (401 stale_timestamp)
+#   --malformed             send half the body, validly signed (422 malformed_body)
+#   --operator ID           the PMS operator ID in the envelope (default: the first live connection's)
+#   --record                allow a valid delivery; it becomes a permanent raw event
+#   --url URL               the receiver (default http://localhost:4002/webhooks/pms)
+#
+# A valid delivery is refused without --record, because raw events are immutable: a test event
+# would stay in every later comparison with the PMS. Secrets and bodies are never printed.
+ENV["SERVICE_NAME"] ||= "rentsync-tool"
+require "net/http"
+require "optparse"
+require "securerandom"
+require_relative "../lib/rentsync"
+
+options = { offset: 0, url: "http://localhost:4002/webhooks/pms" }
+OptionParser.new do |o|
+  o.banner = "usage: bin/send_test_webhook [--bad-signature] [--timestamp-offset S] [--malformed] " \
+             "[--operator ID] [--record] [--url URL]"
+  o.on("--bad-signature") { options[:bad_signature] = true }
+  o.on("--timestamp-offset S", Integer) { |s| options[:offset] = s }
+  o.on("--malformed") { options[:malformed] = true }
+  o.on("--operator ID") { |id| options[:operator] = id }
+  o.on("--record") { options[:record] = true }
+  o.on("--url URL") { |url| options[:url] = url }
+end.parse!
+
+Rentsync.boot!
+
+failing = options[:bad_signature] || options[:malformed] || options[:offset].abs > Rentsync::Webhooks::Signature::TOLERANCE_S
+abort "refusing a valid delivery without --record: it would be a permanent raw event" unless failing || options[:record]
+
+client = Rentsync::PmsClient.active.first(pms_key: Rentsync::Pms::Registration::PMS_KEY)
+abort "no active PMS client; run bin/setup" unless client
+operator = options[:operator] ||
+           Rentsync::PmsConnection.where(pms_client_id: client.id, status: Rentsync::PmsConnection::LIVE)
+                                  .order(:id).get(:pms_operator_id) ||
+           abort("no live connection; pass --operator or run bin/connect_operator")
+
+event_id = "evt_TEST#{SecureRandom.alphanumeric(16).upcase}"
+body = JSON.generate(id: event_id, type: "lease.updated", occurred_at: Time.now.utc.iso8601, operator_id: operator,
+                     api_version: "2026-10-01", data: { object: { id: "lea_TEST", status: "active" } })
+body = body.byteslice(0, body.bytesize / 2) if options[:malformed]
+secret = options[:bad_signature] ? SecureRandom.hex(16) : client.signing_secret_plaintext
+t = Time.now.to_i + options[:offset]
+signature = "t=#{t},v1=#{OpenSSL::HMAC.hexdigest('SHA256', secret, "#{t}.#{body}")}"
+
+uri = URI(options[:url])
+request = Net::HTTP::Post.new(uri, "Content-Type" => "application/json; charset=utf-8", "PMS-Event-Id" => event_id,
+                                   "PMS-Event-Type" => "lease.updated", "PMS-Delivery-Id" => "dlv_TEST",
+                                   "PMS-Delivery-Attempt" => "1", "PMS-Signature" => signature,
+                                   "X-Correlation-Id" => "send-test-webhook-#{SecureRandom.hex(4)}")
+request.body = body
+http_options = { use_ssl: uri.scheme == "https", open_timeout: 5, read_timeout: 15 }
+response = Net::HTTP.start(uri.host, uri.port, **http_options) do |http|
+  http.request(request)
+end
+answer = JSON.parse(response.body) rescue {} # rubocop:disable Style/RescueModifier
+code = answer.dig("error", "code") || answer["outcome"] || "unreadable response"
+puts "#{event_id}: HTTP #{response.code} #{code} (correlation #{response['X-Correlation-Id']})"

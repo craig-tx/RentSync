@@ -537,6 +537,75 @@ schema. So a release may add tables, columns or indexes, but never drop or renam
 same release that stops using it. Remove the old column one release later, once nothing
 deployed reads it (research R9).
 
+## Releasing RentSync's API
+
+From feature 003, a release is **two images at one commit**: the mock PMS and RentSync's API
+(003 research R15). `build-api` pushes `<ECR>/shared-us/api:<sha>`, and the host receives
+`rentsync-deploy <sha>@sha256:<mock digest>+sha256:<api digest>`. It deploys the mock first,
+then the API, which registers with the mock through its public URL. The release succeeds only
+when both `/healthz` endpoints report the SHA, or both go back to the previous ref. The
+external check also reads `https://app[-staging].<domain>/healthz` (GitHub Environment variable
+`APP_URL`).
+
+A ref without an API digest runs the mock alone and stops the API. Every release before
+feature 003 is like that, so a rollback or reload to one of them still works, and so does the
+first boot of a replaced host whose `image_tag` predates the API.
+
+### Turning it on (once)
+
+The workspaces track `main`, so the shared ECR repository can't be applied before the merge
+that adds it. Releases therefore build the API image only once `API_ECR_REPOSITORY_URL` is set,
+the same skip-until-set pattern as `ECR_REPOSITORY_URL` (§Bootstrap step 3). The order:
+
+**Before the merge**
+
+1. A records `app-staging.<domain>` and `app.<domain>` → each environment's Elastic IP (§DNS).
+2. In `rentsync-dev-staging` and `rentsync-prod-us`, add the variables in
+   [workspace-variables.md](../../specs/002-aws-deployment/contracts/workspace-variables.md)
+   (`app_hostname` and RentSync's three secrets; each environment gets its own values). They
+   have no defaults, so the dev-staging run the merge starts fails without them. Until then,
+   runs only warn "Value for undeclared variable".
+   - `rentsync_encryption_keys`: `printf 'k1=%s' "$(openssl rand -base64 32)"`. Keep a copy: if
+     it is lost, stored tokens and RentSync's PMS client secrets can't be read again.
+   - `rentsync_operator_seed_password`: `openssl rand -base64 24`. Keep a copy: it is the seeded
+     operators' sign-in password, set only when they are first created.
+   - `rentsync_session_secret`: `openssl rand -hex 32`.
+3. In CloudShell, run `bash infra/bootstrap/bootstrap-iam.sh` (the plan; it changes nothing)
+   from a checkout of this branch, or of `main` after the merge. For each existing policy it
+   prints an `aws iam create-policy-version … --set-as-default` command. Run only the one for
+   `rentsync-github-build`, which lets the build role push to `*/api` as well. IAM keeps at most five versions of a policy; if it refuses, delete
+   the oldest non-default version first.
+
+**Merge.** At once:
+
+- `rentsync-dev-staging` applies on its own. It writes the three SSM parameters, then **replaces
+  the staging host** (host files changed; §Host replacement). Staging is down for a few minutes.
+- `rentsync-shared-us` and `rentsync-prod-us` plan, then wait for you.
+- The release builds the mock only and deploys it to staging, then waits for prod approval.
+
+**After the merge**
+
+4. Confirm `rentsync-shared-us`: a new repository `shared-us/api` with its lifecycle policy, and
+   a replacement of the telemetry host, whose user data changed too (shared host scripts and
+   the cloud-init file encoding); OpenObserve is down for a few minutes, its data volume kept.
+   Nothing else is destroyed. Note the output `api_ecr_repository_url`.
+5. Confirm `rentsync-prod-us`: it replaces the prod host and writes its parameters. Approve the
+   pending mock-only prod release only **after** this apply, or let it lapse.
+6. On your machine:
+   `bash infra/bootstrap/bootstrap-github.sh --api-ecr-repository-url <URL>`, then the same with
+   `--apply`. It sets `API_ECR_REPOSITORY_URL` and each Environment's `APP_URL`.
+7. Run **Deploy** for `dev-staging` with the merge SHA (it builds the API image), check
+   staging (quickstart §5 step 3), then **Deploy** for `prod-us` with the same SHA. Every later
+   merge releases both images.
+
+Rotating RentSync's secrets follows §Secret rotation: change the value, bump its `_version`,
+apply, reload. Two differ:
+
+- `rentsync_encryption_keys`: put the new key **first** and keep the old one
+  (`k2=<new>,k1=<old>`). The first key encrypts; every listed key decrypts. Nothing re-encrypts
+  existing values yet, so never drop an old key.
+- `rentsync_operator_seed_password`: changing it changes no existing operator's password.
+
 ## Rollback
 
 There is one documented action (FR-029). In GitHub → **Actions** → **Deploy** → **Run

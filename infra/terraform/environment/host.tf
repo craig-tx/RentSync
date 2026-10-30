@@ -28,17 +28,17 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 module "host" {
   source = "../modules/host"
 
-  deployment_id      = var.deployment_id
-  ami_id             = local.shared.ami_id
-  instance_type      = var.instance_type
-  availability_zone  = local.shared.availability_zone
-  subnet_id          = module.network.subnet_id
-  private_ip         = var.private_ip
-  security_group_ids = [aws_security_group.this.id]
-  ssm_read_paths     = [local.ssm_prefix, local.shared.ingest_ssm_path]
-  ssm_write_params   = [aws_ssm_parameter.image_tag.name, aws_ssm_parameter.previous_image_tag.name]
-  ecr_repository_arn = local.shared.ecr_repository_arn
-  data_snapshot_id   = var.data_snapshot_id
+  deployment_id       = var.deployment_id
+  ami_id              = local.shared.ami_id
+  instance_type       = var.instance_type
+  availability_zone   = local.shared.availability_zone
+  subnet_id           = module.network.subnet_id
+  private_ip          = var.private_ip
+  security_group_ids  = [aws_security_group.this.id]
+  ssm_read_paths      = [local.ssm_prefix, local.shared.ingest_ssm_path]
+  ssm_write_params    = [aws_ssm_parameter.image_tag.name, aws_ssm_parameter.previous_image_tag.name]
+  ecr_repository_arns = local.ecr_repository_arns
+  data_snapshot_id    = var.data_snapshot_id
 
   # Releases target hosts by DeploymentId. The non-production release role may run commands only
   # on hosts tagged "true"; production hosts are "protected", which only the prod-us role (trusted
@@ -52,15 +52,35 @@ module "host" {
     "/opt/rentsync/collector.yaml"   = { content = file("${path.module}/../../otel/collector.yaml"), permissions = "0644" }
     "/usr/local/bin/rentsync-deploy" = { content = file("${path.module}/../../host/bin/rentsync-deploy"), permissions = "0755" }
   }
+  host_env = local.host_env
+
+  # rentsync-render-env requires these from the first boot, so they exist before the host does.
+  depends_on = [
+    aws_ssm_parameter.rentsync_encryption_keys,
+    aws_ssm_parameter.rentsync_operator_seed_password,
+    aws_ssm_parameter.rentsync_session_secret,
+  ]
+}
+
+locals {
+  # RentSync's API image lives beside the mock's (feature 003 research R15). Until
+  # rentsync-shared-us has applied its own output, the URL follows the */mock_pms naming, so a
+  # merge can apply this workspace before the shared one (runbook §Releasing RentSync's API).
+  api_ecr_repository_url = try(local.shared.api_ecr_repository_url, replace(local.shared.ecr_repository_url, "/mock_pms", "/api"))
+  api_ecr_repository_arn = try(local.shared.api_ecr_repository_arn, replace(local.shared.ecr_repository_arn, "/mock_pms", "/api"))
+  ecr_repository_arns    = [local.shared.ecr_repository_arn, local.api_ecr_repository_arn]
+
   host_env = {
     HOST_ROLE                 = "environment"
     DEPLOYMENT_ID             = var.deployment_id
     DEPLOYMENT_ENVIRONMENT    = var.environment
     SITE_HOSTNAME             = var.hostname
+    APP_HOSTNAME              = var.app_hostname
     DB_NAME                   = local.db_name
     AWS_REGION                = var.region
     SSM_READ_PATHS            = join(" ", [local.ssm_prefix, local.shared.ingest_ssm_path])
     ECR_REPOSITORY_URL        = local.shared.ecr_repository_url
+    API_ECR_REPOSITORY_URL    = local.api_ecr_repository_url
     OPENOBSERVE_OTLP_ENDPOINT = local.shared.otlp_endpoint
     ACME_EMAIL                = var.acme_email
     ACME_CA                   = var.acme_ca

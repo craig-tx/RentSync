@@ -38,6 +38,11 @@ variables {
   private_ip       = "10.41.1.20"
   acme_email       = "ops@example.test"
   admin_token      = "0123456789abcdef0123456789abcdef"
+  app_hostname     = "app-staging.example.com"
+
+  rentsync_encryption_keys        = "k1=VEVTVC1PTkxZLUtFWS1GT1ItVEVSUkFGT1JNLVRFU1Q="
+  rentsync_operator_seed_password = "test-only-seed-password"
+  rentsync_session_secret         = "test-only-session-secret-0123456789abcdef"
 }
 
 run "staging" {

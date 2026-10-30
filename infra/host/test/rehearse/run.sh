@@ -38,6 +38,7 @@ HOST_ROLE="environment"
 DEPLOYMENT_ID="pr-42"
 DEPLOYMENT_ENVIRONMENT="staging"
 SITE_HOSTNAME="localhost"
+APP_HOSTNAME="app.localhost"
 DB_NAME="mock_pms_pr_42"
 AWS_REGION="us-east-1"
 SSM_READ_PATHS="/rentsync/pr-42 /rentsync/shared-us/openobserve/ingest"
@@ -54,6 +55,11 @@ put /rentsync/pr-42/admin_token "rehearsal-admin-token-0123456789abcdef"
 put /rentsync/pr-42/postgres_password "rehearsalPgPassw0rd"
 put /rentsync/pr-42/image_tag none
 put /rentsync/pr-42/previous_image_tag none
+# RentSync's secrets (feature 003): render-env requires them. Bare-SHA deploys below carry no
+# API digest, so they run the mock alone.
+put /rentsync/pr-42/rentsync/encryption_keys "k1=UkVIRUFSU0FMLU9OTFktS0VZLU5PVC1GT1ItSE9TVFM="
+put /rentsync/pr-42/rentsync/operator_seed_password "rehearsal-seed-password"
+put /rentsync/pr-42/rentsync/session_secret "rehearsal-session-secret-0123456789abcdef"
 put /rentsync/shared-us/openobserve/ingest/user "ops@example.test"
 put /rentsync/shared-us/openobserve/ingest/password "$special_pw"
 cat > /usr/local/bin/aws <<STUB

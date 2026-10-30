@@ -36,6 +36,11 @@ variables {
   private_ip       = "10.41.1.20"
   acme_email       = "ops@example.test"
   admin_token      = "0123456789abcdef0123456789abcdef"
+  app_hostname     = "app-staging.example.com"
+
+  rentsync_encryption_keys        = "k1=VEVTVC1PTkxZLUtFWS1GT1ItVEVSUkFGT1JNLVRFU1Q="
+  rentsync_operator_seed_password = "test-only-seed-password"
+  rentsync_session_secret         = "test-only-session-secret-0123456789abcdef"
 }
 
 run "only_http_and_https_from_the_internet" {
@@ -65,6 +70,95 @@ run "secrets_are_write_only" {
     condition     = aws_ssm_parameter.postgres_password.type == "SecureString" && aws_ssm_parameter.postgres_password.value_wo_version == var.postgres_password_version
     error_message = "postgres_password must be a SecureString written through value_wo (R11)."
   }
+}
+
+# Feature 003 (contracts/host-changes.md): RentSync's three secrets, the same write-only way, in
+# the deployment's rentsync/ sub-path, which rentsync-render-env reads recursively.
+run "rentsync_secrets_are_write_only" {
+  command = plan
+
+  assert {
+    condition = alltrue([for k, p in {
+      encryption_keys        = aws_ssm_parameter.rentsync_encryption_keys,
+      operator_seed_password = aws_ssm_parameter.rentsync_operator_seed_password,
+      session_secret         = aws_ssm_parameter.rentsync_session_secret,
+    } : p.name == "/rentsync/dev-staging/rentsync/${k}" && p.type == "SecureString"])
+    error_message = "RentSync's secrets must be SecureStrings at /rentsync/<deployment_id>/rentsync/<name>."
+  }
+
+  assert {
+    condition = (aws_ssm_parameter.rentsync_encryption_keys.value_wo_version == var.rentsync_encryption_keys_version
+      && aws_ssm_parameter.rentsync_operator_seed_password.value_wo_version == var.rentsync_operator_seed_password_version
+    && aws_ssm_parameter.rentsync_session_secret.value_wo_version == var.rentsync_session_secret_version)
+    error_message = "RentSync's secrets must be written through value_wo, versioned by their _version variables (ADR-0007)."
+  }
+}
+
+run "rentsync_reaches_the_host" {
+  command = plan
+
+  assert {
+    condition     = local.host_env.APP_HOSTNAME == "app-staging.example.com"
+    error_message = "app_hostname must reach host.env as APP_HOSTNAME."
+  }
+
+  # Derived from the mock's repository until rentsync-shared-us has applied its own output, so a
+  # merge can apply this workspace before the shared one (runbook §Releasing RentSync's API).
+  assert {
+    condition     = local.host_env.API_ECR_REPOSITORY_URL == "123456789012.dkr.ecr.us-east-1.amazonaws.com/shared-us/api"
+    error_message = "host.env must name the API's repository, next to the mock's."
+  }
+
+  assert {
+    condition = local.ecr_repository_arns == [
+      "arn:aws:ecr:us-east-1:123456789012:repository/shared-us/mock_pms",
+      "arn:aws:ecr:us-east-1:123456789012:repository/shared-us/api",
+    ]
+    error_message = "The host must pull from exactly the mock's and the API's repositories."
+  }
+}
+
+run "rentsync_example_secrets_rejected" {
+  command = plan
+
+  variables {
+    rentsync_encryption_keys        = "k1=REVWLU9OTFktS0VZLU5FVkVSLVVTRS1PTi1BLUhPU1Q="
+    rentsync_operator_seed_password = "local-dev-operator-pass"
+    rentsync_session_secret         = "local-dev-session-secret-change-me-0123456789"
+  }
+
+  expect_failures = [var.rentsync_encryption_keys, var.rentsync_operator_seed_password, var.rentsync_session_secret]
+}
+
+run "rentsync_weak_secrets_rejected" {
+  command = plan
+
+  variables {
+    rentsync_encryption_keys        = "k1=c2hvcnQ=" # 5 bytes, not 32
+    rentsync_operator_seed_password = "fifteen-chars!!"
+    rentsync_session_secret         = "has spaces and is not url safe 0123456789"
+  }
+
+  expect_failures = [var.rentsync_encryption_keys, var.rentsync_operator_seed_password, var.rentsync_session_secret]
+}
+
+run "rentsync_key_list_accepted" {
+  command = plan
+
+  # The new key first, the old one kept for decryption (rotation, runbook §Secret rotation).
+  variables {
+    rentsync_encryption_keys = "k2_2026-11=VEVTVC1PTkxZLUtFWS1GT1ItVEVSUkFGT1JNLVRFU1Q=,k1=VEVTVC1PTkxZLUtFWS1GT1ItVEVSUkFGT1JNLVRFU1Q="
+  }
+}
+
+run "short_session_secret_rejected" {
+  command = plan
+
+  variables {
+    rentsync_session_secret = "0123456789abcdef0123456789abcde" # 31 characters
+  }
+
+  expect_failures = [var.rentsync_session_secret]
 }
 
 run "example_admin_token_rejected" {

@@ -121,8 +121,10 @@ module MockPms
                            expires_at: now + Settings.access_token_ttl, created_at: now)
         RefreshToken.create(token_digest: digest(refresh), grant_seq: grant.seq,
                             expires_at: now + Settings.refresh_token_ttl, created_at: now)
+        # operator_id is the value webhook envelopes carry (feature 003 contracts/pms-changes.md).
         { access_token: access, token_type: "Bearer", expires_in: Settings.access_token_ttl,
-          refresh_token: refresh, scope: grant.scope }
+          refresh_token: refresh, scope: grant.scope,
+          operator_id: grant.operator.id, operator_name: grant.operator.name }
       end
     end
   end

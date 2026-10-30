@@ -17,10 +17,10 @@ receivers:
       - type: container
         format: docker
         add_metadata_from_filepath: false
-      # Docker's files carry no container names, so keep only mock_pms lines by their
-      # own service.name field; postgres/redis/collector output is dropped.
+      # Docker's files carry no container names, so keep only the mock's and RentSync's lines
+      # by their own service.name field; postgres/redis/collector output is dropped.
       - type: filter
-        expr: 'not (body matches "\"service\\.name\":\"mock_pms")'
+        expr: 'not (body matches "\"service\\.name\":\"(mock_pms|rentsync-)")'
       - type: json_parser
         parse_from: body
         parse_to: attributes
@@ -62,6 +62,12 @@ receivers:
           scrape_interval: ${env:METRICS_SCRAPE_INTERVAL:-15s}
           static_configs:
             - targets: ["mock_pms:4001"]
+        # RentSync (feature 003 research R16). The worker's /metrics (api_worker:4003) renders
+        # the same Redis totals, so scraping it too would store every series twice.
+        - job_name: rentsync-api-web
+          scrape_interval: ${env:METRICS_SCRAPE_INTERVAL:-15s}
+          static_configs:
+            - targets: ["api:4002"]
         # The Collector's own metrics, including its drop counters (Constitution VI).
         - job_name: otel-collector
           scrape_interval: ${env:METRICS_SCRAPE_INTERVAL:-15s}
@@ -96,6 +102,7 @@ processors:
           - delete_key(attributes, "deployment_id")
           - delete_key(attributes, "service_name")
           - delete_key(attributes, "service.instance.id") where attributes["service.name"] == "mock_pms-web"
+          - delete_key(attributes, "service.instance.id") where attributes["service.name"] == "rentsync-api-web"
 
   # Every record leaves with both deployment attributes (constitution VI), including the
   # Collector's own metrics, which carry neither. insert never overwrites a service's own value.

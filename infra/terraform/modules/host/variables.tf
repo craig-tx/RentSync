@@ -90,10 +90,10 @@ variable "ssm_write_params" {
   description = "Full SSM parameter names the host may overwrite (image_tag, previous_image_tag)."
 }
 
-variable "ecr_repository_arn" {
-  type        = string
-  default     = null
-  description = "Repository the host may pull from; null for hosts that pull no private image."
+variable "ecr_repository_arns" {
+  type        = list(string)
+  default     = []
+  description = "Repositories the host may pull from; empty for hosts that pull no private image."
 }
 
 variable "extra_tags" {

@@ -1,0 +1,55 @@
+<% r = report; access = r[:access_status]; run = r[:last_reconciliation]; events = r[:events_received] -%>
+<p><a href="/connections">&larr; Connections</a></p>
+<h1><%= h(r[:connection][:pms_operator_name]) %></h1>
+<% if notice -%>
+<p class="notice"><%= h(notice) %></p>
+<% end -%>
+<table>
+  <tbody>
+    <tr><th>Access</th><td class="status-<%= h(access[:status]) %>"><%= h(access[:status]) %><% if access[:last_renewal_error] %> <span class="muted">(last renewal error: <%= h(access[:last_renewal_error]) %>)</span><% end %></td></tr>
+    <tr><th>Last successful sync</th><td><%= h(time(r[:last_successful_sync_at] && Time.iso8601(r[:last_successful_sync_at])) || "never") %></td></tr>
+    <tr><th>Events received</th>
+      <td><%= events[:total] %></td></tr>
+    <tr><th>By path</th><td>webhook <%= events[:webhook] %>, reconciliation <%= events[:reconciliation] %></td></tr>
+    <tr><th>By type</th><td><%= h(events[:by_type].map { |type, n| "#{type} #{n}" }.join(", ").then { |s| s.empty? ? "none" : s }) %></td></tr>
+    <tr><th>Duplicates ignored (90 days)</th><td><%= r[:duplicates_ignored_90d] %></td></tr>
+    <tr><th>Rejected (90 days)</th>
+      <td><%= r[:rejected_90d] %></td></tr>
+<% r[:rejected_by_reason_90d].each do |reason, n| -%>
+    <tr><th class="muted">&nbsp;&nbsp;<%= h(reason) %></th><td><%= n %></td></tr>
+<% end -%>
+  </tbody>
+</table>
+
+<h2>Reconciliation</h2>
+<% if run -%>
+<table>
+  <tbody>
+    <tr><th>Last run</th><td><%= h(time(Time.iso8601(run[:started_at]))) %>: <span class="<%= run[:outcome] == 'failed' ? 'error' : '' %>"><%= h(run[:outcome] || "running") %></span><% if run[:error_code] %> (<%= h(run[:error_code]) %>)<% end %>, <%= run[:facts_added] %> facts added</td></tr>
+    <tr><th>Last succeeded</th><td><%= h(run[:last_succeeded_at] ? time(Time.iso8601(run[:last_succeeded_at])) : "never") %></td></tr>
+    <tr><th>Next due</th><td><%= h(time(Time.iso8601(run[:next_due_at]))) %></td></tr>
+  </tbody>
+</table>
+<% else -%>
+<p class="muted">No reconciliation has run yet.</p>
+<% end -%>
+<% if Rentsync::PmsConnection::LIVE.include?(access[:status]) -%>
+<form method="post" action="/connections/<%= h(connection.public_id) %>/reconcile">
+  <input type="hidden" name="csrf_token" value="<%= h(csrf) %>">
+  <button type="submit">Reconcile now</button>
+</form>
+<% end -%>
+
+<h2>Recent rejections</h2>
+<% if r[:recent_rejections].empty? -%>
+<p class="muted">None in the last 90 days.</p>
+<% else -%>
+<table>
+  <thead><tr><th>Received</th><th>Reason</th><th>Event type</th><th>Event ID</th></tr></thead>
+  <tbody>
+<% r[:recent_rejections].each do |rej| -%>
+    <tr><td><%= h(time(Time.iso8601(rej[:received_at]))) %></td><td><%= h(rej[:reason]) %></td><td><%= h(rej[:event_type] || "unknown") %></td><td><%= h(rej[:event_id] || "unknown") %></td></tr>
+<% end -%>
+  </tbody>
+</table>
+<% end -%>
