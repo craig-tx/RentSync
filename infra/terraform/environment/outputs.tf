@@ -11,6 +11,11 @@ output "url" {
   value = "https://${var.hostname}"
 }
 
+output "app_url" {
+  description = "RentSync's public URL; the GitHub Environment's APP_URL (bootstrap-github.sh)."
+  value       = "https://${var.app_hostname}"
+}
+
 output "db_name" {
   value = local.db_name
 }
@@ -29,6 +34,9 @@ output "ssm_parameter_names" {
     aws_ssm_parameter.postgres_password.name,
     aws_ssm_parameter.image_tag.name,
     aws_ssm_parameter.previous_image_tag.name,
+    aws_ssm_parameter.rentsync_encryption_keys.name,
+    aws_ssm_parameter.rentsync_operator_seed_password.name,
+    aws_ssm_parameter.rentsync_session_secret.name,
   ]
 }
 

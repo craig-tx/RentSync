@@ -35,6 +35,15 @@ output "ecr_repository_arn" {
   value = aws_ecr_repository.mock_pms.arn
 }
 
+output "api_ecr_repository_url" {
+  description = "GitHub API_ECR_REPOSITORY_URL (bootstrap-github.sh); environments derive it until this exists."
+  value       = aws_ecr_repository.api.repository_url
+}
+
+output "api_ecr_repository_arn" {
+  value = aws_ecr_repository.api.arn
+}
+
 output "otlp_endpoint" {
   value = "http://${var.telemetry_private_ip}:5080/api/default"
 }

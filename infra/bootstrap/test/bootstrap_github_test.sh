@@ -7,7 +7,8 @@
 #   3. --apply on an empty repository makes exactly those changes;
 #   4. a repository that already matches gets no changes;
 #   5. drift is corrected: a differing variable is set again, an extra deployment branch is
-#      removed, and adding a reviewer keeps the existing one;
+#      removed, and adding a reviewer keeps the existing one; the two repository URLs are set
+#      when given (feature 003 adds the API's, and APP_URL per Environment);
 #   6. an API error other than 404 stops the run;
 #   7. --teardown (at a terminal, after the sum) deletes the variables and Environments, keeps
 #      secret scanning, and deletes nothing on a wrong answer or without a terminal.
@@ -63,6 +64,8 @@ matching() {
   done
   put "$R/environments/dev-staging/variables/SITE_URL" '{"value":"https://pms-staging.example.com"}'
   put "$R/environments/prod-us/variables/SITE_URL" '{"value":"https://pms.example.com"}'
+  put "$R/environments/dev-staging/variables/APP_URL" '{"value":"https://app-staging.example.com"}'
+  put "$R/environments/prod-us/variables/APP_URL" '{"value":"https://app.example.com"}'
   put "$R/environments/prod-us/variables/AWS_ROLE_ARN" "{\"value\":\"arn:aws:iam::$ACCT:role/rentsync-github-actions-prod\"}"
   put "$R" '{"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"enabled"}}}'
 }
@@ -75,6 +78,9 @@ if run --aws-account 12345 > /dev/null 2>&1; then fail "accepted a short AWS acc
 if run --aws-account $ACCT --ecr-repository-url 999999999999.dkr.ecr.eu-west-2.amazonaws.com/x > /dev/null 2>&1; then
   fail "accepted an ECR URL from another AWS account"
 fi
+if run --aws-account $ACCT --api-ecr-repository-url 999999999999.dkr.ecr.eu-west-2.amazonaws.com/shared-us/api > /dev/null 2>&1; then
+  fail "accepted an API ECR URL from another AWS account"
+fi
 if run --aws-account $ACCT --bogus > /dev/null 2>&1; then fail "accepted an unknown option"; fi
 [ "$(writes)" -eq 0 ] || fail "bad arguments made a write"
 
@@ -83,19 +89,23 @@ reset
 put "$R" '{"security_and_analysis":{"secret_scanning":{"status":"disabled"},"secret_scanning_push_protection":{"status":"disabled"}}}'
 plan="$(run)" || fail "plan failed"
 [ "$(writes)" -eq 0 ] || fail "plan mode made a write"
-[ "$(grep -c '^+ ' <<< "$plan")" -eq 11 ] || fail "plan should list 11 changes: $plan"
+[ "$(grep -c '^+ ' <<< "$plan")" -eq 13 ] || fail "plan should list 13 changes: $plan"
 grep -qF "+ set repository variable AWS_BUILD_ROLE_ARN = arn:aws:iam::$ACCT:role/rentsync-github-build" <<< "$plan" \
   || fail "plan lacks the build role variable"
 grep -qF "+ set prod-us Environment variable AWS_ROLE_ARN = arn:aws:iam::$ACCT:role/rentsync-github-actions-prod" <<< "$plan" \
   || fail "plan lacks the prod-us role override"
 grep -q 'rerun with --ecr-repository-url' <<< "$plan" || fail "plan does not mention ECR_REPOSITORY_URL"
+grep -q 'rerun with --api-ecr-repository-url' <<< "$plan" || fail "plan does not mention API_ECR_REPOSITORY_URL"
+# Feature 003: deploy-to.yml checks RentSync's public URL too.
+grep -qF "+ set dev-staging Environment variable APP_URL = https://app-staging.example.com" <<< "$plan" || fail "plan lacks dev-staging APP_URL"
+grep -qF "+ set prod-us Environment variable APP_URL = https://app.example.com" <<< "$plan" || fail "plan lacks prod-us APP_URL"
 # --aws-account still overrides the settings.
 grep -qF "arn:aws:iam::210987654321:role/rentsync-github-build" <<< "$(run --aws-account 210987654321)" \
   || fail "--aws-account did not override the settings"
 
 # 3. Apply on the same empty repository.
 run --apply > /dev/null || fail "apply failed"
-[ "$(grep -c 'variable set' "$GH_LOG")" -eq 6 ] || fail "expected 6 variables set"
+[ "$(grep -c 'variable set' "$GH_LOG")" -eq 8 ] || fail "expected 8 variables set"
 grep -q 'variable set AWS_ROLE_ARN --repo example-owner/example-app --body arn:aws:iam::123456789012:role/rentsync-github-actions-prod --env prod-us' "$GH_LOG" \
   || fail "the prod-us override was not set on the Environment"
 [ "$(grep -c "^api -X PUT $R/environments/" "$GH_LOG")" -eq 2 ] || fail "expected 2 Environments created"
@@ -115,18 +125,21 @@ put "$R/actions/variables/AWS_REGION" '{"value":"us-west-2"}'
 put "$R/environments/prod-us" '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"protection_rules":[{"type":"required_reviewers","reviewers":[{"type":"Team","reviewer":{"id":5}}]}]}'
 put "$R/environments/dev-staging/deployment-branch-policies" '{"branch_policies":[{"id":7,"name":"main","type":"branch"},{"id":9,"name":"feature/*","type":"branch"}]}'
 put "users/octo" '{"id":42}'
-out="$(run --prod-reviewer octo --ecr-repository-url $ACCT.dkr.ecr.eu-west-2.amazonaws.com/shared-us/mock_pms --apply)" \
+out="$(run --prod-reviewer octo --ecr-repository-url $ACCT.dkr.ecr.eu-west-2.amazonaws.com/shared-us/mock_pms \
+  --api-ecr-repository-url $ACCT.dkr.ecr.eu-west-2.amazonaws.com/shared-us/api --apply)" \
   || fail "apply with drift failed"
 grep -q 'variable set AWS_REGION --repo example-owner/example-app --body eu-west-2$' "$GH_LOG" || fail "differing AWS_REGION not set again"
 grep -q "variable set ECR_REPOSITORY_URL --repo example-owner/example-app --body $ACCT.dkr.ecr.eu-west-2.amazonaws.com/shared-us/mock_pms" "$GH_LOG" \
   || fail "ECR_REPOSITORY_URL not set"
+grep -q "variable set API_ECR_REPOSITORY_URL --repo example-owner/example-app --body $ACCT.dkr.ecr.eu-west-2.amazonaws.com/shared-us/api" "$GH_LOG" \
+  || fail "API_ECR_REPOSITORY_URL not set"
 grep -q "^api -X DELETE $R/environments/dev-staging/deployment-branch-policies/9$" "$GH_LOG" \
   || fail "extra deployment branch not removed"
 if grep -q "deployment-branch-policies/7" "$GH_LOG"; then fail "removed the main policy"; fi
 grep -qF '"reviewers":[{"type":"Team","id":5},{"type":"User","id":42}]' "$GH_LOG" \
   || fail "adding a reviewer dropped the existing one: $(cat "$GH_LOG")"
 if grep -q "PUT $R/environments/dev-staging" "$GH_LOG"; then fail "touched a matching Environment"; fi
-[ "$(writes)" -eq 5 ] || fail "expected 4 writes and 1 body for drift: $(cat "$GH_LOG")"
+[ "$(writes)" -eq 6 ] || fail "expected 5 writes and 1 body for drift: $(cat "$GH_LOG")"
 
 # 6. A server error stops the run.
 matching

@@ -41,7 +41,9 @@ emit() {
 # inside "$(...)" would not stop the script (set -e ignores it there), and a host would start
 # with an empty ADMIN_TOKEN. infra/host/test/render_env_test.sh covers this.
 case "$HOST_ROLE" in
-  environment) required=(admin_token postgres_password image_tag user password) ;;
+  environment)
+    required=(admin_token postgres_password image_tag user password
+              rentsync/encryption_keys rentsync/operator_seed_password rentsync/session_secret) ;;
   telemetry) required=(openobserve/root_email openobserve/root_password openobserve/db_password) ;;
   *) echo "rentsync-render-env: unknown HOST_ROLE '$HOST_ROLE'" >&2; exit 1 ;;
 esac
@@ -75,6 +77,18 @@ case "$HOST_ROLE" in
     emit PREVIOUS_IMAGE_TAG "${param[previous_image_tag]:-none}"
     emit OPENOBSERVE_USER "${param[user]}"
     emit OPENOBSERVE_PASSWORD "${param[password]}"
+    # RentSync (feature 003 contracts/host-changes.md): its own database on the same Postgres,
+    # Redis database 1, and the public URLs on both sides (research R13).
+    emit RENTSYNC_DATABASE_URL "postgres://postgres:${param[postgres_password]}@postgres:5432/rentsync_${DEPLOYMENT_ID//-/_}"
+    emit RENTSYNC_REDIS_URL "redis://redis:6379/1"
+    emit RENTSYNC_ENCRYPTION_KEYS "${param[rentsync/encryption_keys]}"
+    emit RENTSYNC_OPERATOR_SEED_PASSWORD "${param[rentsync/operator_seed_password]}"
+    emit RENTSYNC_SESSION_SECRET "${param[rentsync/session_secret]}"
+    emit MOCK_PMS_ADMIN_TOKEN "${param[admin_token]}"
+    emit PMS_PUBLIC_URL "https://$SITE_HOSTNAME"
+    emit PMS_API_URL "https://$SITE_HOSTNAME"
+    emit APP_PUBLIC_URL "https://$APP_HOSTNAME"
+    emit WEBHOOK_SUBSCRIBER_URL "https://$APP_HOSTNAME/webhooks/pms"
     ;;
   telemetry)
     emit ZO_ROOT_USER_EMAIL "${param[openobserve/root_email]}"

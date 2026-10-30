@@ -1,4 +1,5 @@
-# Builds the mock PMS image for one commit and pushes it to ECR (feature 002 research R9).
+# Builds one image for one commit and pushes it to ECR (feature 002 research R9): the mock PMS by
+# default, or RentSync's API (feature 003 research R15) with context and repository_url.
 # Reusable: called by release.yml and deploy.yml. Tags are immutable, so an existing tag is
 # skipped and a re-run never produces a second image for one commit.
 #
@@ -14,6 +15,16 @@ on:
         description: Full 40-character commit SHA to build; also the image tag
         required: true
         type: string
+      context:
+        description: Directory to build (mock_pms or api)
+        required: false
+        type: string
+        default: mock_pms
+      repository_url:
+        description: ECR repository to push to; the mock's (ECR_REPOSITORY_URL) when empty
+        required: false
+        type: string
+        default: ""
     outputs:
       digest:
         description: sha256 digest of the image for this commit
@@ -30,10 +41,14 @@ jobs:
       digest: ${{ steps.digest.outputs.digest }}
     env:
       SHA: ${{ inputs.sha }}
-      ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
+      ECR_REPOSITORY_URL: ${{ inputs.repository_url || vars.ECR_REPOSITORY_URL }}
     steps:
-      - name: Check the SHA
-        run: '[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be a full 40-character commit SHA"; exit 1; }'
+      - name: Check the inputs
+        env:
+          CONTEXT: ${{ inputs.context }}
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be a full 40-character commit SHA"; exit 1; }
+          [[ "$CONTEXT" =~ ^(mock_pms|api)$ ]] || { echo "context must be mock_pms or api"; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.sha }}
@@ -56,13 +71,13 @@ jobs:
         id: push
         if: steps.exists.outputs.found != 'true'
         with:
-          context: mock_pms
+          context: ${{ inputs.context }}
           platforms: linux/arm64
           build-args: GIT_SHA=${{ inputs.sha }}
-          tags: ${{ vars.ECR_REPOSITORY_URL }}:${{ inputs.sha }}
+          tags: ${{ env.ECR_REPOSITORY_URL }}:${{ inputs.sha }}
           push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ inputs.context }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.context }}
       - name: Record the digest
         id: digest
         run: |

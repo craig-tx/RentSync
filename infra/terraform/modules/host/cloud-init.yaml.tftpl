@@ -1,12 +1,14 @@
 #cloud-config
 # Rendered by modules/host (feature 002 research R6). Contains no secrets: hosts read those
 # from SSM at boot through rentsync-render-env.
+# Files go in as YAML literal blocks, not base64: EC2 caps the gzipped user data at 16 KB, and
+# gzip compresses plain text far better than base64 (tests/host.tftest.hcl checks the round trip).
 write_files:
 %{ for path, f in files ~}
   - path: ${path}
     permissions: "${f.permissions}"
-    encoding: b64
-    content: ${base64encode(f.content)}
+    content: |
+      ${indent(6, f.content)}
 %{ endfor ~}
   - path: /etc/rentsync/host.env
     permissions: "0644"

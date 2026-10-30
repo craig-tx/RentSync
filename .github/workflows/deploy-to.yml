@@ -1,8 +1,9 @@
 # Deploys one image to one deployment through SSM Run Command, then checks it from the
 # internet (feature 002 research R9; contracts/host-interface.md). Reusable: called by
 # release.yml and deploy.yml. The job runs in the GitHub Environment named by the
-# DeploymentId, so prod-us waits for its required reviewer. The URL comes from that
-# Environment's SITE_URL variable, and the AWS role from its AWS_ROLE_ARN variable: the prod-us
+# DeploymentId, so prod-us waits for its required reviewer. The URLs come from that
+# Environment's SITE_URL and APP_URL variables (APP_URL is checked when the release carries
+# RentSync's API, feature 003), and the AWS role from its AWS_ROLE_ARN variable: the prod-us
 # Environment overrides the repository's role with rentsync-github-actions-prod, the only role
 # IAM lets run commands on production (protected) hosts.
 name: Deploy to
@@ -21,6 +22,11 @@ on:
         default: ""
       image_digest:
         description: sha256 digest from build-image.yml; required with image_tag, so the host pulls exactly that image
+        required: false
+        type: string
+        default: ""
+      api_image_digest:
+        description: sha256 digest of RentSync's API image for the same commit; empty for a mock-only release
         required: false
         type: string
         default: ""
@@ -50,9 +56,11 @@ jobs:
       DEPLOYMENT_ID: ${{ inputs.deployment_id }}
       IMAGE_TAG: ${{ inputs.image_tag }}
       IMAGE_DIGEST: ${{ inputs.image_digest }}
+      API_IMAGE_DIGEST: ${{ inputs.api_image_digest }}
       ROLLBACK: ${{ inputs.rollback }}
       RELOAD: ${{ inputs.reload }}
       SITE_URL: ${{ vars.SITE_URL }}
+      APP_URL: ${{ vars.APP_URL }}
       AWS_REGION: ${{ vars.AWS_REGION }}
     steps:
       - name: Check inputs
@@ -63,6 +71,10 @@ jobs:
           if [ "$ROLLBACK" != "true" ] && [ "$RELOAD" != "true" ]; then
             [[ "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "image_tag must be a full 40-character commit SHA"; exit 1; }
             [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "image_digest must come from build-image.yml (sha256:...)"; exit 1; }
+            if [ -n "$API_IMAGE_DIGEST" ]; then
+              [[ "$API_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "api_image_digest must come from build-image.yml (sha256:...)"; exit 1; }
+              [ -n "$APP_URL" ] || { echo "Environment $DEPLOYMENT_ID has no APP_URL variable (runbook §Releasing RentSync's API)"; exit 1; }
+            fi
           fi
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -75,7 +87,8 @@ jobs:
       # replacement and this release together (infra/release/run-deploy.sh).
       - name: Run rentsync-deploy on the host
         run: |
-          arg="$IMAGE_TAG@$IMAGE_DIGEST" # pinned: the host pulls exactly the image the build produced
+          arg="$IMAGE_TAG@$IMAGE_DIGEST" # pinned: the host pulls exactly the images the build produced
+          [ -z "$API_IMAGE_DIGEST" ] || arg="$arg+$API_IMAGE_DIGEST"
           [ "$ROLLBACK" = "true" ] && arg="--rollback"
           [ "$RELOAD" = "true" ] && arg="--reload"
           bash infra/release/run-deploy.sh "$DEPLOYMENT_ID" "$arg"
@@ -88,3 +101,11 @@ jobs:
           if [ "$ROLLBACK" != "true" ] && [ "$RELOAD" != "true" ]; then
             [ "$(jq -r .version <<< "$body")" = "$IMAGE_TAG" ] || { echo "version is not $IMAGE_TAG"; exit 1; }
           fi
+      - name: Check RentSync's /healthz from the internet
+        if: ${{ inputs.api_image_digest != '' && !inputs.rollback && !inputs.reload }}
+        run: |
+          body="$(curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "$APP_URL/healthz")"
+          echo "$body"
+          [ "$(jq -r .status <<< "$body")" = ok ] || { echo "status is not ok"; exit 1; }
+          [ "$(jq -r .deployment_id <<< "$body")" = "$DEPLOYMENT_ID" ] || { echo "wrong deployment answered"; exit 1; }
+          [ "$(jq -r .version <<< "$body")" = "$IMAGE_TAG" ] || { echo "version is not $IMAGE_TAG"; exit 1; }

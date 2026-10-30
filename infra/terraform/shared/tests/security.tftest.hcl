@@ -63,6 +63,21 @@ run "registry" {
     condition     = aws_ecr_repository.mock_pms.image_tag_mutability == "IMMUTABLE" && aws_ecr_repository.mock_pms.image_scanning_configuration[0].scan_on_push
     error_message = "ECR tags must be immutable and scanned on push (R16)."
   }
+
+  # Feature 003 research R15: RentSync's API image, beside the mock's and kept the same way. The
+  # name matches the */mock_pms pattern, which the build role's push policy and the environment
+  # roots' derived repository URL both follow.
+  assert {
+    condition = (aws_ecr_repository.api.name == "shared-us/api"
+      && aws_ecr_repository.api.image_tag_mutability == "IMMUTABLE"
+    && aws_ecr_repository.api.image_scanning_configuration[0].scan_on_push)
+    error_message = "The API's repository must be <deployment_id>/api, with immutable tags scanned on push (003 R15)."
+  }
+
+  assert {
+    condition     = aws_ecr_lifecycle_policy.api.policy == aws_ecr_lifecycle_policy.mock_pms.policy
+    error_message = "The API's images must expire under the mock's lifecycle policy (003 R15)."
+  }
 }
 
 run "weak_openobserve_password_rejected" {

@@ -43,3 +43,26 @@ resource "aws_ssm_parameter" "previous_image_tag" {
     ignore_changes = [value]
   }
 }
+
+# RentSync's secrets (feature 003, contracts/host-changes.md), in a rentsync/ sub-path that
+# rentsync-render-env reads with the rest of the deployment's path.
+resource "aws_ssm_parameter" "rentsync_encryption_keys" {
+  name             = "${local.ssm_prefix}/rentsync/encryption_keys"
+  type             = "SecureString"
+  value_wo         = var.rentsync_encryption_keys
+  value_wo_version = var.rentsync_encryption_keys_version
+}
+
+resource "aws_ssm_parameter" "rentsync_operator_seed_password" {
+  name             = "${local.ssm_prefix}/rentsync/operator_seed_password"
+  type             = "SecureString"
+  value_wo         = var.rentsync_operator_seed_password
+  value_wo_version = var.rentsync_operator_seed_password_version
+}
+
+resource "aws_ssm_parameter" "rentsync_session_secret" {
+  name             = "${local.ssm_prefix}/rentsync/session_secret"
+  type             = "SecureString"
+  value_wo         = var.rentsync_session_secret
+  value_wo_version = var.rentsync_session_secret_version
+}

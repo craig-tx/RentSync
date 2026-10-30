@@ -38,7 +38,7 @@ resource "aws_iam_role_policy_attachment" "ssm_core" {
 
 data "aws_iam_policy_document" "host" {
   dynamic "statement" {
-    for_each = var.ecr_repository_arn == null ? [] : [1]
+    for_each = length(var.ecr_repository_arns) == 0 ? [] : [1]
     content {
       sid       = "EcrAuth"
       actions   = ["ecr:GetAuthorizationToken"]
@@ -47,11 +47,11 @@ data "aws_iam_policy_document" "host" {
   }
 
   dynamic "statement" {
-    for_each = var.ecr_repository_arn == null ? [] : [1]
+    for_each = length(var.ecr_repository_arns) == 0 ? [] : [1]
     content {
       sid       = "EcrPull"
       actions   = ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:BatchCheckLayerAvailability"]
-      resources = [var.ecr_repository_arn]
+      resources = var.ecr_repository_arns
     }
   }
 

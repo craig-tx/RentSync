@@ -78,7 +78,7 @@ services:
       - "4002:4002"
     environment:
       <<: *api-env
-      SERVICE_NAME: rentsync-api
+      SERVICE_NAME: rentsync-api-web
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:4002/healthz/live"]
       interval: 5s
@@ -90,7 +90,7 @@ services:
     command: ["bundle", "exec", "bin/worker"]
     environment:
       <<: *api-env
-      SERVICE_NAME: rentsync-worker
+      SERVICE_NAME: rentsync-api-worker
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.162.0

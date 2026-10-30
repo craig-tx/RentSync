@@ -29,3 +29,20 @@ resource "aws_ecr_lifecycle_policy" "mock_pms" {
     }]
   })
 }
+
+# RentSync's API image (feature 003 research R15), kept exactly like the mock's: one release
+# ships both at the same commit SHA.
+resource "aws_ecr_repository" "api" {
+  name                 = "${var.deployment_id}/api"
+  image_tag_mutability = "IMMUTABLE"
+  force_delete         = false
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "api" {
+  repository = aws_ecr_repository.api.name
+  policy     = aws_ecr_lifecycle_policy.mock_pms.policy
+}

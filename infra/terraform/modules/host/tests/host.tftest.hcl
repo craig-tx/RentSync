@@ -9,18 +9,18 @@ mock_provider "aws" {
 }
 
 variables {
-  deployment_id      = "pr-42"
-  ami_id             = "ami-0123456789abcdef0"
-  instance_type      = "t4g.small"
-  availability_zone  = "us-east-1a"
-  subnet_id          = "subnet-0123456789abcdef0"
-  private_ip         = "10.40.1.42"
-  security_group_ids = ["sg-0123456789abcdef0"]
-  files              = {}
-  host_env           = { HOST_ROLE = "environment" }
-  ssm_read_paths     = ["/rentsync/pr-42"]
-  ssm_write_params   = ["/rentsync/pr-42/image_tag"]
-  ecr_repository_arn = "arn:aws:ecr:us-east-1:123456789012:repository/shared-us/mock_pms"
+  deployment_id       = "pr-42"
+  ami_id              = "ami-0123456789abcdef0"
+  instance_type       = "t4g.small"
+  availability_zone   = "us-east-1a"
+  subnet_id           = "subnet-0123456789abcdef0"
+  private_ip          = "10.40.1.42"
+  security_group_ids  = ["sg-0123456789abcdef0"]
+  files               = {}
+  host_env            = { HOST_ROLE = "environment" }
+  ssm_read_paths      = ["/rentsync/pr-42"]
+  ssm_write_params    = ["/rentsync/pr-42/image_tag"]
+  ecr_repository_arns = ["arn:aws:ecr:us-east-1:123456789012:repository/shared-us/mock_pms"]
 }
 
 run "hardened_and_durable" {
@@ -112,4 +112,36 @@ run "swap_must_fit_the_root_disk" {
   }
 
   expect_failures = [var.swap_mib]
+}
+
+# Every file reaches the host byte for byte through cloud-init's YAML, including tabs (the
+# Caddyfile) and the largest scripts. Files are written as plain text, not base64, so the gzipped
+# user data stays under EC2's 16 KB limit (feature 003 grew the environment host's files).
+run "files_survive_cloud_init" {
+  command = apply # the volume ID is part of the user data
+
+  override_resource {
+    target = aws_ebs_volume.data
+    values = { id = "vol-0123456789abcdef0" }
+  }
+
+  variables {
+    files = {
+      "/opt/rentsync/Caddyfile"        = { content = file("../../../host/Caddyfile.env"), permissions = "0644" }
+      "/opt/rentsync/compose.yaml"     = { content = file("../../../host/compose.env.yaml"), permissions = "0644" }
+      "/usr/local/bin/rentsync-deploy" = { content = file("../../../host/bin/rentsync-deploy"), permissions = "0755" }
+    }
+  }
+
+  assert {
+    condition = alltrue([for wf in yamldecode(local.user_data).write_files :
+      wf.path == "/etc/rentsync/host.env" || wf.content == merge(local.base_files, var.files)[wf.path].content
+    ])
+    error_message = "A file written by cloud-init differs from its source."
+  }
+
+  assert {
+    condition     = length(yamldecode(local.user_data).write_files) == length(local.base_files) + 4 # + 3 files and host.env
+    error_message = "cloud-init must write every file."
+  }
 }

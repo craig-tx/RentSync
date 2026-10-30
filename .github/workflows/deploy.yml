@@ -38,13 +38,23 @@ jobs:
     with:
       sha: ${{ inputs.image_tag }}
 
+  # RentSync's API image (feature 003 research R15), once its repository is configured.
+  build-api:
+    if: ${{ !inputs.rollback && !inputs.reload && vars.API_ECR_REPOSITORY_URL != '' }}
+    uses: ./.github/workflows/build-image.yml
+    with:
+      sha: ${{ inputs.image_tag }}
+      context: api
+      repository_url: ${{ vars.API_ECR_REPOSITORY_URL }}
+
   deploy:
-    needs: build
-    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    needs: [build, build-api]
+    if: ${{ !cancelled() && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.build-api.result == 'success' || needs.build-api.result == 'skipped') }}
     uses: ./.github/workflows/deploy-to.yml
     with:
       deployment_id: ${{ inputs.deployment_id }}
       image_tag: ${{ inputs.image_tag }}
       image_digest: ${{ needs.build.outputs.digest }}
+      api_image_digest: ${{ needs.build-api.outputs.digest }}
       rollback: ${{ inputs.rollback }}
       reload: ${{ inputs.reload }}

@@ -1,6 +1,10 @@
 # Release (feature 002 research R9, US4): every green main build is released to dev-staging,
 # then promoted to prod-us after the prod-us Environment's required reviewer approves.
-# Both deployments get the same image tag; nothing is rebuilt between them (FR-027).
+# Both deployments get the same images; nothing is rebuilt between them (FR-027).
+#
+# A release is the mock PMS image and RentSync's API image at one commit SHA (feature 003
+# research R15). The API image is built only once the bootstrap has set API_ECR_REPOSITORY_URL
+# (runbook §Releasing RentSync's API); until then a release ships the mock alone, as before.
 name: Release
 
 on:
@@ -26,20 +30,34 @@ jobs:
     with:
       sha: ${{ github.event.workflow_run.head_sha }}
 
+  build-api:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && vars.ECR_REPOSITORY_URL != '' && vars.API_ECR_REPOSITORY_URL != '' }}
+    uses: ./.github/workflows/build-image.yml
+    with:
+      sha: ${{ github.event.workflow_run.head_sha }}
+      context: api
+      repository_url: ${{ vars.API_ECR_REPOSITORY_URL }}
+
+  # Runs when the mock built and the API either built or was skipped (not yet configured); a
+  # failed API build stops the release.
   deploy-dev-staging:
-    needs: build
+    needs: [build, build-api]
+    if: ${{ !cancelled() && needs.build.result == 'success' && (needs.build-api.result == 'success' || needs.build-api.result == 'skipped') }}
     uses: ./.github/workflows/deploy-to.yml
     with:
       deployment_id: dev-staging
       image_tag: ${{ github.event.workflow_run.head_sha }}
       image_digest: ${{ needs.build.outputs.digest }}
+      api_image_digest: ${{ needs.build-api.outputs.digest }}
 
-  # Waits here for approval (prod-us Environment reviewer). Its URL comes from SITE_URL.
-  # The same digest as staging: production runs the exact image staging verified.
+  # Waits here for approval (prod-us Environment reviewer). Its URLs come from SITE_URL and
+  # APP_URL. The same digests as staging: production runs the exact images staging verified.
   deploy-prod-us:
-    needs: [build, deploy-dev-staging]
+    needs: [build, build-api, deploy-dev-staging]
+    if: ${{ !cancelled() && needs.deploy-dev-staging.result == 'success' }}
     uses: ./.github/workflows/deploy-to.yml
     with:
       deployment_id: prod-us
       image_tag: ${{ github.event.workflow_run.head_sha }}
       image_digest: ${{ needs.build.outputs.digest }}
+      api_image_digest: ${{ needs.build-api.outputs.digest }}
