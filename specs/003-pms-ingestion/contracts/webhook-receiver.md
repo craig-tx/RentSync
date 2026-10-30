@@ -35,8 +35,8 @@ Nothing in the body is read before step 3 passes.
 | unexpected error | 500 | `{"error":{"code":"internal_error"}}`: the PMS retries |
 
 `200` is sent only after the transaction that records the raw event (or finds it) and the
-receipt has committed (FR-011). Every outcome, including `500` where possible, writes one
-`webhook_receipts` row.
+receipt has committed (FR-011). Every outcome, including `500` where possible (reason
+`internal_error`, written after the rollback), writes one `webhook_receipts` row.
 
 Error messages never echo body content, header values or secrets.
 

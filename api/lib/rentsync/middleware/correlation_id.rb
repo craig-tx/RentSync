@@ -4,7 +4,7 @@ require "securerandom"
 
 module Rentsync
   module Middleware
-    # Takes X-Request-Id / X-Correlation-Id (or generates one), exposes it to logging
+    # Takes X-Correlation-Id, else X-Request-Id (or generates one), exposes it to logging
     # and every event created during the request, echoes it back, and writes one
     # access-log line per request.
     class CorrelationId
@@ -13,7 +13,7 @@ module Rentsync
       end
 
       def call(env)
-        id = env["HTTP_X_REQUEST_ID"] || env["HTTP_X_CORRELATION_ID"] || SecureRandom.uuid
+        id = env["HTTP_X_CORRELATION_ID"] || env["HTTP_X_REQUEST_ID"] || SecureRandom.uuid
         Thread.current[:correlation_id] = id
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         status, headers, body = @app.call(env)

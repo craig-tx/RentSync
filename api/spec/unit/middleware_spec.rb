@@ -32,6 +32,13 @@ RSpec.describe "Rentsync middleware" do
       expect(Thread.current[:correlation_id]).to be_nil
     end
 
+    it "prefers X-Correlation-Id to X-Request-Id, so a proxy's request ID never replaces the PMS's" do
+      _, headers, = app.call(env_for("/healthz", "HTTP_X_REQUEST_ID" => "req-proxy",
+                                                 "HTTP_X_CORRELATION_ID" => "corr-pms-1"))
+      expect(seen).to eq(["corr-pms-1"])
+      expect(headers["x-correlation-id"]).to eq("corr-pms-1")
+    end
+
     it "generates one when none is given" do
       _, headers, = app.call(env_for("/healthz"))
       expect(headers["x-correlation-id"]).to match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)

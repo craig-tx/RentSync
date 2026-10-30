@@ -286,24 +286,24 @@ recorded with a reason.
 
 ### Tests for User Story 2 (write first; they must fail) ⚠️
 
-- [ ] T036 [P] [US2] Unit spec `api/spec/unit/webhooks/signature_spec.rb`, using
+- [X] T036 [P] [US2] Unit spec `api/spec/unit/webhooks/signature_spec.rb`, using
   `api/spec/fixtures/signature_vector.json` copied from `mock_pms/spec/fixtures/`: the vector
   verifies; one changed body byte, a wrong secret, a malformed header, or a missing header
   fails with `bad_signature` or `missing_signature`; `|now − t| > 300` fails with
   `stale_timestamp` and exactly 300 passes; the comparison is constant time (it calls
   `OpenSSL.fixed_length_secure_compare` after a length check).
-- [ ] T037 [P] [US2] Unit spec `api/spec/unit/webhooks/envelope_spec.rb`: each of the mock's
+- [X] T037 [P] [US2] Unit spec `api/spec/unit/webhooks/envelope_spec.rb`: each of the mock's
   malformations (`truncate`, `drop_field`, `bad_type` from `mock_pms/lib/mock_pms/delivery/malformer.rb`)
   is `malformed_body`; an unknown `type` is `malformed_body`; `id` different from
   `PMS-Event-Id` is `malformed_body`; a valid envelope of each of the four types passes.
-- [ ] T038 [P] [US2] Unit spec `api/spec/unit/webhooks/recorder_spec.rb` (real Postgres): new
+- [X] T038 [P] [US2] Unit spec `api/spec/unit/webhooks/recorder_spec.rb` (real Postgres): new
   event → `recorded`; same event ID and same body → `duplicate`; same ID with a different body →
   rejected `conflicting_duplicate`, first version unchanged; a `payment.created` whose
   `business_key` was already recorded by reconciliation → `duplicate` with
   `duplicate_of_path = reconciliation`; `operator_id` never connected → `unknown_operator`; only
   a disconnected or `needs_reauth` connection → `no_active_connection`; every outcome writes one
   receipt; `UPDATE` or `DELETE` on `raw_events` raises (the trigger).
-- [ ] T039 [P] [US2] End-to-end spec `api/spec/e2e/webhook_to_raw_event_spec.rb`
+- [X] T039 [P] [US2] End-to-end spec `api/spec/e2e/webhook_to_raw_event_spec.rb`
   (Constitution III): a real signed HTTP request through the full Rack stack produces the
   persisted raw event and receipt, the stored `payload_raw` equals the request body byte for
   byte (and `payload` is its parsed JSON), `correlation_id`
@@ -312,9 +312,14 @@ recorded with a reason.
   table in contracts/webhook-receiver.md: each reason maps to its HTTP status, and error bodies
   never echo body content or header values.
 
+  *2026-10-29: T036–T039 were seen failing first. The unit specs could not load
+  (`uninitialized constant Rentsync::Webhooks`), and 13 of 13 end-to-end examples failed, along with the new
+  middleware example (`X-Correlation-Id` must win over `X-Request-Id`). T039 is `:committed` and
+  runs on a local Puma, so "200 only after commit" is a real commit over real HTTP.*
+
 ### Implementation for User Story 2
 
-- [ ] T040 [US2] Migration `api/db/migrations/003_events.rb`:
+- [X] T040 [US2] Migration `api/db/migrations/003_events.rb`:
   - `raw_events` with every column in data-model.md, unique `(pms_client_id, event_id)`,
     partial unique `(pms_client_id, business_key) WHERE business_key IS NOT NULL`, indexes
     `(connection_id, received_at)` and `(connection_id, occurred_at)`, and a trigger that
@@ -322,16 +327,30 @@ recorded with a reason.
   - `webhook_receipts` with every column; `outcome` in `recorded|duplicate|rejected`; `reason`
     required when `rejected` and in the data-model's list; indexes `(connection_id,
     received_at)` and `(operator_id, outcome, received_at)`.
-- [ ] T041 [P] [US2] `api/lib/rentsync/webhooks/signature.rb` and `envelope.rb`. Pass T036,
+- [X] T041 [P] [US2] `api/lib/rentsync/webhooks/signature.rb` and `envelope.rb`. Pass T036,
   T037.
-- [ ] T042 [US2] `api/lib/rentsync/webhooks/recorder.rb`: one transaction for the raw event and
+- [X] T042 [US2] `api/lib/rentsync/webhooks/recorder.rb`: one transaction for the raw event and
   the receipt; `ON CONFLICT DO NOTHING`, then the `payload_sha256` comparison (R4). Business
   keys: `payment.created:<data.object.id>` and `payment.reversed:<data.object.id>`, null for
   lease events. Passes T038.
-- [ ] T043 [US2] `api/lib/rentsync/webhooks/receiver.rb`: the plain Rack endpoint at
+- [X] T043 [US2] `api/lib/rentsync/webhooks/receiver.rb`: the plain Rack endpoint at
   `POST /webhooks/pms`, mounted first in `app.rb`. It reads at most 256 KiB, and nothing in the
   body is read before the signature passes. Response codes as in the contract; a correlation ID
   is generated when absent. Passes T039.
+
+  *2026-10-29 decisions (T040–T043):*
+  - *A `500` writes a receipt with the new reason `internal_error`, in its own transaction after
+    the rollback, best effort. data-model.md and the contract now list it.*
+  - *Only the active PMS client's signing secret is tried. A delivery signed by a superseded
+    registration gets `bad_signature` (pinned in T039).*
+  - *`X-Correlation-Id` now wins over `X-Request-Id` in the correlation middleware, so a proxy's
+    request ID can never replace the PMS's.*
+  - *Header values stored on receipts are capped at 100 characters, because they arrive before the
+    signature is checked. A body that is not valid UTF-8 is `malformed_body`.*
+  - *A business-key conflict is always `duplicate`; payload digests are compared only on an
+    event-ID conflict.*
+  - *Mutation checks, each caught: dropping the digest comparison, accepting any connection
+    status, and skipping the size limit.*
 - [ ] T044 [P] [US2] `api/bin/send_test_webhook` (`--bad-signature`, `--timestamp-offset <s>`,
   `--malformed`, `--operator <pms_operator_id>`) and `api/lib/rentsync/api/admin.rb` with
   `/admin/raw_events` and `/admin/receipts` (admin token, constant-time comparison, no payloads),

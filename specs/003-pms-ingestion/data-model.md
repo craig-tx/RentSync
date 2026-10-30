@@ -169,7 +169,7 @@ One row per delivery received, whatever its outcome (research R10, FR-012).
 | event_id | text null | from the header, or the body once verified |
 | event_type | text null | |
 | outcome | text | `recorded`, `duplicate`, `rejected` |
-| reason | text null | required when `rejected`: `missing_signature`, `bad_signature`, `stale_timestamp`, `body_too_large`, `malformed_body`, `unknown_operator`, `no_active_connection`, `conflicting_duplicate` |
+| reason | text null | required when `rejected`: `missing_signature`, `bad_signature`, `stale_timestamp`, `body_too_large`, `malformed_body`, `unknown_operator`, `no_active_connection`, `conflicting_duplicate`, or `internal_error` (a `500`: the failed transaction rolled back, so this receipt is written on its own, best effort) |
 | duplicate_of_path | text null | for `duplicate`: `webhook` or `reconciliation` |
 | raw_event_id | FK null | the recorded or matched raw event |
 | body_bytes | int | |

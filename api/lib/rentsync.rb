@@ -48,6 +48,10 @@ module Rentsync
     worker
     jobs/daily_purge
     app
+    webhooks/signature
+    webhooks/envelope
+    webhooks/recorder
+    webhooks/receiver
     web/page
     api/pages
   ].freeze

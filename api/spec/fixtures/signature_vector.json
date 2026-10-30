@@ -1,0 +1,7 @@
+{
+  "_comment": "Computed independently with: printf '%s' '<t>.<body>' | openssl dgst -sha256 -hmac '<secret>'. Shared with feature 002.",
+  "secret": "whsec_test_0123456789abcdef",
+  "t": 1792540800,
+  "body": "{\"id\":\"evt_TEST\",\"type\":\"payment.created\"}",
+  "v1": "ed69c6af6c69cc39cac4e9e65eda46f000fb25012a2f4c35b87ad91b001e4943"
+}
