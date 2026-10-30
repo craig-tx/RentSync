@@ -114,8 +114,8 @@ run "swap_must_fit_the_root_disk" {
   expect_failures = [var.swap_mib]
 }
 
-# Every file reaches the host byte for byte through cloud-init's YAML, including tabs (the
-# Caddyfile) and the largest scripts. Files are written as plain text, not base64, so the gzipped
+# Every file either root ships reaches its host byte for byte through cloud-init's YAML,
+# including tabs (the Caddyfiles). The telemetry files get test paths: both roots use the same. Files are written as plain text, not base64, so the gzipped
 # user data stays under EC2's 16 KB limit (feature 003 grew the environment host's files).
 run "files_survive_cloud_init" {
   command = apply # the volume ID is part of the user data
@@ -130,6 +130,9 @@ run "files_survive_cloud_init" {
       "/opt/rentsync/Caddyfile"        = { content = file("../../../host/Caddyfile.env"), permissions = "0644" }
       "/opt/rentsync/compose.yaml"     = { content = file("../../../host/compose.env.yaml"), permissions = "0644" }
       "/usr/local/bin/rentsync-deploy" = { content = file("../../../host/bin/rentsync-deploy"), permissions = "0755" }
+      "/opt/rentsync/collector.yaml"   = { content = file("../../../otel/collector.yaml"), permissions = "0644" }
+      "/test/compose.telemetry.yaml"   = { content = file("../../../host/compose.telemetry.yaml"), permissions = "0644" }
+      "/test/Caddyfile.telemetry"      = { content = file("../../../host/Caddyfile.telemetry"), permissions = "0644" }
     }
   }
 
@@ -141,7 +144,7 @@ run "files_survive_cloud_init" {
   }
 
   assert {
-    condition     = length(yamldecode(local.user_data).write_files) == length(local.base_files) + 4 # + 3 files and host.env
+    condition     = length(yamldecode(local.user_data).write_files) == length(local.base_files) + 7 # + 6 files and host.env
     error_message = "cloud-init must write every file."
   }
 }

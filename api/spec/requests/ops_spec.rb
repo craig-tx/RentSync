@@ -111,6 +111,15 @@ RSpec.describe "ops endpoints", type: :request do
   end
 
   describe "GET /metrics" do
+    # Pinned here, so the example doesn't depend on the SERVICE_NAME of the shell or container
+    # running it (Compose sets rentsync-api-web, as on the hosts).
+    around do |example|
+      Rentsync::Logging.service_name = "rentsync-api-web"
+      example.run
+    ensure
+      Rentsync::Logging.service_name = nil
+    end
+
     it "renders Prometheus text with flushed request counters and target_info" do
       beat!(1)
       get "/healthz"
@@ -122,7 +131,7 @@ RSpec.describe "ops endpoints", type: :request do
       expected = 'rentsync_http_requests_total{method="GET",route="/healthz",status="200"} 1'
       expect(last_response.body).to include(expected)
       labels = 'deployment_environment="[^"]+",deployment_id="[^"]+",' \
-               'service_name="rentsync-api",service_version="[^"]+"'
+               'service_name="rentsync-api-web",service_version="[^"]+"'
       expect(last_response.body).to match(/^target_info\{#{labels}\} 1$/)
     end
   end
