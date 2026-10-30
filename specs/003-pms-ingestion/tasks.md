@@ -419,7 +419,7 @@ within the PMS's rate limit, resumably.
 
 ### Tests for User Story 3 (write first; they must fail) ⚠️
 
-- [ ] T047 [P] [US3] Unit spec `api/spec/unit/pms/client_spec.rb` against
+- [X] T047 [P] [US3] Unit spec `api/spec/unit/pms/client_spec.rb` against
   `api/spec/support/fake_pms.rb` (a Rack app on Puma with scripted responses):
   - every call takes a token from the Redis bucket keyed on the PMS client;
   - a `429` with `Retry-After: 3` sets `rentsync:pms:<client>:blocked_until` (keeping the later
@@ -428,7 +428,7 @@ within the PMS's rate limit, resumably.
     timeouts; the 6th failed attempt raises;
   - Redis down → the call waits and does not proceed (fail closed);
   - an expiring access token is renewed first (T032).
-- [ ] T048 [P] [US3] Unit spec `api/spec/unit/reconciliation/run_spec.rb` (real Postgres, fake
+- [X] T048 [P] [US3] Unit spec `api/spec/unit/reconciliation/run_spec.rb` (real Postgres, fake
   PMS):
   - first run: no `updated_since` (full backfill), `trigger = initial`;
   - later runs: `updated_since = watermark − RECONCILE_OVERLAP_S`;
@@ -441,22 +441,46 @@ within the PMS's rate limit, resumably.
     run;
   - the watermark becomes the run's start time; failure keeps the cursor and backs off 30 s
     doubling up to the interval, with jitter.
-- [ ] T049 [P] [US3] Unit spec `api/spec/unit/reconciliation/scheduler_spec.rb`: two schedulers
+- [X] T049 [P] [US3] Unit spec `api/spec/unit/reconciliation/scheduler_spec.rb`: two schedulers
   never claim the same connection; an expired `reconcile_lease_until` is reclaimable; only
   `active` and `renewal_failing` connections are claimed; `POST /connections/{id}/reconcile`
   sets `next_reconcile_at = now()`, and returns 409 for a connection that isn't active.
 
+  *2026-10-29: T047–T049 were seen failing first: none could load
+  (`uninitialized constant Rentsync::Pms::Client` and `Rentsync::Reconciliation`). Choices
+  they pin:*
+  - *the shared Retry-After block keeps its time (`Rentsync::Clock`) as the value, set by a
+    small Lua compare-and-set that keeps the later block;*
+  - *a 401 forces one renewal and retries once, so a revoked grant ends in `needs_reauth`
+    through the refresh's `invalid_grant`;*
+  - *a reconciled `payment.created` takes the payment's own `received_at` as `occurred_at`,
+    the same time as the PMS's webhook, so both paths agree;*
+  - *after a resumed walk, the watermark is the earliest start since the last success, so pages
+    read before an interruption can't hide later updates;*
+  - *409 applies to connections that are not reconciled: `needs_reauth` and `disconnected`.
+    `renewal_failing` is still reconciled.*
+
 ### Implementation for User Story 3
 
-- [ ] T050 [US3] Migration `api/db/migrations/004_reconciliation.rb`: `reconciliation_runs`
+- [X] T050 [US3] Migration `api/db/migrations/004_reconciliation.rb`: `reconciliation_runs`
   with every column in data-model.md; `trigger` in `schedule|manual|initial`; `outcome` in
   `succeeded|failed` or null while running.
-- [ ] T051 [US3] `api/lib/rentsync/pms/client.rb`: `Net::HTTP` on `PMS_API_URL`, the shared
+- [X] T051 [US3] `api/lib/rentsync/pms/client.rb`: `Net::HTTP` on `PMS_API_URL`, the shared
   bucket (`api/lib/rentsync/rate_limit/token_bucket.lua`), `blocked_until`, and backoff.
   Passes T047.
-- [ ] T052 [US3] `api/lib/rentsync/reconciliation/run.rb`. Passes T048.
-- [ ] T053 [US3] `api/lib/rentsync/reconciliation/scheduler.rb`, registered as a worker job,
+- [X] T052 [US3] `api/lib/rentsync/reconciliation/run.rb`. Passes T048.
+- [X] T053 [US3] `api/lib/rentsync/reconciliation/scheduler.rb`, registered as a worker job,
   and the "Reconcile now" route. Passes T049.
+
+  *2026-10-29 (T050–T053):*
+  - *Migration 004 adds the foreign key from `raw_events` that 003 promised, and
+    `pms_connections.reconcile_requested_at` (data-model.md updated), so a run can be named
+    `manual` and a press during a run isn't lost.*
+  - *The Reconcile now button sits on `/connections` and redirects there until the health
+    page exists (US4).*
+  - *Mutation checks, each caught: dropping `SKIP LOCKED`, dropping the status filter, not
+    saving the cursor, not reading the shared block, and not setting it.*
+
 - [ ] T054 [US3] Extend the daily purge (T035) to delete `webhook_receipts` older than 90 days.
   Spec: raw events are untouched and the job runs once a day across two workers.
 - [ ] T055 [P] [US3] `api/bin/compare_with_pms [--wait <s>] [--reconcile]`: lists the mock's

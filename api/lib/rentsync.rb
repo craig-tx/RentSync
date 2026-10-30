@@ -40,6 +40,7 @@ module Rentsync
     seed/operators
     pms/admin_api
     pms/oauth
+    pms/client
     pms/connect
     pms/registration
     metrics/heartbeat_collector
@@ -47,6 +48,8 @@ module Rentsync
     api/ops
     worker
     jobs/daily_purge
+    reconciliation/run
+    reconciliation/scheduler
     app
     webhooks/signature
     webhooks/envelope

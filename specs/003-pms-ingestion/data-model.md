@@ -91,6 +91,7 @@ Links one RentSync operator to one PMS operator (spec, Key Entities).
 | next_reconcile_at | timestamptz | |
 | reconcile_lease_until | timestamptz null | claim (R2) |
 | reconcile_failures | int | for backoff |
+| reconcile_requested_at | timestamptz null | when the operator pressed **Reconcile now** (FR-020): the run is named `manual`, and a press during a run makes the next run due at once (added in migration 004) |
 
 **Constraints**:
 

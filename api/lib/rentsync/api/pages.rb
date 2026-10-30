@@ -17,7 +17,8 @@ module Rentsync
                                    "Sign in to the PMS as that account to reconnect.",
         "pms_unavailable" => "The PMS could not be reached. Please try again in a few minutes.",
         "disconnected" => "Disconnected. RentSync deleted the stored PMS credentials and kept the events " \
-                          "already recorded."
+                          "already recorded.",
+        "reconcile_requested" => "Reconciliation requested. It starts within a few seconds."
       }.freeze
 
       helpers do
@@ -155,6 +156,23 @@ module Rentsync
         Logging.for_function("Rentsync::API::Pages#disconnect").info("connection disconnected",
                                                                      connection_id: con.public_id)
         see_other("/connections?result=disconnected")
+      end
+
+      # Reconcile now (FR-020): due at once, and marked as asked for so the run is named manual.
+      # Back to /connections until the health page exists (US4).
+      post "connections/:id/reconcile" do
+        next see_other("/sign-in") unless operator
+        next forbidden unless csrf_ok?
+
+        con = own_connection(params[:id])
+        next not_found unless con
+        unless PmsConnection::LIVE.include?(con.status)
+          next message(409, "Not connected", "This connection is not active. Reconnect it first.")
+        end
+
+        now = Clock.now
+        con.this.update(reconcile_requested_at: now, next_reconcile_at: now)
+        see_other("/connections?result=reconcile_requested")
       end
 
       get "v1/connections" do

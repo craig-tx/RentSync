@@ -19,6 +19,10 @@
       <td><%= h(time(con.connected_at)) %><% if con.disconnected_at %><br><span class="muted">disconnected <%= h(time(con.disconnected_at)) %></span><% end %></td>
       <td>
 <% if Rentsync::PmsConnection::LIVE.include?(con.status) -%>
+        <form method="post" action="/connections/<%= h(con.public_id) %>/reconcile" class="inline">
+          <input type="hidden" name="csrf_token" value="<%= h(csrf) %>">
+          <button type="submit">Reconcile now</button>
+        </form>
         <form method="post" action="/connections/<%= h(con.public_id) %>/disconnect" class="inline">
           <input type="hidden" name="csrf_token" value="<%= h(csrf) %>">
           <button type="submit">Disconnect</button>
