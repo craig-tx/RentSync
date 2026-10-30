@@ -508,7 +508,7 @@ within the PMS's rate limit, resumably.
   counter passed at once, because T052 already counted it. Renewal results are `renewed`,
   `needs_reauth` and `failed`. The PMS request status is the HTTP code, or `timeout`.*
 
-- [ ] T057 [US3] Write `docs/adr/0009-postgres-claimed-background-work.md` from research R2,
+- [X] T057 [US3] Write `docs/adr/0009-postgres-claimed-background-work.md` from research R2,
   including when to revisit Sidekiq.
 
 **Checkpoint**: quickstart §3 (full) and §4 pass locally.
