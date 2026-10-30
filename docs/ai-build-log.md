@@ -1159,6 +1159,59 @@ should show "trying again" and then success on the new host.
   header are still allowed. Checked live; research R11 updated.
 - **Next:** Phase 5 (US3, reconciliation), T047 onward.
 
+### 2026-10-29: 003 Phase 5, US3 catch what webhooks missed (interactive)
+
+- **Done:** T047–T057.
+  - **`Pms::Client`:**
+    - every call takes a token from a Redis bucket keyed on the PMS client;
+    - a 429 sets a `blocked_until` that every instance obeys (a Lua compare-and-set);
+    - full-jitter backoff on 429s, 5xx and timeouts, giving up after 6 attempts;
+    - it fails closed without Redis;
+    - a 401 forces one renewal.
+  - **`Reconciliation::Run`:**
+    - walks `/v1/payments` from the watermark minus the overlap, or everything the first time;
+    - records `payment.created` and `payment.reversed` facts with synthetic IDs;
+    - saves the cursor with each page's facts;
+    - resumes after a kill;
+    - backs off 30 s, doubling up to the interval.
+  - **`Reconciliation::Scheduler`:** claims due connections with `FOR UPDATE SKIP LOCKED`
+    under a lease.
+  - **Also:** the **Reconcile now** button and route, the 90-day receipt purge,
+    `bin/compare_with_pms`, four metrics, and ADR 0009.
+- **Tests:** 277 API examples pass; RuboCop is clean.
+  - Every new spec was seen failing first.
+  - **Mutation checks** caught each of these:
+    - dropping `SKIP LOCKED`;
+    - dropping the status filter;
+    - not saving the cursor;
+    - not reading the shared block, and not setting it.
+- **Checkpoint, local (details in tasks.md):**
+  - §3 with chaos on: clean (0 missing, 0 duplicated).
+  - §4.1: lost webhooks were recovered by reconciliation, and replays of them came back as
+    `duplicate` with `reconciliation`.
+  - §4.3: ten 429s at a 10-a-minute limit, all honoured, and every run succeeded.
+  - §4.5: two workers never ran one connection at once.
+  - Quickstart §2 steps 4 and 5 now pass: a revoked grant goes to `needs_reauth`, and
+    reconnecting keeps the row.
+  - §4.4 was covered only by `run_spec`, because a backfill takes 0.67 s.
+- **Decisions:**
+  - **Reconcile now:** migration 004 adds `pms_connections.reconcile_requested_at`, so a run
+    is named `manual` and a press during a run is not lost. The foreign key that 003 promised
+    is added too.
+  - **Payment time:** a reconciled `payment.created` uses the payment's own `received_at` as
+    `occurred_at`, the same time as the PMS's webhook.
+  - **Watermark after a resumed walk:** it is the earliest start since the last success.
+  - **409:** only for `needs_reauth` and `disconnected`. `renewal_failing` is still reconciled.
+  - **`compare_with_pms`:** compares payments by business key, and lease events only when they
+    were delivered to RentSync. It reads RentSync's side from the database.
+  - **Redirect:** Reconcile now redirects to `/connections` until the health page (US4)
+    exists.
+- **Local state:**
+  - all three seeded operators are connected, with their histories backfilled permanently;
+  - one worker again;
+  - chaos is 0, and the mock client's rate limit is back to the default.
+- **Next:** Phase 6 (US4, connection health), T058 onward.
+
 <!-- PR #55: free -->
 
 <!-- PR #56: free -->

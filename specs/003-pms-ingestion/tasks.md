@@ -513,6 +513,31 @@ within the PMS's rate limit, resumably.
 
 **Checkpoint**: quickstart §3 (full) and §4 pass locally.
 
+*2026-10-29: checkpoint met locally, except that §4.4 was checked by its unit spec only.*
+- *§3 with chaos on and a `month_end_burst`: `bin/compare_with_pms --wait 300 --reconcile`
+  found 0 missing and 0 duplicated facts. 35 malformed deliveries were rejected and 12 repeats
+  got `duplicate`.*
+- *§4.1: the API was stopped through `nsf_wave` and `month_end_burst` until 23 deliveries ran
+  out of attempts. Reconciliation then added the 19 missing payments, and the comparison was
+  clean. Replaying the 23 lost events gave 20 `duplicate` receipts marked `reconciliation`, 3
+  marked `webhook`, and no new raw events.*
+- *§4.3: with the mock's limit for RentSync at 10 a minute, two rounds of full backfills of
+  three connections met ten 429s. Each was honoured through the shared block (56 s of waits),
+  and every run succeeded. RentSync's own bucket is 50 a minute, so the shared Retry-After
+  block is what held it back.*
+- *§4.4: not run live. A full backfill takes 0.67 s, too short to kill a worker mid-walk on
+  purpose. `run_spec` covers the kill and the resume.*
+- *§4.5: with two workers and three connections reconciled five times, no two runs of one
+  connection overlapped, and both workers took runs.*
+- *Quickstart §2 steps 4 and 5, left open in Phase 3, now pass:*
+  - *expired tokens were renewed before calls (`token_renewed`), with no 401 except below;*
+  - *after the grant was revoked, a run met one 401, the forced renewal got `invalid_grant`, and
+    the connection went to `needs_reauth`;*
+  - *`bin/connect_operator` restored it to `active` on the same connection row, its history
+    kept.*
+- *All three seeded operators are now connected locally, and their histories are backfilled
+  permanently.*
+
 ---
 
 ## Phase 6: User Story 4 - See connection health (Priority: P2)
