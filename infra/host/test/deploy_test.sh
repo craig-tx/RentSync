@@ -176,9 +176,9 @@ grep -qx "pull mock=123456789012.dkr.ecr.us-east-1.amazonaws.com/shared-us/mock_
   || fail "the images pulled were: $(cat "$work/pull.log")"
 mock_setup="$(grep -n "run --rm mock_pms bundle exec bin/setup --deploy" "$work/docker.log" | head -1 | cut -d: -f1)"
 api_setup="$(grep -n "run --rm api bundle exec bin/setup --deploy" "$work/docker.log" | head -1 | cut -d: -f1)"
-[ -n "$mock_setup" ] && [ -n "$api_setup" ] || fail "a two-image deploy did not run both setups"
+if ! { [ -n "$mock_setup" ] && [ -n "$api_setup" ]; }; then fail "a two-image deploy did not run both setups"; fi
 [ "$mock_setup" -lt "$api_setup" ] || fail "the API's setup ran before the mock's"
-[ "$(cat "$work/running")" = "$B" ] && [ "$(api_running)" = "$B" ] || fail "running: mock $(cat "$work/running"), api $(api_running)"
+if ! { [ "$(cat "$work/running")" = "$B" ] && [ "$(api_running)" = "$B" ]; }; then fail "running: mock $(cat "$work/running"), api $(api_running)"; fi
 [ "$(tags)" = "$R1 $A@$M" ] || fail "after a two-image deploy, tags are $(tags)"
 : > "$work/docker.log"
 out="$(deploy "$R1")" || fail "redeploying a two-image ref failed: $out"
@@ -192,7 +192,7 @@ set -e
 [ "$code" -eq 1 ] || fail "an unhealthy API exited $code, expected 1: $out"
 grep -qx "rolled back to $R1" <<< "$out" || fail "an unhealthy API printed: $out"
 [ "$(tags)" = "$R1 $A@$M" ] || fail "a failed two-image deploy changed SSM: $(tags)"
-[ "$(cat "$work/running")" = "$B" ] && [ "$(api_running)" = "$B" ] || fail "after the rollback: mock $(cat "$work/running"), api $(api_running)"
+if ! { [ "$(cat "$work/running")" = "$B" ] && [ "$(api_running)" = "$B" ]; }; then fail "after the rollback: mock $(cat "$work/running"), api $(api_running)"; fi
 
 # 11. Rolling back to a release from before the API runs the mock alone and stops the API.
 : > "$work/docker.log"
@@ -207,7 +207,7 @@ out="$(deploy "$BAD_API@$M+$P")"
 code=$?
 set -e
 [ "$code" -eq 1 ] || fail "a failed first two-image release exited $code: $out"
-[ "$(cat "$work/running")" = "$A" ] && [ "$(api_running)" = stopped ] || fail "after a failed first release: mock $(cat "$work/running"), api $(api_running)"
+if ! { [ "$(cat "$work/running")" = "$A" ] && [ "$(api_running)" = stopped ]; }; then fail "after a failed first release: mock $(cat "$work/running"), api $(api_running)"; fi
 
 # 12. A host without an API repository refuses an API digest.
 sed -i '/^API_ECR_REPOSITORY_URL=/d' "$work/etc/host.env"
