@@ -1111,6 +1111,48 @@ should show "trying again" and then success on the new host.
   Step 6's health URL needs US4.
 - **Next:** Phase 4 (US2, record every PMS event exactly once), T036 onward.
 
+### 2026-10-29: 003 Phase 4, US2 record every PMS event exactly once (interactive)
+
+- **Done:** T036–T046.
+  - **Receiver:** `POST /webhooks/pms` is a plain Rack endpoint. It reads at most 256 KiB, checks
+    the signature (constant time, then the 300 s window) before reading the body, then the
+    envelope.
+  - **Recording:** the raw event and its receipt are written in one transaction.
+    `ON CONFLICT DO NOTHING` covers the event-ID key and the partial business-key key, and a
+    trigger refuses `UPDATE` and `DELETE` on `raw_events`.
+  - **Tools:** `/admin/raw_events`, `/admin/receipts` and `bin/send_test_webhook`.
+  - **Metrics:** receipts, raw events, and the acknowledgement-time histogram.
+  - **ADR 0011.**
+- **Tests:** 234 API examples pass; RuboCop is clean.
+  - Every new spec was seen failing first.
+  - The end-to-end spec is `:committed` and runs on a real local Puma, so "200 only after
+    commit" is a real commit.
+  - **Mutation checks** caught each of these:
+    - dropping the digest comparison;
+    - accepting any connection status;
+    - skipping the size limit.
+- **Live check, local, chaos on (quickstart §3 settings) with a `month_end_burst`:**
+  - 22 events reached RentSync across 28 deliveries; 21 were recorded, with 0 duplicated;
+  - all 27 malformed deliveries were rejected, and 4 repeats got `duplicate`;
+  - the one event still missing had only a malformed delivery, and US3's reconciliation will
+    recover it.
+  - Chaos was reset to 0 afterwards.
+- **Decisions:**
+  - **500 receipts:** a 500 writes an `internal_error` receipt after the rollback. This is a
+    new reason; data-model.md and the contract are updated.
+  - **Signing secret:** only the active PMS client's secret is accepted, so a superseded
+    registration's deliveries get `bad_signature`.
+  - **Correlation ID:** `X-Correlation-Id` now wins over `X-Request-Id`, so a proxy's ID
+    can't replace the PMS's.
+  - **Admin token:** `/admin` reuses the mock's `ADMIN_TOKEN` value, so the hosts need no new
+    secret (plan.md).
+  - **Test sender:** `bin/send_test_webhook` refuses a valid delivery without `--record`,
+    because raw events are permanent.
+  - **Histogram buckets:** the shared buckets gain 2 s, so SC-006's p95 is read off a bucket.
+    `buffer_spec`'s pinned list was updated on purpose.
+- **Still open:** login CSRF on `POST /sign-in` awaits the operator's decision.
+- **Next:** Phase 5 (US3, reconciliation), T047 onward.
+
 <!-- PR #55: free -->
 
 <!-- PR #56: free -->

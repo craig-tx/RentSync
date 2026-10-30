@@ -386,6 +386,17 @@ recorded with a reason.
 **Checkpoint**: with chaos on, quickstart §3 shows 0 missing and 0 duplicated events once
 US3's reconciliation exists; before that, 0 duplicated and every malformed delivery rejected.
 
+*2026-10-29: the pre-US3 checkpoint passed locally, with quickstart §3's chaos settings and a
+`month_end_burst`:*
+- *the mock made 28 deliveries of 22 events to RentSync;*
+- *RentSync recorded 21 raw events, with 0 duplicated IDs;*
+- *every malformed delivery was rejected (27 `malformed_body` receipts), and 4 repeat deliveries
+  got `duplicate`.*
+
+*The one missing event had a single delivery, malformed (`drop_field`), which was rejected
+until it ran out of attempts. Recovering it is US3's job. `bin/compare_with_pms` (US3) will
+automate this comparison; this run used a scratch script. Chaos was reset to 0 afterwards.*
+
 ---
 
 ## Phase 5: User Story 3 - Catch what webhooks missed (Priority: P2)
