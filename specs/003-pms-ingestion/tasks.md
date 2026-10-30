@@ -588,6 +588,19 @@ reconciliation, then compare the health page with `/admin/receipts`.
 
 **Checkpoint**: all four stories work locally; quickstart §2–§4 pass.
 
+*2026-10-29: met locally; §4.4 is still covered by its unit spec only, as noted in Phase 5.*
+- *US4's independent test, with chaos at 50% duplicates and 30% malformed, a
+  `month_end_burst` and one reconciliation of three connections. Summed across the three
+  operators' health JSON, the changes matched the change in `/admin/receipts` exactly:*
+  - *5 duplicates;*
+  - *120 `malformed_body`, all attributed;*
+  - *26 events received = 19 recorded webhooks + 7 reconciled facts.*
+- *`bin/compare_with_pms` stayed clean.*
+- *Quickstart §2 step 6: operator 2 sees only their own connection, and gets 404 for operator
+  1's health page.*
+- *Rejections recorded before attribution existed (Phase 4's 35 `malformed_body`) have no
+  operator, so they appear in `/admin/receipts` only.*
+
 ---
 
 ## Phase 7: Deploy to staging and production (FR-025)

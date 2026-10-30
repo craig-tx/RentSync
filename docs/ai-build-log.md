@@ -1216,6 +1216,43 @@ should show "trying again" and then success on the new host.
   a backfill waited out 4 blocks (40 s) and succeeded.
 - **Next:** Phase 6 (US4, connection health), T058 onward.
 
+### 2026-10-29: 003 Phase 6, US4 connection health (interactive)
+
+- **Done:** T058–T061.
+  - **`Health::Report`:** built from durable rows and scoped to one connection. It reports:
+    - access status and the last successful sync;
+    - events received, by path and by type;
+    - duplicates and rejections by reason, over 90 days;
+    - the last run, with its error, the last success and when the next is due;
+    - the 50 latest rejections, with only time, reason, type and event ID.
+  - **Served at:** `/connections/:id/health` (HTML, or JSON on request) and
+    `/v1/connections/:id/health`.
+  - **Navigation:** the connections page links to each health page, and Reconcile now returns
+    there.
+- **Tests:** 295 API examples pass; RuboCop is clean.
+  - Every new spec was seen failing first.
+  - **Mutation checks** caught each of these:
+    - unscoped receipts;
+    - unscoped events;
+    - no 90-day window;
+    - looking the connection up without the operator.
+- **Checkpoint, local:** US4's independent test passed.
+  - The run used 50% duplicates, 30% malformed and a burst, then one reconciliation.
+  - Summed across operators, the health figures equalled the change in `/admin/receipts`:
+    5 duplicates, 120 malformed, and 26 received (19 by webhook, 7 by reconciliation).
+  - Quickstart §2 step 6 passes.
+  - Quickstart §2–§4 now pass locally, except §4.4, which is covered by its unit spec only.
+- **Decisions:**
+  - **Attribution:** validly signed but stale or malformed deliveries are now attributed to
+    their operator. The operator, event ID and type are read from the authenticated body,
+    never from headers, so they appear on that operator's health page. Deliveries that fail
+    the signature check are never attributed.
+  - **Times** are shown in UTC, as on the connections page.
+  - **Older receipts:** Phase 4's 35 malformed receipts predate attribution and appear only
+    in `/admin/receipts`.
+- **Next:** Phase 7 (deploy to staging and production, FR-025), which needs the operator's
+  steps from quickstart §5.
+
 <!-- PR #55: free -->
 
 <!-- PR #56: free -->
