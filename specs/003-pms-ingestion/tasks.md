@@ -380,7 +380,7 @@ recorded with a reason.
   deliberate change, not a weakened test. A `raw_events_total` type comes from the verified
   envelope, never from the `PMS-Event-Type` header. The ack histogram has no labels and times
   every answer, including 500s. Checked live on `/metrics`.*
-- [ ] T046 [US2] Write `docs/adr/0011-exactly-once-raw-events.md` (context, decision,
+- [X] T046 [US2] Write `docs/adr/0011-exactly-once-raw-events.md` (context, decision,
   alternatives, consequences), from research R3, R4 and R10.
 
 **Checkpoint**: with chaos on, quickstart §3 shows 0 missing and 0 duplicated events once
