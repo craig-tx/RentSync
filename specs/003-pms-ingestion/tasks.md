@@ -487,10 +487,12 @@ within the PMS's rate limit, resumably.
   *2026-10-29: the two new examples were seen failing first. "Across two workers" uses two job
   instances against one lease; the lease spec from T035 already covers a held lease. Raw events
   are kept even when the receipts that point to them are purged.*
-- [ ] T055 [P] [US3] `api/bin/compare_with_pms [--wait <s>] [--reconcile]`: lists the mock's
+
+- [X] T055 [P] [US3] `api/bin/compare_with_pms [--wait <s>] [--reconcile]`: lists the mock's
   true events (`GET /admin/events`) for connected operators, optionally triggers and waits for
   one reconciliation, lists RentSync's (`/admin/raw_events`), and prints missing, duplicated and
   per-type counts. It exits non-zero on any missing or duplicated fact.
+*2026-10-29: runs in the `api` container. Payment facts are compared by business key, because  reconciled facts have synthetic IDs. Lease events are compared only when the mock delivered  them to RentSync's client, because reconciliation never fetches them (R5). RentSync's side is  read from the database, not over `/admin/raw_events`, since the tool runs where the database  is. Checked live after the first full backfill: 893 `payment.created` and 632  `payment.reversed`, with 0 missing and 0 duplicated, exit 0.*
 - [ ] T056 [US3] Metrics `rentsync_reconciliation_runs_total{result}`,
   `rentsync_pms_requests_total{status}`, `rentsync_pms_rate_limit_waits_seconds_total` and
   `rentsync_token_renewals_total{result}`.

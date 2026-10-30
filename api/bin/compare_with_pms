@@ -1,0 +1,118 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Compares what RentSync recorded with the PMS's true events (T055, quickstart §3 and §4, SC-003).
+# Runs in the api container, which can reach the mock and the database:
+#
+#   docker compose exec -T api bundle exec bin/compare_with_pms [--wait S] [--reconcile]
+#
+#   --wait S      first wait up to S seconds for the mock's deliveries to RentSync to settle,
+#                 and (with --reconcile) for the runs to finish
+#   --reconcile   ask for one reconciliation of every live connection and wait for it
+#
+# Payment facts are compared by business key (payment.created:<pay_id>, payment.reversed:<pay_id>),
+# because reconciled facts carry synthetic event IDs. Lease events are compared by event ID, and
+# only those the mock delivered to RentSync's client: reconciliation never fetches them (research
+# R5). Exits 1 on any missing or duplicated fact. Prints IDs and counts only, never payloads.
+ENV["SERVICE_NAME"] ||= "rentsync-tool"
+require "net/http"
+require "optparse"
+require_relative "../lib/rentsync"
+
+options = { wait: 0 }
+OptionParser.new do |o|
+  o.banner = "usage: bin/compare_with_pms [--wait S] [--reconcile]"
+  o.on("--wait S", Integer) { |s| options[:wait] = s }
+  o.on("--reconcile") { options[:reconcile] = true }
+end.parse!
+
+Rentsync.boot!
+
+# GET on the mock's admin API, following next_cursor.
+def admin_pages(path, params)
+  base = URI(Rentsync::Settings.pms_api_url)
+  rows = []
+  cursor = nil
+  loop do
+    query = URI.encode_www_form(params.merge(limit: 100).merge(cursor ? { cursor: cursor } : {}))
+    request = Net::HTTP::Get.new("#{path}?#{query}", "Authorization" => "Bearer #{Rentsync::Settings.mock_pms_admin_token}")
+    response = Net::HTTP.start(base.host, base.port, use_ssl: base.scheme == "https") { |h| h.request(request) }
+    abort "#{path}: HTTP #{response.code}" unless response.code == "200"
+    body = JSON.parse(response.body)
+    rows.concat(body.fetch("data"))
+    cursor = body["next_cursor"]
+    break unless cursor
+  end
+  rows
+end
+
+def deadline_passed?(deadline) = Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+
+client = Rentsync::PmsClient.active.first(pms_key: Rentsync::Pms::Registration::PMS_KEY) || abort("run bin/setup first")
+connections = Rentsync::PmsConnection.where(pms_client_id: client.id, status: Rentsync::PmsConnection::LIVE).all
+abort "no live connection; run bin/connect_operator" if connections.empty?
+deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + options[:wait]
+
+if options[:wait].positive?
+  until deadline_passed?(deadline)
+    unsettled = %w[pending in_flight].sum do |status|
+      admin_pages("/admin/deliveries", client_id: client.client_id, status: status).size
+    end
+    break if unsettled.zero?
+
+    puts "waiting: #{unsettled} deliveries to RentSync not settled"
+    sleep 5
+  end
+end
+
+if options[:reconcile]
+  asked = Rentsync::Clock.now
+  connections.each { |c| c.this.update(reconcile_requested_at: asked, next_reconcile_at: asked) }
+  runs = Rentsync.db[:reconciliation_runs].where(connection_id: connections.map(&:id)).where { started_at >= asked }
+  loop do
+    finished = runs.exclude(outcome: nil).select_map(:connection_id).uniq
+    break if finished.size == connections.size
+
+    abort "reconciliation did not finish within --wait #{options[:wait]}" if deadline_passed?(deadline)
+
+    sleep 2
+  end
+  runs.order(:id).each do |run|
+    puts "reconciliation #{run[:outcome]}: #{run[:pages]} pages, #{run[:payments_seen]} payments, " \
+         "#{run[:facts_added]} facts added#{" (#{run[:error_code]})" if run[:error_code]}"
+  end
+end
+
+delivered = admin_pages("/admin/deliveries", client_id: client.client_id).to_set { |d| d["event_id"] }
+problems = 0
+connections.each do |connection|
+  truth = admin_pages("/admin/events", operator_id: connection.pms_operator_id)
+  pms = truth.filter_map do |event|
+    if Rentsync::Webhooks::Envelope::PAYMENT_TYPES.include?(event["type"])
+      [event["type"], "#{event['type']}:#{event.dig('data', 'object', 'id')}"]
+    elsif delivered.include?(event["id"])
+      [event["type"], event["id"]]
+    end
+  end
+  ours = Rentsync.db[:raw_events].where(connection_id: connection.id)
+                 .select_map(%i[event_type business_key event_id])
+                 .map { |type, key, id| [type, key || id] }
+
+  puts "#{connection.pms_operator_name} (#{connection.pms_operator_id}):"
+  ours_by_key = ours.group_by(&:last)
+  pms.group_by(&:first).sort.each do |type, facts|
+    keys = facts.map(&:last).uniq
+    missing = keys.reject { |k| ours_by_key.key?(k) }
+    duplicated = keys.count { |k| ours_by_key.fetch(k, []).size > 1 }
+    problems += missing.size + duplicated
+    puts format("  %<type>-17s PMS %<pms>5d  RentSync %<ours>5d  missing %<missing>4d  duplicated %<dup>4d",
+                type: type, pms: keys.size, ours: ours.count { |t, _| t == type }, missing: missing.size,
+                dup: duplicated)
+    missing.first(5).each { |k| puts "    missing #{k}" }
+  end
+  by_path = Rentsync.db[:raw_events].where(connection_id: connection.id).group_and_count(:arrival_path).all
+  puts "  by path: #{by_path.to_h { |r| [r[:arrival_path], r[:count]] }}"
+end
+
+puts problems.zero? ? "OK: no missing or duplicated facts" : "FAILED: #{problems} missing or duplicated"
+exit(problems.zero? ? 0 : 1)
