@@ -10,7 +10,8 @@ rentsync-deploy <ref>          deploy <sha>@sha256:<digest> (what releases alway
                                bare 40-char <sha>. The host pulls <ecr>:<ref>, so a pinned
                                digest makes Docker refuse any other image under that tag.
                                The whole <ref> is recorded in image_tag; /healthz.version is
-                               checked against the <sha> part
+                               checked against the <sha> part. From feature 003 a release may
+                               add +sha256:<api digest>; see 003 contracts/host-changes.md
 rentsync-deploy --rollback     deploy previous_image_tag
 rentsync-deploy --reload       re-render secrets and (re)start the current image_tag
                                (boot, secret rotation); if image_tag is "none", starts only Caddy

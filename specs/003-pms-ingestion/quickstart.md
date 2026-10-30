@@ -94,11 +94,14 @@ Reset chaos to 0 afterwards.
 
 ## 5. Deployed (FR-025)
 
-1. Operator, **in this order**: add the two `app-*` A records and wait until they resolve; set
-   the new workspace variables (contracts/host-changes.md); apply `rentsync-shared-us` (the ECR
-   repository and IAM), then `rentsync-dev-staging`, then `rentsync-prod-us`. The records come
-   first because the first release with the API checks its public URL.
-2. Merge to `main`; the release deploys both images to staging, then prod after approval.
+1. Operator, before the merge: add the two `app-*` A records and wait until they resolve; set the
+   new workspace variables (contracts/host-changes.md) in both environment workspaces; let the
+   build role push to `*/api` (`bootstrap-iam.sh`). The workspaces track `main`, so nothing can
+   be applied before the merge.
+2. Merge to `main`, then follow runbook §Releasing RentSync's API: dev-staging applies on its
+   own and the first release ships the mock alone; confirm `rentsync-shared-us` and
+   `rentsync-prod-us`; set `API_ECR_REPOSITORY_URL` and `APP_URL` (`bootstrap-github.sh`);
+   then deploy the merge SHA to staging, and to prod after approval, with both images.
 3. Check:
 
    ```bash

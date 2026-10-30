@@ -612,50 +612,78 @@ release.
 
 ### Tests (write first; they must fail) ⚠️
 
-- [ ] T062 [P] Extend `infra/host/test/render_env_test.sh`: an environment host without
+- [X] T062 [P] Extend `infra/host/test/render_env_test.sh`: an environment host without
   `rentsync/encryption_keys`, `rentsync/operator_seed_password` or `rentsync/session_secret`
   fails, naming the parameter, never its value; with them, the env file contains every key in
   contracts/host-changes.md "Rendered environment additions", with
   `RENTSYNC_DATABASE_URL` ending in `rentsync_<deployment id with underscores>`.
-- [ ] T063 [P] Extend the `rentsync-deploy` tests (`infra/host/test/`): it pulls both images at
+  *Done: also asserts the error names each missing secret and prints no value.*
+- [X] T063 [P] Extend the `rentsync-deploy` tests (`infra/host/test/`): it pulls both images at
   one tag, runs both setups, and succeeds only when both `/healthz` report the new version over
   the Compose network; if the API is unhealthy, **both** roll back to the previous tag.
-- [ ] T064 [P] Terraform tests (`infra/terraform/environment/tests/`, `infra/terraform/shared/tests/`):
+  *Done. The ref is `<sha>@sha256:<mock>+sha256:<api>`; a ref without the API digest (every
+  earlier release) runs the mock alone and stops the API, so rolling back past this feature and
+  booting a replaced host on an old `image_tag` still work (cases 9–12).*
+- [X] T064 [P] Terraform tests (`infra/terraform/environment/tests/`, `infra/terraform/shared/tests/`):
   the three write-only `rentsync_*` variables and their `_version` companions produce SSM
   SecureString parameters under `<deployment path>/rentsync/`; `app_hostname` reaches host.env;
   the `rentsync/api` ECR repository has immutable tags and the mock's lifecycle policy; the
   GitHub release role may push to it and host roles may pull from it.
+  *Done. The repository is `shared-us/api`, matching `*/mock_pms`. The build role's push right
+  lives in `docs/deploy/iam/github-build-policy.json` (CloudShell bootstrap), not Terraform, so
+  `bootstrap_iam_test.sh` checks it.*
 
 ### Implementation
 
-- [ ] T065 `infra/terraform/environment`: `app_hostname` and the `rentsync_*` variables
+- [X] T065 `infra/terraform/environment`: `app_hostname` and the `rentsync_*` variables
   (validation: encryption keys match `^[a-z0-9]+=[A-Za-z0-9+/]{43}=(,[a-z0-9]+=[A-Za-z0-9+/]{43}=)*$`,
   seed password ≥ 16 characters, session secret ≥ 32 URL-safe characters, none equal to the
   `.env.example` values), SSM parameters via the write-only pattern (ADR-0007), and host.env.
   Update `specs/002-aws-deployment/contracts/workspace-variables.md`. Passes T064.
-- [ ] T066 `infra/terraform/shared`: the `rentsync/api` ECR repository and the IAM additions.
+  *Done. Key IDs follow `Crypto::Box` (`[A-Za-z0-9_-]{1,32}`), wider than the regex above.
+  The host module depends on the three parameters. The API repository URL and ARN fall back to
+  the mock's with `/api`, so dev-staging can apply before the shared workspace has.
+  `audit-hcp-secrets.rb` searches for the three new values too.*
+- [X] T066 `infra/terraform/shared`: the `rentsync/api` ECR repository and the IAM additions.
   Passes T064.
-- [ ] T067 `infra/host/bin/rentsync-render-env`: require and render the new keys. Passes T062.
-- [ ] T068 `infra/host/compose.env.yaml` (`api` with `mem_limit: 256m`, `api_worker` with
+  *Done; outputs `api_ecr_repository_url` and `api_ecr_repository_arn`.*
+- [X] T067 `infra/host/bin/rentsync-render-env`: require and render the new keys. Passes T062.
+  *Done.*
+- [X] T068 `infra/host/compose.env.yaml` (`api` with `mem_limit: 256m`, `api_worker` with
   `mem_limit: 192m`, `${API_IMAGE}`, only the variables each needs), `infra/host/Caddyfile.env`
   (the `{$APP_HOSTNAME}` site block with `respond /metrics* 404` and `reverse_proxy api:4002`),
   and `infra/otel/collector.yaml` (scrape `api:4002` and `api_worker:4003` at the same interval
   variable). Validate the Collector config with `otelcol validate` as before.
-- [ ] T069 `infra/host/bin/rentsync-deploy`: both images, both setups, both health checks,
+  *Done, with one deviation: only `api:4002` is scraped. The worker's `/metrics` renders the
+  same Redis totals, so a second target would store every series twice. The Collector's log
+  filter also had to admit `rentsync-` lines, or RentSync's logs would have been dropped. The
+  API services are in a Compose profile `api`, enabled per release.*
+- [X] T069 `infra/host/bin/rentsync-deploy`: both images, both setups, both health checks,
   joint rollback. Passes T063.
-- [ ] T070 `.github/workflows/release.yml` builds and pushes both images with the commit SHA;
+  *Done; mutation-checked (no API health check, no API stop, setups swapped).*
+- [X] T070 `.github/workflows/release.yml` builds and pushes both images with the commit SHA;
   `deploy-to.yml`'s external check also verifies `APP_URL`'s `/healthz` version;
   `bootstrap-github.sh` sets `APP_URL` per GitHub Environment (with its bootstrap test updated).
-- [ ] T071 CI job `ingestion-e2e` in `.github/workflows/ci.yml` (research R17), modelled on
+  *Done. `build-image.yml` takes `context` and `repository_url`; the API build waits for the
+  repository variable `API_ECR_REPOSITORY_URL` (set by `bootstrap-github.sh
+  --api-ecr-repository-url`), so the merge that creates the repository releases the mock alone.*
+- [X] T071 CI job `ingestion-e2e` in `.github/workflows/ci.yml` (research R17), modelled on
   `telemetry-smoke`: start mock and API, `bin/setup` both, run `bin/connect_operator` on the
   runner, set every chaos rate (quickstart §3 values), run `month_end_burst`, then
   `bin/compare_with_pms --wait 180 --reconcile`, which must exit 0. On failure, dump
   `docker compose logs`.
-- [ ] T072 **🧑 OPERATOR**: add A records `app-staging.rentsync.org` and `app.rentsync.org` to
-  the environments' Elastic IPs and wait until they resolve; set the new workspace variables
-  (contracts/host-changes.md) in `rentsync-dev-staging` and `rentsync-prod-us`; apply
-  `rentsync-shared-us` (confirm), then `rentsync-dev-staging`, then `rentsync-prod-us` (confirm).
-  The A records come **before** the first release that includes the API (quickstart §5).
+  *Done; run locally from a clean stack: 22 facts by webhook, 1 recovered by reconciliation,
+  0 missing or duplicated. Two changes found by it: the job finishes the connect's backfill
+  before the burst (otherwise the backfill records the burst first and no webhook path is
+  tested), and `bin/compare_with_pms` gives reconciliation its own `--wait`, because
+  exhausting retries (~254 s) used up the shared deadline.*
+- [ ] T072 **🧑 OPERATOR**: runbook §Releasing RentSync's API. Before the merge: A records
+  `app-staging.rentsync.org` and `app.rentsync.org` (done 2026-10-30); the new workspace
+  variables (contracts/host-changes.md) in `rentsync-dev-staging` and `rentsync-prod-us`; the
+  build role's new policy version (`bootstrap-iam.sh`). After the merge: confirm
+  `rentsync-shared-us` and `rentsync-prod-us`; `bootstrap-github.sh --api-ecr-repository-url`;
+  deploy the merge SHA with both images. *Reworded: the workspaces track `main`, so the shared
+  apply can't come before the merge, as the original order had it.*
 - [ ] T073 After merge, run quickstart §5 steps 2–5 and §6 against staging, then prod
   (approval needed: **🧑 OPERATOR**), including SC-006's p95 from `rentsync_webhook_ack_seconds`
   and SC-002's 24-hour check (step 5). Record results in the build log.
