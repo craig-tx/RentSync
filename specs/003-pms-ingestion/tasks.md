@@ -218,6 +218,9 @@ usable through access-token expiry, revocation and disconnection.
   - disconnect nulls both tokens, sets `disconnected`, and keeps raw events (AC5);
   - operator B gets 404 for operator A's connection pages and JSON (AC6, FR-023).
 
+  *2026-10-29: "keeps raw events" is now asserted, since T040 exists. It passed when first run:
+  nothing deletes raw events, and the trigger would refuse a deletion anyway.*
+
   *Two assertions wait for later tables: "keeps raw events" needs `raw_events` (T040), and the
   health page's 404 for another operator needs the health page (US4). The spec covers
   disconnect and the 404 on another operator's disconnect now. Requests use
@@ -346,7 +349,10 @@ recorded with a reason.
   - *`X-Correlation-Id` now wins over `X-Request-Id` in the correlation middleware, so a proxy's
     request ID can never replace the PMS's.*
   - *Header values stored on receipts are capped at 100 characters, because they arrive before the
-    signature is checked. A body that is not valid UTF-8 is `malformed_body`.*
+    signature is checked. The correlation middleware accepts an ID only if it matches
+    `\A[\w.:-]{1,128}\z`, which covers the mock's UUIDs and `none`, and generates one
+    otherwise. That middleware spec was seen failing first. A body that is not valid UTF-8 is
+    `malformed_body`.*
   - *A business-key conflict is always `duplicate`; payload digests are compared only on an
     event-ID conflict.*
   - *Mutation checks, each caught: dropping the digest comparison, accepting any connection

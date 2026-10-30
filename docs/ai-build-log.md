@@ -1123,7 +1123,7 @@ should show "trying again" and then success on the new host.
   - **Tools:** `/admin/raw_events`, `/admin/receipts` and `bin/send_test_webhook`.
   - **Metrics:** receipts, raw events, and the acknowledgement-time histogram.
   - **ADR 0011.**
-- **Tests:** 234 API examples pass; RuboCop is clean.
+- **Tests:** 236 API examples pass; RuboCop is clean.
   - Every new spec was seen failing first.
   - The end-to-end spec is `:committed` and runs on a real local Puma, so "200 only after
     commit" is a real commit.
@@ -1143,7 +1143,11 @@ should show "trying again" and then success on the new host.
   - **Signing secret:** only the active PMS client's secret is accepted, so a superseded
     registration's deliveries get `bad_signature`.
   - **Correlation ID:** `X-Correlation-Id` now wins over `X-Request-Id`, so a proxy's ID
-    can't replace the PMS's.
+    can't replace the PMS's. The ID is stored before any authentication, so only short
+    plain tokens (`\A[\w.:-]{1,128}\z`) are kept; anything else gets a generated ID. The
+    mock's middleware keeps the old order.
+  - **Disconnect:** the Phase 3 spec now asserts that disconnecting keeps raw events. The
+    assertion passed when first run.
   - **Admin token:** `/admin` reuses the mock's `ADMIN_TOKEN` value, so the hosts need no new
     secret (plan.md).
   - **Test sender:** `bin/send_test_webhook` refuses a valid delivery without `--record`,

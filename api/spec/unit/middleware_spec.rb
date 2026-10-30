@@ -39,6 +39,20 @@ RSpec.describe "Rentsync middleware" do
       expect(headers["x-correlation-id"]).to eq("corr-pms-1")
     end
 
+    it "replaces an oversized or unusual ID with a generated one, since it is stored unauthenticated" do
+      ["x" * 10_000, "corr\nforged-log-line", "a b", ""].each do |given|
+        _, headers, = app.call(env_for("/healthz", "HTTP_X_CORRELATION_ID" => given))
+        expect(headers["x-correlation-id"]).to match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/), given[0, 20].inspect
+      end
+    end
+
+    it "keeps the IDs the PMS sends: UUIDs, and the literal none" do
+      %w[3acee54b-f226-490e-b9cf-75eeca4861c4 none send-test-webhook-66cb1b81].each do |given|
+        _, headers, = app.call(env_for("/healthz", "HTTP_X_CORRELATION_ID" => given))
+        expect(headers["x-correlation-id"]).to eq(given)
+      end
+    end
+
     it "generates one when none is given" do
       _, headers, = app.call(env_for("/healthz"))
       expect(headers["x-correlation-id"]).to match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)

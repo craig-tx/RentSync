@@ -8,12 +8,16 @@ module Rentsync
     # and every event created during the request, echoes it back, and writes one
     # access-log line per request.
     class CorrelationId
+      # The ID is stored and logged before any authentication, so only a short plain token is kept.
+      ACCEPTED = /\A[\w.:-]{1,128}\z/
+
       def initialize(app)
         @app = app
       end
 
       def call(env)
-        id = env["HTTP_X_CORRELATION_ID"] || env["HTTP_X_REQUEST_ID"] || SecureRandom.uuid
+        given = env["HTTP_X_CORRELATION_ID"] || env["HTTP_X_REQUEST_ID"]
+        id = ACCEPTED.match?(given.to_s) ? given : SecureRandom.uuid
         Thread.current[:correlation_id] = id
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         status, headers, body = @app.call(env)

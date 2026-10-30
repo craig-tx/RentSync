@@ -270,14 +270,21 @@ RSpec.describe "connections", type: :request do
   describe "disconnecting (AC5)" do
     before { sign_in }
 
-    it "nulls both tokens and sets disconnected" do
+    it "nulls both tokens, sets disconnected, and keeps the raw events" do
       con = connect!
+      body = JSON.generate("id" => "evt_1")
+      Rentsync.db[:raw_events].insert(
+        pms_client_id: con.pms_client_id, connection_id: con.id, event_id: "evt_1", event_type: "lease.updated",
+        occurred_at: Time.now.utc, received_at: Time.now.utc, arrival_path: "webhook",
+        payload_raw: Sequel.blob(body), payload: Sequel.pg_jsonb_wrap(JSON.parse(body)),
+        payload_sha256: Sequel.blob(Digest::SHA256.digest(body)), correlation_id: "corr"
+      )
       post "#{base}/connections/#{con.public_id}/disconnect", csrf_token: csrf
       expect(last_response.status).to eq(303)
       con.refresh
       expect([con.status, con.access_token, con.refresh_token]).to eq(["disconnected", nil, nil])
       expect(con.disconnected_at).not_to be_nil
-      # Raw events are kept: asserted in Phase 4, once raw_events exists (T040).
+      expect(Rentsync.db[:raw_events].where(connection_id: con.id).count).to eq(1)
     end
 
     it "requires the CSRF token" do
