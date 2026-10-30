@@ -1210,7 +1210,10 @@ should show "trying again" and then success on the new host.
   - all three seeded operators are connected, with their histories backfilled permanently;
   - one worker again;
   - chaos is 0, and the mock client's rate limit is back to the default.
-- **Clock fix (the operator asked for it):** the shared Retry-After block now uses the Redis  server's clock, as the bucket does, so containers on hosts whose clocks differ agree on when  it ends. Specs can still drive it through an optional `now_ms`. Checked live: at 3 a minute,  a backfill waited out 4 blocks (40 s) and succeeded.
+- **Clock fix (the operator asked for it):** the shared Retry-After block now uses the Redis
+  server's clock, as the bucket does, so containers on hosts whose clocks differ agree on when
+  it ends. Specs can still drive it through an optional `now_ms`. Checked live: at 3 a minute,
+  a backfill waited out 4 blocks (40 s) and succeeded.
 - **Next:** Phase 6 (US4, connection health), T058 onward.
 
 <!-- PR #55: free -->
