@@ -492,10 +492,22 @@ within the PMS's rate limit, resumably.
   true events (`GET /admin/events`) for connected operators, optionally triggers and waits for
   one reconciliation, lists RentSync's (`/admin/raw_events`), and prints missing, duplicated and
   per-type counts. It exits non-zero on any missing or duplicated fact.
-*2026-10-29: runs in the `api` container. Payment facts are compared by business key, because  reconciled facts have synthetic IDs. Lease events are compared only when the mock delivered  them to RentSync's client, because reconciliation never fetches them (R5). RentSync's side is  read from the database, not over `/admin/raw_events`, since the tool runs where the database  is. Checked live after the first full backfill: 893 `payment.created` and 632  `payment.reversed`, with 0 missing and 0 duplicated, exit 0.*
-- [ ] T056 [US3] Metrics `rentsync_reconciliation_runs_total{result}`,
+
+  *2026-10-29: runs in the `api` container. Payment facts are compared by business key, because
+  reconciled facts have synthetic IDs. Lease events are compared only when the mock delivered
+  them to RentSync's client, because reconciliation never fetches them (R5). RentSync's side is
+  read from the database, not over `/admin/raw_events`, since the tool runs where the database
+  is. Checked live after the first full backfill: 893 `payment.created` and 632
+  `payment.reversed`, with 0 missing and 0 duplicated, exit 0.*
+
+- [X] T056 [US3] Metrics `rentsync_reconciliation_runs_total{result}`,
   `rentsync_pms_requests_total{status}`, `rentsync_pms_rate_limit_waits_seconds_total` and
   `rentsync_token_renewals_total{result}`.
+
+  *2026-10-29: `reconciliation_metrics_spec.rb` was seen failing first (4 of 5). The runs
+  counter passed at once, because T052 already counted it. Renewal results are `renewed`,
+  `needs_reauth` and `failed`. The PMS request status is the HTTP code, or `timeout`.*
+
 - [ ] T057 [US3] Write `docs/adr/0009-postgres-claimed-background-work.md` from research R2,
   including when to revisit Sidekiq.
 

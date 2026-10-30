@@ -175,6 +175,7 @@ module Rentsync
         tokens = OAuth.new(client: con.pms_client, request: @request).refresh(con.refresh_token_plaintext)
         store(con, tokens)
         log.info("token_renewed", connection_id: con.public_id)
+        Metrics.increment("rentsync_token_renewals_total", result: "renewed")
         tokens.access_token
       rescue OAuth::Rejected => e
         return needs_reauth(con, e.code) if REAUTH_CODES.include?(e.code)
@@ -199,6 +200,7 @@ module Rentsync
         PmsConnection.where(id: con.id, status: PmsConnection::LIVE)
                      .update(status: "needs_reauth", last_renewal_error: code, renewal_lease_until: nil)
         log.warn("connection needs reauthorization", connection_id: con.public_id, error_code: code)
+        Metrics.increment("rentsync_token_renewals_total", result: "needs_reauth")
         raise NeedsReauth, "the PMS refused renewal: #{code}"
       end
 
@@ -209,6 +211,7 @@ module Rentsync
           renewal_lease_until: Clock.now + self.class.backoff_s(failures)
         )
         log.warn("token renewal failed", connection_id: con.public_id, error: error.message, failures: failures)
+        Metrics.increment("rentsync_token_renewals_total", result: "failed")
         raise Unavailable, error.message
       end
 

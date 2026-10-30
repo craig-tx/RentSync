@@ -15,6 +15,10 @@ module Rentsync
       "rentsync_webhook_receipts_total" => [:counter, "Webhook deliveries received, by outcome and reason."],
       "rentsync_raw_events_total" => [:counter, "Raw events recorded, by arrival path and event type."],
       "rentsync_webhook_ack_seconds" => [:histogram, "Time to answer a webhook delivery (SC-006)."],
+      "rentsync_reconciliation_runs_total" => [:counter, "Reconciliation runs, by result."],
+      "rentsync_pms_requests_total" => [:counter, "PMS API requests, by HTTP status (or timeout)."],
+      "rentsync_pms_rate_limit_waits_seconds_total" => [:counter, "Seconds spent waiting for the PMS rate limit."],
+      "rentsync_token_renewals_total" => [:counter, "Access-token renewals, by result."],
       DROPPED => [:counter, "Metric label sets dropped because the buffer cap was reached."]
     }.freeze
 
